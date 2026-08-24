@@ -40,6 +40,19 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 export LD_PRELOAD="libgcc_s.so.1${LD_PRELOAD:+:$LD_PRELOAD}"
 mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/serproid/certificados"
 
+# A libeToken do SafeNet procura a configuração dela em /etc por caminho
+# absoluto, sem forma de redirecionar. No sandbox /etc é um tmpfs recriado a
+# cada execução, então os arquivos que vieram no componente são copiados agora
+# e somem junto com ele.
+for conf in "$COMPONENTES"/*/etc/eToken*.conf; do
+    [ -e "$conf" ] || continue
+    cp -f "$conf" "/etc/$(basename "$conf")" ||
+        echo "adv-br: não deu para preparar $(basename "$conf"); o token SafeNet pode não abrir." >&2
+done
+# A biblioteca guarda cache de token aqui e falha ao gravar se o diretório não
+# existir. /var é gravável no sandbox.
+mkdir -p /var/tmp/eToken.cache
+
 # O Certisign abre os .glade da interface por caminho absoluto em
 # /opt/certisign-websigner/res, e não há como redirecioná-lo. A raiz do sandbox
 # é um tmpfs gravável, então o caminho que ele espera é criado aqui e some com

@@ -12,13 +12,16 @@ import collections
 
 Componente = collections.namedtuple(
     "Componente",
-    "chave nome resumo detalhe tipo url sha256 arquivos tamanho ca lancador",
+    "chave nome resumo detalhe tipo url sha256 arquivos tamanho ca lancador "
+    "dentro_de_zip",
 )
 # `ca` nomeia um certificado extra a confiar no download, e existe por um
 # servidor só; ver o Softplan abaixo. `lancador` é o corpo de um script para
 # componentes que trazem aplicativo com janela, e não só biblioteca. Vazios no
 # resto.
-Componente.__new__.__defaults__ = ("", "")
+# `dentro_de_zip` é o caminho do .deb dentro de um zip, para o fabricante que
+# distribui assim. Vazio quando a URL já é o pacote.
+Componente.__new__.__defaults__ = ("", "", "")
 
 # tipo:
 #   driver     apresenta o token ao sistema (vira módulo PKCS#11)
@@ -158,6 +161,38 @@ CATALOGO += [
             '    -Djava.util.logging.config.class=smartcert.LogConfig \\\n'
             "    -classpath 'lib/*' smartcert.Main \"$@\"\n"
         ),
+    ),
+]
+
+CATALOGO += [
+    Componente(
+        chave="safenet",
+        nome="SafeNet",
+        resumo="Driver dos tokens eToken 5100, 5110 e IDPrime",
+        detalhe=(
+            "Da SafeNet/Thales. Instale se o seu token for um eToken e o "
+            "certificado não aparecer com o OpenSC."
+        ),
+        tipo="driver",
+        url="https://www.digicert.com/StaticFiles/Linux_SAC_10.9_GA.zip",
+        sha256="46759cfe91d736af18a49d10e4749f264022db44e04ed4caf94e1ca77d6a013e",
+        # O fabricante distribui um zip com instaladores para várias
+        # distribuições. O que interessa é a variante sem interface: a gráfica
+        # depende de componentes que não cabem aqui, e o que faz o token
+        # funcionar é a biblioteca.
+        dentro_de_zip=("SAC_10.9 GA/Installation/withoutUI/Ubuntu-2204/"
+                       "safenetauthenticationclient-core_10.9.4723_amd64.deb"),
+        arquivos={
+            "./usr/lib/libeToken.so.10.9.4723": "pkcs11/libeToken.so",
+            # A libeToken abre as demais por dlopen, então todas precisam
+            # estar no caminho que o lançador monta.
+            "./usr/lib/": "lib",
+            # Ela procura estes por caminho absoluto em /etc, sem forma de
+            # redirecionar; o lançador os copia para lá a cada execução.
+            "./etc/eToken.conf": "etc/eToken.conf",
+            "./etc/eToken.common.conf": "etc/eToken.common.conf",
+        },
+        tamanho=87 * 1024 * 1024,
     ),
 ]
 

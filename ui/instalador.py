@@ -7,10 +7,12 @@ Nada aqui pede permissão nenhuma ao sistema: é o próprio diretório de dados 
 aplicativo. Instalar é escrever ali; desinstalar é apagar.
 """
 import hashlib
+import io
 import os
 import shutil
 import ssl
 import urllib.request
+import zipfile
 
 import deb
 
@@ -115,6 +117,18 @@ def instalar(componente, progresso=None):
     # extração não pode deixar meio driver instalado, que é pior que nenhum.
     temporario = destino + ".parcial"
     shutil.rmtree(temporario, ignore_errors=True)
+    if componente.dentro_de_zip:
+        # Alguns fabricantes distribuem um zip com instaladores para várias
+        # distribuições. O sha256 conferido é o do zip, que é o que se baixou.
+        with zipfile.ZipFile(io.BytesIO(dados)) as pacote:
+            try:
+                dados = pacote.read(componente.dentro_de_zip)
+            except KeyError as erro:
+                raise ValueError(
+                    "o arquivo baixado não traz %s. O fabricante pode ter "
+                    "mudado o conteúdo do pacote."
+                    % componente.dentro_de_zip) from erro
+
     try:
         deb.extrair(dados, temporario, componente.arquivos)
         _escrever_lancador(componente, temporario)
