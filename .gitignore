@@ -3,3 +3,4 @@ build-driver-*/
 .flatpak-builder/
 *.flatpak
 repo/
+__pycache__/
