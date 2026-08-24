@@ -56,19 +56,41 @@ que descomprime.
 
 De cima para baixo, na ordem em que a pessoa faz as perguntas:
 
-1. **Seu certificado** — o que a máquina está enxergando agora. É o que ela
-   veio saber.
-2. **Drivers e assinadores** — o que ela pode instalar a respeito.
+1. **Seu certificado**: o que a máquina está enxergando agora. É o que ela veio
+   saber.
+2. **Navegadores e aplicativos**: levar isso para o Firefox, o Chrome, o Brave
+   e o Papers que ela já usa. É um botão só, e é onde aparece o aviso de
+   permissão quando falta acesso à home.
+3. **Drivers de token**: OpenSC (já vem), SafeSign, SafeNet, SerproID.
+4. **Assinadores**: Lacuna Web PKI, Certisign WebSigner, Certisign Desktop.
 
 Quem abre isto está com o token na mão e quer assinar, não configurar.
 
+## O catálogo, e o que fica de fora dele
+
+Os seis componentes do `main` estão aqui: três drivers proprietários e três
+assinadores. Nenhum é redistribuído, todos são baixados do fabricante na hora,
+e o sha256 de cada um é conferido antes de qualquer coisa ser extraída.
+
+O **PJeOffice** não entra. Ele não é uma biblioteca que este aplicativo carrega,
+é um programa Java com servidor próprio, e já existe empacotado em separado no
+`PjeOffice-flatpak`, que consome as extensões de driver da versão de linha de
+comando. Trazê-lo para cá significaria embutir um runtime Java inteiro num
+aplicativo que hoje ocupa poucos megabytes, para duplicar um pacote que já
+funciona.
+
+Isso deixa uma ponta solta conhecida: no modelo desta branch os drivers vivem
+em `~/.var/app/dev.lukakuuhaku.AdvBr/data/componentes/`, e não como extensões
+Flatpak montadas dentro de outro aplicativo. O `PjeOffice-flatpak` continua
+consumindo as extensões do `main`, e quem usar os dois terá o driver baixado
+duas vezes. Resolver isso é decidir se o PJeOffice fala com este aplicativo
+pela mesma ponte que os navegadores usam, o que exigiria dele permissão para
+iniciar um Flatpak a partir de dentro do sandbox.
+
 ## O que ainda não existe
 
-- publicar para os navegadores pela interface (é o que exige acesso à home, e
-  onde entra o aviso de permissão);
-- os outros componentes no catálogo (assinadores e PJeOffice, este com o Java
-  que ele precisa);
-- desinstalar componentes que deixaram de existir no catálogo.
+- desinstalar componentes que deixaram de existir no catálogo;
+- VIDaaS, que é certificado em nuvem e não passa por PKCS#11 local.
 
 ## Armadilhas medidas aqui
 
@@ -83,3 +105,22 @@ Quem abre isto está com o token na mão e quer assinar, não configurar.
   a lista de tokens vazia mesmo antes de qualquer driver ser instalado.
 - **O OpenSC instala completions em `/usr` no runtime GNOME.** No freedesktop
   não acontecia. `completiondir` resolve.
+- **A `libserproidp11.so` não declara a `libgcc_s` de que depende.** Quem a abre
+  com `dlopen` falha com `undefined symbol: _Unwind_Resume_or_Rethrow`, a menos
+  que outra coisa já a tenha trazido para o processo, e aí o driver funciona por
+  acidente. No modelo de extensões dava para corrigir no build, com `patchelf`;
+  aqui o driver chega pronto pela rede, então quem carrega precisa fazer
+  `LD_PRELOAD=libgcc_s.so.1` antes. Na janela isso exige reexecutar o
+  interpretador: quando o Python já subiu, é tarde.
+- **O aplicativo do SerproID reclama de FXML e segue funcionando.** Ele mostra
+  `NullPointerException` em `ControllerInicio.exibirAtividade` porque o pacote
+  do Serpro traz FXML de JavaFX 11 lido por um runtime JavaFX 8. Acontece igual
+  fora do Flatpak, e não é este empacotamento.
+- **A `libeToken` do SafeNet lê `/etc/eToken.conf` por caminho absoluto.** Não
+  há variável que redirecione. No sandbox `/etc` é tmpfs e é gravável, então dá
+  para copiar o arquivo para lá a cada execução; sem isso a biblioteca carrega,
+  responde `C_GetFunctionList` e não encontra token nenhum, que é o sintoma mais
+  caro de diagnosticar.
+- **`ldd` avisa sobre permissão de execução em `.so` que veio de `.deb`.** O
+  pacote traz as bibliotecas em 644 e nada as torna 755 na extração. É só o
+  aviso do `ldd`: `dlopen` não pede bit de execução.
