@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=PJeOffice Pro
+GenericName=Assinador digital do PJe
+Comment=Assinatura eletrônica de documentos do Processo Judicial Eletrônico
+Exec=pjeoffice-pro
+Icon=io.github.llawli.AdvBr.PJeOffice
+Terminal=false
+Categories=Office;
+Keywords=PJe;assinador;certificado;ICP-Brasil;CNJ;processo;judicial;
+StartupNotify=false
+StartupWMClass=br-jus-cnj-pje-office-imp-PjeOfficeApp
