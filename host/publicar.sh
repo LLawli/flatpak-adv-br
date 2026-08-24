@@ -458,6 +458,25 @@ titulo "4/4 · Atalhos de aplicativo"
 # passo.
 ATALHOS=$(flatpak run --command=adv-br-atalhos "$APP_ID" 2>/dev/null) || true
 
+# O atalho de uma extensão removida some daqui, pelo mesmo motivo do .module e
+# do manifesto de assinador: ele continuaria no menu, abrindo um comando que
+# não existe mais. É o pior dos três, porque é o único que a pessoa VÊ todo dia.
+declare -A ATALHO_VIVO=()
+while IFS=$'\t' read -r nome _ _; do
+    [ -n "$nome" ] && ATALHO_VIVO["$APP_ID.$nome.desktop"]=1
+done <<<"$ATALHOS"
+
+for arquivo in "$ATALHOS_HOST/$APP_ID."*.desktop; do
+    [ -e "$arquivo" ] || continue
+    [ -n "${ATALHO_VIVO[$(basename "$arquivo")]:-}" ] && continue
+    nome=$(basename "$arquivo" .desktop)
+    nome=${nome#"$APP_ID."}
+    rm -f "$arquivo" "$ICONES_HOST/$nome.png" &&
+        log "atalho $nome não existe mais no pacote; removido."
+done
+command -v update-desktop-database >/dev/null &&
+    update-desktop-database "$ATALHOS_HOST" 2>/dev/null || true
+
 if [ -z "$ATALHOS" ]; then
     log "nenhuma extensão instalada oferece atalho."
 else

@@ -155,6 +155,24 @@ if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
         falha "contagem de módulos: $registrados registrados, $carregados carregados"
     fi
 
+    # Um atalho de menu que sobrevive à extensão que o trouxe é o pior dos
+    # rastros: continua no menu, abrindo um comando que não existe mais. Este
+    # teste cria um órfão e confere que a publicação o remove.
+    APLICATIVOS=${XDG_DATA_HOME:-$HOME/.local/share}/applications
+    ICONES=${XDG_DATA_HOME:-$HOME/.local/share}/$APP_ID
+    if [ -d "$APLICATIVOS" ]; then
+        printf '[Desktop Entry]\nType=Application\nName=Teste\nExec=/bin/true\n' \
+            > "$APLICATIVOS/$APP_ID.teste-orfao.desktop"
+        ./host/publicar.sh >/dev/null 2>&1 || true
+        if [ -e "$APLICATIVOS/$APP_ID.teste-orfao.desktop" ]; then
+            falha "atalho órfão sobreviveu à publicação"
+            rm -f "$APLICATIVOS/$APP_ID.teste-orfao.desktop"
+        else
+            ok "publicar remove atalho de extensão que não existe mais"
+        fi
+        rm -f "$ICONES/teste-orfao.png"
+    fi
+
     # As ferramentas e os atalhos das extensões instaladas têm de aparecer: é
     # por eles que se abre o SerproID e o PJeOffice, que não são comandos do
     # pacote base.
