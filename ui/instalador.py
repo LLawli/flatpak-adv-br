@@ -36,8 +36,10 @@ def instalado(componente):
     deixa um diretório que existe e não serve.
     """
     destino = diretorio(componente)
-    return all(os.path.exists(os.path.join(destino, alvo))
-               for alvo in componente.arquivos.values())
+    esperados = list(componente.arquivos.values())
+    if componente.lancador:
+        esperados.append(os.path.join("bin", componente.chave))
+    return all(os.path.exists(os.path.join(destino, alvo)) for alvo in esperados)
 
 
 def _contexto(componente):
@@ -88,6 +90,23 @@ def baixar(componente, progresso=None):
     return dados
 
 
+def _escrever_lancador(componente, destino):
+    """Cria bin/<chave> para o componente que traz aplicativo com janela.
+
+    O corpo vem do catálogo, e não de código por componente: acrescentar um
+    aplicativo novo continua sendo uma entrada lá e nada mais.
+    """
+    if not componente.lancador:
+        return
+    caminho = os.path.join(destino, "bin", componente.chave)
+    os.makedirs(os.path.dirname(caminho), exist_ok=True)
+    with open(caminho, "w", encoding="utf-8") as arquivo:
+        arquivo.write("#!/bin/sh\nset -eu\n"
+                      'COMPONENTE=$(cd -- "$(dirname -- "$0")/.." && pwd)\n'
+                      + componente.lancador)
+    os.chmod(caminho, 0o755)
+
+
 def instalar(componente, progresso=None):
     dados = baixar(componente, progresso)
     destino = diretorio(componente)
@@ -98,6 +117,7 @@ def instalar(componente, progresso=None):
     shutil.rmtree(temporario, ignore_errors=True)
     try:
         deb.extrair(dados, temporario, componente.arquivos)
+        _escrever_lancador(componente, temporario)
         shutil.rmtree(destino, ignore_errors=True)
         os.replace(temporario, destino)
     finally:

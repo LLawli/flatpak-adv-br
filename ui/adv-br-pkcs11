@@ -37,4 +37,21 @@ for lib in "$COMPONENTES"/*/lib; do
 done
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 
+# A libserproidp11.so do SerproID usa símbolos da libgcc_s e NÃO a declara em
+# DT_NEEDED: quem a abre com dlopen falha com "undefined symbol", a menos que
+# alguma outra coisa já a tenha trazido para o processo. Pior, quando isso
+# acontece por acaso o driver funciona, e o mesmo pacote passa numa máquina e
+# falha em outra.
+#
+# No modelo de extensões isso era corrigido no build, com patchelf. Aqui não há
+# build: o driver chega pronto pela rede. Carregá-la antes resolve, e é
+# inofensivo — a libgcc_s já é carregada por quase tudo.
+export LD_PRELOAD="libgcc_s.so.1${LD_PRELOAD:+:$LD_PRELOAD}"
+
+# O SerproID faz readdir neste diretório assim que é carregado e derruba com
+# SIGSEGV quem o carregou se ele não existir. Como quem carrega é o assinador
+# ou o navegador, um driver mal preparado impediria assinar com qualquer outro
+# token.
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/serproid/certificados"
+
 exec p11-kit remote "$MODULO"

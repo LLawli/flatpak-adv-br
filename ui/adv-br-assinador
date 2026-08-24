@@ -35,6 +35,11 @@ for lib in "$COMPONENTES"/*/lib; do
 done
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 
+# Ver adv-br-pkcs11: o driver do SerproID não declara a libgcc_s que usa, e o
+# assinador é justamente quem carrega todos os módulos.
+export LD_PRELOAD="libgcc_s.so.1${LD_PRELOAD:+:$LD_PRELOAD}"
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/serproid/certificados"
+
 # O Certisign abre os .glade da interface por caminho absoluto em
 # /opt/certisign-websigner/res, e não há como redirecioná-lo. A raiz do sandbox
 # é um tmpfs gravável, então o caminho que ele espera é criado aqui e some com

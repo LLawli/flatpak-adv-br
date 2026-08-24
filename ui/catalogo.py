@@ -12,11 +12,13 @@ import collections
 
 Componente = collections.namedtuple(
     "Componente",
-    "chave nome resumo detalhe tipo url sha256 arquivos tamanho ca",
+    "chave nome resumo detalhe tipo url sha256 arquivos tamanho ca lancador",
 )
 # `ca` nomeia um certificado extra a confiar no download, e existe por um
-# servidor só; ver o Softplan abaixo. Vazio no resto.
-Componente.__new__.__defaults__ = ("",)
+# servidor só; ver o Softplan abaixo. `lancador` é o corpo de um script para
+# componentes que trazem aplicativo com janela, e não só biblioteca. Vazios no
+# resto.
+Componente.__new__.__defaults__ = ("", "")
 
 # tipo:
 #   driver     apresenta o token ao sistema (vira módulo PKCS#11)
@@ -123,6 +125,39 @@ CATALOGO += [
                 "native-messaging/br.com.certisign.websigner.chromium.json",
         },
         tamanho=1 * 1024 * 1024,
+    ),
+]
+
+CATALOGO += [
+    Componente(
+        chave="serproid",
+        nome="SerproID",
+        resumo="Certificado em nuvem do Serpro",
+        detalhe=(
+            "O certificado fica na nuvem do Serpro, não num token. Depois de "
+            "instalar, abra o aplicativo do SerproID uma vez para associar o "
+            "seu certificado; só então ele passa a aparecer."
+        ),
+        tipo="driver",
+        url=("https://storagegw.estaleiro.serpro.gov.br/instalador-desktop/"
+             "SerproID-2.1.6-amd64.deb"),
+        sha256="0ffa9ffe5bc343cc758a12f28bd7f08aec4b6e843d1c043baf0b81572461e588",
+        arquivos={
+            "./usr/lib/libserproidp11.so": "pkcs11/libserproidp11.so",
+            # O aplicativo inteiro, com o JRE que ele embarca. É metade da
+            # solução: sem abrir o aplicativo não há certificado nenhum para a
+            # biblioteca ler, e a falta só apareceria na hora de assinar.
+            "./usr/share/serproid-desktop/": "app",
+        },
+        tamanho=288 * 1024 * 1024,
+        # O aplicativo resolve tools/ e lib/ como caminhos relativos ao
+        # diretório de trabalho, então o cd não é conveniência.
+        lancador=(
+            'cd "$COMPONENTE/app"\n'
+            'exec ./jre/bin/java \\\n'
+            '    -Djava.util.logging.config.class=smartcert.LogConfig \\\n'
+            "    -classpath 'lib/*' smartcert.Main \"$@\"\n"
+        ),
     ),
 ]
 

@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
 """Ponto de entrada do aplicativo."""
+import os
 import sys
 
 sys.path.insert(0, "/app/share/adv-br-ui")
+
+# O driver do SerproID usa símbolos da libgcc_s e não a declara: quem o abre
+# com dlopen falha com "undefined symbol", e quem abre aqui é esta janela, ao
+# listar os tokens. Carregá-la antes de tudo resolve, e é inofensivo, porque
+# quase todo processo já a carrega. Precisa acontecer antes de o Python abrir
+# qualquer biblioteca, daí o reexec.
+if "libgcc_s.so.1" not in os.environ.get("LD_PRELOAD", ""):
+    preload = os.environ.get("LD_PRELOAD", "")
+    os.environ["LD_PRELOAD"] = "libgcc_s.so.1" + (":" + preload if preload else "")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 import gi  # noqa: E402
 
