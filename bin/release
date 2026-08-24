@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Solta uma release: confere, versiona, commita e cria a tag.
+#
+#   bin/release 0.2.0
+#
+# O que acontece depois de a tag chegar ao GitHub é com o workflow de release,
+# que extrai a seção desta versão do CHANGELOG.md e a usa como corpo do GitHub
+# Release. Por isso a seção precisa existir ANTES da tag: escrevê-la é a parte
+# que este script se recusa a fazer por você.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+vermelho='' verde='' normal=''
+if [ -t 1 ]; then
+    vermelho=$(printf '\033[31m') verde=$(printf '\033[32m') normal=$(printf '\033[0m')
+fi
+log()  { printf '%s==>%s %s\n' "$verde" "$normal" "$1"; }
+erro() { printf '%serro:%s %s\n' "$vermelho" "$normal" "$1" >&2; exit 1; }
+
+[ $# -eq 1 ] || erro "uso: bin/release <versão>   (exemplo: bin/release 0.2.0)"
+VERSAO=$1
+
+# Sem o "v". A tag ganha o prefixo; o arquivo VERSAO e o CHANGELOG não têm.
+[[ $VERSAO =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    erro "versão deve ser X.Y.Z sem o 'v' (recebido: $VERSAO)"
+
+TAG="v$VERSAO"
+
+log "conferindo o estado do repositório"
+git rev-parse --git-dir >/dev/null 2>&1 || erro "não é um repositório git."
+[ -z "$(git status --porcelain)" ] ||
+    erro "há alterações não commitadas. Commite ou guarde antes de soltar a release."
+! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null ||
+    erro "a tag $TAG já existe."
+
+# O corpo do GitHub Release sai daqui. Uma seção ausente produziria uma release
+# vazia, que é exatamente o que este script existe para impedir.
+log "conferindo a seção [$VERSAO] no CHANGELOG.md"
+printf '%s\n' "$(cat CHANGELOG.md)" | grep -q "^## \[$VERSAO\]" ||
+    erro "CHANGELOG.md não tem a seção '## [$VERSAO]'. Escreva-a antes."
+
+corpo=$(awk -v ver="$VERSAO" '
+    BEGIN { hdr = "## [" ver "]" }
+    index($0, hdr) == 1 { flag = 1; next }
+    flag && index($0, "## [") == 1 { exit }
+    flag && /^\[[^]]+\]:[[:space:]]/ { exit }
+    flag { print }
+' CHANGELOG.md)
+
+[ -n "$(printf '%s' "$corpo" | tr -d '[:space:]')" ] ||
+    erro "a seção '## [$VERSAO]' do CHANGELOG.md está vazia."
+
+log "rodando as verificações estáticas"
+make lint >/dev/null || erro "o lint falhou; corrija antes de soltar a release."
+
+log "conferindo o pacote que está sendo lançado"
+command -v flatpak-builder >/dev/null 2>&1 ||
+    erro "flatpak-builder não encontrado; não dá para conferir o que está sendo lançado."
+flatpak-builder --user --force-clean --disable-rofiles-fuse \
+    build-release io.github.llawli.AdvBr.yml >/dev/null ||
+    erro "o pacote base não constrói; não vou marcar uma versão quebrada."
+rm -rf build-release
+
+log "gravando a versão"
+printf '%s\n' "$VERSAO" > VERSAO
+git add VERSAO CHANGELOG.md
+git commit -q -m "chore: versão $VERSAO"
+
+log "criando a tag $TAG"
+git tag -s -a "$TAG" -m "$VERSAO
+
+$corpo"
+
+printf '\n%s==>%s pronto. Falta empurrar:\n\n    git push && git push origin %s\n\n' \
+    "$verde" "$normal" "$TAG"

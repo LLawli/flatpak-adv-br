@@ -25,8 +25,8 @@ jobs:
       - name: shellcheck
         run: |
           shellcheck -S warning \
-              src/*.sh host/*.sh tests/*.sh drivers/*.sh packaging/*.sh \
-              instalar.sh diagnostico.sh
+              src/*.sh host/*.sh tests/*.sh drivers/*.sh assinadores/*.sh \
+              apps/*.sh packaging/*.sh instalar.sh diagnostico.sh
 
       - name: Python compila
         run: |
@@ -38,11 +38,12 @@ jobs:
           import glob
           import sys
 
-          manifestos = sorted(glob.glob("*.yml") + glob.glob("drivers/*.yml"))
+          manifestos = sorted(glob.glob("*.yml") + glob.glob("drivers/*.yml")
+                      + glob.glob("assinadores/*.yml") + glob.glob("apps/*.yml"))
           # Piso absoluto: um glob que não casa nada faria este teste passar
           # sem conferir manifesto nenhum.
-          if len(manifestos) < 4:
-              sys.exit("esperava ao menos 4 manifestos, achei %d" % len(manifestos))
+          if len(manifestos) < 8:
+              sys.exit("esperava ao menos 8 manifestos, achei %d" % len(manifestos))
           for arquivo in manifestos:
               texto = open(arquivo, encoding="utf-8").read()
               if "\t" in texto:
@@ -55,7 +56,7 @@ jobs:
       - name: Fontes citadas nos manifestos existem
         run: |
           faltando=0
-          for manifesto in *.yml drivers/*.yml; do
+          for manifesto in *.yml drivers/*.yml assinadores/*.yml apps/*.yml; do
               while read -r caminho; do
                   [ -n "$caminho" ] || continue
                   # Nos manifestos de extensão, 'path:' é relativo ao diretório
@@ -74,4 +75,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq appstream desktop-file-utils
           appstreamcli validate --no-net io.github.llawli.AdvBr.metainfo.xml
-          desktop-file-validate io.github.llawli.AdvBr.PJeOffice.desktop
+          # Os .desktop das extensões são modelos: @EXEC@ e @ICONE@ entram no
+          # lugar certo quando o publicador os leva para o host.
+          for d in drivers/*.desktop apps/*.desktop; do
+              [ -e "$d" ] || continue
+              sed -e 's|@EXEC@|/bin/true|' -e 's|@ICONE@|x|' "$d" > /tmp/t.desktop
+              desktop-file-validate /tmp/t.desktop || exit 1
+          done

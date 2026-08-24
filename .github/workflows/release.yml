@@ -1,0 +1,65 @@
+# Dispara por tag, e só por tag: a release é um ato deliberado, feito pelo
+# bin/release, e não um efeito colateral de um push na main.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Versão da tag
+        id: versao
+        run: |
+          versao="${GITHUB_REF_NAME#v}"
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+          # A tag e o arquivo VERSAO têm de concordar. Se divergirem, quem
+          # baixar o tarball vai instalar uma coisa achando que é outra.
+          arquivo=$(tr -d '[:space:]' < VERSAO)
+          [ "$arquivo" = "$versao" ] || {
+              echo "tag $GITHUB_REF_NAME não bate com VERSAO ($arquivo)" >&2
+              exit 1
+          }
+
+      - name: Corpo da release, extraído do CHANGELOG
+        run: |
+          awk -v ver="${{ steps.versao.outputs.versao }}" '
+              BEGIN { hdr = "## [" ver "]" }
+              index($0, hdr) == 1 { flag = 1; next }
+              flag && index($0, "## [") == 1 { exit }
+              flag && /^\[[^]]+\]:[[:space:]]/ { exit }
+              flag { print }
+          ' CHANGELOG.md > corpo.md
+          # Uma release com corpo vazio é pior que nenhuma: some do radar de
+          # quem acompanha o projeto pelo feed de releases.
+          [ -s corpo.md ] || { echo "CHANGELOG sem a seção desta versão" >&2; exit 1; }
+          cat corpo.md
+
+      - name: Tarball do código, com checksum
+        run: |
+          nome="flatpak-adv-br-${{ steps.versao.outputs.versao }}"
+          git archive --format=tar.gz --prefix="$nome/" -o "$nome.tar.gz" HEAD
+          sha256sum "$nome.tar.gz" > "$nome.tar.gz.sha256"
+          cat "$nome.tar.gz.sha256"
+
+      - name: Publica
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Não há binário para publicar: nada aqui pode ser redistribuído, e o
+          # pacote é construído na máquina de quem instala. O que a release
+          # oferece é o código com um sha256 para conferir.
+          gh release create "$GITHUB_REF_NAME" \
+              --title "${{ steps.versao.outputs.versao }}" \
+              --notes-file corpo.md \
+              flatpak-adv-br-*.tar.gz flatpak-adv-br-*.tar.gz.sha256
