@@ -37,7 +37,7 @@ for manifesto in io.github.llawli.AdvBr.yml drivers/*.yml assinadores/*.yml apps
     if python3 - "$manifesto" <<'PY'
 import sys
 # Sem depender de PyYAML, que não é garantido: o que se confere aqui é o que
-# quebra na prática — indentação com tabulação e um "id:" no topo.
+# quebra na prática: indentação com tabulação e um "id:" no topo.
 texto = open(sys.argv[1], encoding="utf-8").read()
 assert "\t" not in texto, "tabulação em YAML"
 assert any(l.startswith("id:") for l in texto.splitlines()), "sem id:"

@@ -14,8 +14,8 @@
 # por dois motivos. O primeiro é isolamento: um driver que derrube o processo
 # que o carregou (o SafeNet faz isso ao encerrar, o SerproID mal preparado faz
 # na carga) leva junto só a si mesmo. O segundo é que o Flatpak monta em todo
-# sandbox um p11-kit-trust.module que não se consegue remover — o arquivo é um
-# bind somente-leitura — e exportar o proxy devolveria ao host, como se fossem
+# sandbox um p11-kit-trust.module que não se consegue remover: o arquivo é um
+# bind somente-leitura, e exportar o proxy devolveria ao host, como se fossem
 # tokens, as âncoras de confiança que ele mesmo já tem.
 #
 # NÃO ESCREVA NADA EM STDOUT AQUI. O stdout é o protocolo RPC do p11-kit;
@@ -41,8 +41,8 @@ preparar_drivers
 }
 
 # Quando o p11-kit do host está numa série diferente da do runtime, o
-# ./instalar.sh embute aqui um p11-kit da série dele. Só este processo — o da
-# ponte — o usa: é ele que fala o protocolo com o outro lado. O resto do
+# ./instalar.sh embute aqui um p11-kit da série dele. Só o processo da ponte,
+# que é este, o usa: é ele que fala o protocolo com o outro lado. O resto do
 # pacote continua com o p11-kit do runtime, que é o que os assinadores e o
 # PJeOffice carregam, e que não atravessa pipe nenhum.
 COMPAT=/app/lib/p11kit-compat

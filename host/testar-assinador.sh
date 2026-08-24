@@ -56,10 +56,10 @@ for wrapper in "$BIN_HOST/$PREFIXO_WRAPPER"*; do
     # verdade é a extensão no navegador.
     if ! resposta=$(conversar "$wrapper" '{"command":"getVersion","requestId":"1"}'); then
         if [ "$nome" = "${PREFIXO_WRAPPER}certisign" ]; then
-            aviso "não responde a este teste — e também não responde fora do Flatpak.
+            aviso "não responde a este teste, e também não responde fora do Flatpak.
       Não é a ponte. Confira pela extensão no navegador."
         else
-            aviso "não respondeu. A ponte não está de pé — rode ./host/publicar.sh"
+            aviso "não respondeu. A ponte não está de pé: rode ./host/publicar.sh"
             falhou=1
         fi
         continue
@@ -70,7 +70,7 @@ for wrapper in "$BIN_HOST/$PREFIXO_WRAPPER"*; do
     if ! resposta=$(conversar "$wrapper" \
         "{\"command\":\"listCertificates\",\"requestId\":\"2\",\"pkcs11Modules\":[\"$MODULO_NO_SANDBOX\"]}"); then
         aviso "listCertificates não respondeu em ${ADV_BR_ESPERA:-150}s.
-      O assinador subiu — a versão acima saiu dele —, então o que demora é a
+      O assinador subiu (a versão acima saiu dele), então o que demora é a
       leitura dos tokens. Duas causas, nesta ordem de probabilidade:
 
       1. A leitora está ocupada. Cada navegador aberto mantém processos

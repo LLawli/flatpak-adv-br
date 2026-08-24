@@ -9,7 +9,7 @@
 # Ele descobre driver de duas formas, e as duas são inúteis num sandbox:
 # varrendo nomes fixos em /usr/lib (que é o runtime, somente leitura) e lendo a
 # variável PKCS11_DRIVER como diretório, de onde carrega um "pkcs11.so". A
-# segunda é a saída, e é um caminho só — daí o shim do pacote base (ver
+# segunda é a saída, e é um caminho só: daí o shim do pacote base (ver
 # src/pkcs11-shim.c), que repassa ao p11-kit-proxy e assim responde por todos
 # os drivers de uma vez.
 set -euo pipefail
@@ -32,7 +32,7 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 
 # O SafeNet derruba a JVM no ENCERRAMENTO, não em uso: depois que o SunPKCS11
 # foi inicializado, sair dá SIGSEGV dentro de SCardCancel, numa thread nativa
-# que o próprio driver criou. Em uso não há problema — o assinador opera
+# que o próprio driver criou. Em uso não há problema: o assinador opera
 # normalmente. Sem esta opção, a JVM ainda escreve um core dump antes de morrer,
 # e a espera faz o crash parecer travamento: custou uma rodada inteira de
 # diagnóstico achando que o driver pendurava.

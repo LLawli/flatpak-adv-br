@@ -29,7 +29,7 @@ PREFIXO_WRAPPER=adv-br-
 #
 # Não é .local/bin: um sandbox não enxerga isso. O Flatpak monta, de todo
 # ~/.var/app/<id>, só os diretórios XDG (cache, config, data) e o que o app
-# declarar como 'persistent' — o Firefox declara .mozilla, e mais nada. Um
+# declarar como 'persistent': o Firefox declara .mozilla, e mais nada. Um
 # atalho em ~/.var/app/<id>/.local/bin existe para o host e não existe para o
 # aplicativo, e o sintoma é o navegador dizer que o assinador não está
 # instalado.
@@ -49,7 +49,7 @@ NOME_NSS_SANDBOX=adv-br-p11-kit-client
 # @HOME@ e @CONFIG@ são a home e o XDG_CONFIG_HOME de onde o navegador está:
 # para o do host, $HOME e ~/.config; para o mesmo navegador em Flatpak,
 # ~/.var/app/<id> e ~/.var/app/<id>/config. É a mesma tabela para os dois casos
-# porque, do ponto de vista do navegador, os caminhos são os mesmos — o que
+# porque, do ponto de vista do navegador, os caminhos são os mesmos: o que
 # muda é onde essa home está montada.
 #
 # Firefox 147 moveu o perfil para $XDG_CONFIG_HOME/mozilla/firefox e deixou o
@@ -113,7 +113,7 @@ CLIENT_NO_SANDBOX=/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so
 # Aplicativos em Flatpak que não são navegador e que também precisam do token:
 # eles leem o banco NSS do home REAL (têm --filesystem=home), e não um banco
 # próprio em ~/.var/app. É por isso que os bancos do host recebem os dois
-# registros — o do proxy, para quem roda no host, e o do client, para quem lê o
+# registros: o do proxy, para quem roda no host, e o do client, para quem lê o
 # mesmo arquivo de dentro de um sandbox. Um registro que não resolve é ignorado
 # em silêncio pelo NSS, então os dois convivem.
 #
@@ -151,5 +151,5 @@ serie_p11kit_host() {
 # O 'modutil' seria o caminho óbvio, e não é usado de propósito: ele não vem
 # instalado em toda distribuição (num Fedora atômico, acrescentá-lo custa um
 # rpm-ostree e um reboot), e o que ele faz num banco moderno é editar um
-# arquivo de texto — pkcs11.txt, ao lado do cert9.db. Ver host/nssdb.py.
+# arquivo de texto: pkcs11.txt, ao lado do cert9.db. Ver host/nssdb.py.
 nss() { python3 "$AQUI/nssdb.py" "$@"; }

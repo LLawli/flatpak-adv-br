@@ -27,7 +27,7 @@ for arquivo in sorted(glob.glob(os.path.join(raiz, "*", "native-messaging", "*.j
 
     # O comando é o do executável que a extensão instalou em bin/, com o
     # prefixo do pacote: bin/webpki → adv-br-webpki. Assim a tabela de
-    # "qual comando lança qual assinador" não existe em lugar nenhum — ela é
+    # "qual comando lança qual assinador" não existe em lugar nenhum: ela é
     # a própria extensão.
     extensao = os.path.dirname(os.path.dirname(arquivo))
     binarios = [os.path.basename(b) for b in glob.glob(os.path.join(extensao, "bin", "*"))

@@ -32,7 +32,7 @@ else
       Se o token está espetado, confira:
         - ./host/publicar.sh foi executado;
         - o pcscd do host está de pé (systemctl status pcscd.socket);
-        - há driver para este token — só o OpenSC pode não bastar
+        - há driver para este token: só o OpenSC pode não bastar
           (./instalar.sh --with-safesign, --with-safenet)."
     falhou=1
 fi
@@ -40,7 +40,7 @@ fi
 titulo "2 · De dentro de um navegador em Flatpak"
 # O socket do host é o que o navegador em Flatpak alcança; o p11-kit-client.so
 # do runtime dele é quem o consome. Aqui usamos um Flatpak qualquer que tenha
-# o client.so no runtime — o que se está medindo é o encanamento, não o
+# o client.so no runtime, o que se está medindo é o encanamento, não o
 # navegador.
 if ! systemctl --user is-active p11-kit-server.socket >/dev/null 2>&1; then
     aviso "p11-kit-server.socket não está ativo; navegador em Flatpak não vai

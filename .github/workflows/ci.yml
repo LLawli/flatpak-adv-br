@@ -2,7 +2,7 @@
 #
 # O que NÃO está aqui, de propósito: construir o Flatpak. Todo módulo baixa de
 # site de fabricante, e um CI que dependa disso fica vermelho por indisponi-
-# bilidade alheia — que é o tipo de ruído que faz as pessoas pararem de olhar o
+# bilidade alheia, que é o tipo de ruído que faz as pessoas pararem de olhar o
 # CI. A construção é verificada na máquina de quem instala, pelo ./instalar.sh.
 name: CI
 
@@ -18,7 +18,7 @@ jobs:
 
       - name: Versão do shellcheck
         # O runner costuma ter um shellcheck mais novo que o da máquina de quem
-        # escreveu o código, e reprovar o que passou lá — já aconteceu com o
+        # escreveu o código, e reprovar o que passou lá. Já aconteceu com o
         # SC2093. Sem esta linha no log, a divergência vira mistério.
         run: shellcheck --version
 

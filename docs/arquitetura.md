@@ -9,7 +9,7 @@ usa, está no [README](../README.md); o que já foi medido e enganou está em
 Um contêiner resolve o problema dos drivers de token e cria outro: o navegador
 que enxerga o token passa a ser o de dentro, e mudar de navegador significa
 perder senhas, extensões, abas e perfil. A saída não é levar o navegador para
-dentro — é publicar, para o de fora, o que está dentro.
+dentro. É publicar, para o de fora, o que está dentro.
 
 São dois mecanismos, porque são dois problemas:
 
@@ -29,7 +29,7 @@ io.github.llawli.AdvBr              pacote base: OpenSC, pcsc-lite, shim, script
 
 O pacote base não sabe quais extensões existem: ele **varre** os três
 diretórios a cada execução. Acrescentar um driver, um assinador ou um
-aplicativo é escrever um manifesto e uma linha na tabela do `instalar.sh` — não
+aplicativo é escrever um manifesto e uma linha na tabela do `instalar.sh`. Não
 há registro central para atualizar, e é por isso que instalar uma extensão
 depois funciona sem tocar no pacote base.
 
@@ -47,8 +47,8 @@ O p11-kit do host inicia esse comando sob demanda e conversa com ele por um
 pipe. **Um processo por módulo**, e não um só exportando o proxy do sandbox,
 por dois motivos: isolamento (um driver que derrube o processo que o carregou
 leva junto só a si mesmo) e porque o `p11-kit-trust.module` que o Flatpak
-injeta em todo sandbox é um bind somente-leitura que não sai de lá — exportar o
-proxy devolveria ao host, como se fossem tokens, as âncoras de confiança que
+injeta em todo sandbox é um bind somente-leitura que não sai de lá, e exportar
+o proxy devolveria ao host, como se fossem tokens, as âncoras de confiança que
 ele já tem.
 
 O que trafega no pipe é a tabela de funções PKCS#11 serializada, e as duas
@@ -73,7 +73,7 @@ Nada é instalado no sistema. Tudo mora na home de quem usa:
 ## Por que sem `nss-tools`
 
 Num banco NSS moderno (cert9.db + key4.db) a lista de módulos não vive dentro
-do banco: vive em `pkcs11.txt`, texto puro ao lado dele — é isso que o
+do banco: vive em `pkcs11.txt`, texto puro ao lado dele, e é isso que o
 `modutil -add` edita. Editar o arquivo direto evita exigir um pacote a mais num
 sistema atômico, onde ele custa um `rpm-ostree` e um reboot. Ver
 `host/nssdb.py`.
@@ -82,7 +82,7 @@ sistema atômico, onde ele custa um `rpm-ostree` e um reboot. Ver
 
 Contar módulos ou verificar se um socket existe não prova nada: o Flatpak já
 põe um socket do p11-kit em todo sandbox, e um p11-kit-proxy sem módulo nenhum
-falha igual a um driver quebrado. As provas do repositório chamam de verdade —
-`tests/prova-pkcs11.py` e `tests/prova-nss.py` — e nenhuma delas autentica:
+falha igual a um driver quebrado. As provas do repositório chamam de verdade
+(`tests/prova-pkcs11.py` e `tests/prova-nss.py`), e nenhuma delas autentica:
 listar tokens não exige PIN, e cada tentativa errada gasta uma das poucas que
 um token de hardware tem.

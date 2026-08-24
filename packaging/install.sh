@@ -19,7 +19,7 @@
 #   os Flatpaks instalados          o pacote e as extensões que você pediu
 #
 # O que NÃO fica: nenhum artefato de construção. Eles são feitos em
-# ~/.cache/flatpak-adv-br/construcao e apagados no fim — o .flatpak-builder de uma
+# ~/.cache/flatpak-adv-br/construcao e apagados no fim: o .flatpak-builder de uma
 # instalação completa passa de 1 GB, e ninguém que instalou por curl deveria
 # ter que descobrir isso depois.
 set -eu
@@ -39,7 +39,7 @@ ok()   { printf '%s ✓%s %s\n' "$verde" "$normal" "$*"; }
 
 # Duas formas de trazer o código, e nenhuma delas exige que você tenha clonado
 # antes. Com git, dá para atualizar depois sem baixar tudo de novo; sem git,
-# o tarball resolve — e há máquina de trabalho onde instalar git é justamente o
+# o tarball resolve, e há máquina de trabalho onde instalar git é justamente o
 # que a pessoa não pode fazer.
 baixar_com_git() {
     if [ -d "$DESTINO/.git" ]; then

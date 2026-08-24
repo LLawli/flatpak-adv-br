@@ -22,7 +22,7 @@ REMOTO_LOCAL=adv-br-local
 # NÃO no diretório do projeto: o flatpak-builder cria ali um .flatpak-builder
 # que passa de 1 GB e um build-dir por extensão, e quem instalou por curl não
 # tem por que descobrir isso depois. Em ~/.cache eles ficam onde se espera que
-# fique cache — apagável a qualquer momento, e é o que --limpar faz.
+# fique cache: apagável a qualquer momento, e é o que --limpar faz.
 #
 # Também não em /tmp: numa máquina com /tmp em tmpfs, os 288 MB do SerproID
 # seriam RAM.
@@ -59,7 +59,7 @@ Sem nenhuma opção, instala só o pacote base: o OpenSC, que já reconhece part
 dos cartões ICP-Brasil, e a ponte que leva o token aos navegadores e ao Papers.
 São poucos megabytes.
 
-O resto se instala quando você for usar, e pode ser depois — rodar de novo com
+O resto se instala quando você for usar, e pode ser depois: rodar de novo com
 outra opção acrescenta sem refazer o que já está pronto:
 
   drivers de token
@@ -173,7 +173,7 @@ titulo "Runtime"
 remoto_flathub() {
     # A saída é capturada antes de filtrar: "cmd | grep -q" faz o grep sair na
     # primeira ocorrência, o produtor levar SIGPIPE e, com pipefail, o pipeline
-    # inteiro retornar 141 — sucesso que vira falha conforme a POSIÇÃO da linha
+    # inteiro retornar 141: sucesso que vira falha conforme a POSIÇÃO da linha
     # que casou.
     printf '%s\n' "$(flatpak remotes --columns=name)" | grep -qx flathub && return 0
     log "acrescentando o remoto flathub (usuário)"
@@ -202,7 +202,7 @@ titulo "p11-kit"
 # processo dentro do sandbox e conversa com ele por um pipe, e o que trafega
 # ali é a tabela de funções PKCS#11 serializada. As duas pontas precisam
 # concordar sobre ela. Quando não concordam, nada recusa a conexão: os slots
-# enumeram, o PIN é aceito, e toda assinatura falha — inclusive a do login por
+# enumeram, o PIN é aceito, e toda assinatura falha: inclusive a do login por
 # certificado, que assina no handshake TLS.
 #
 # O runtime é fixo, então quem varia é o host: Debian trixie e Ubuntu 24.04
@@ -225,7 +225,7 @@ COMPAT="$RAIZ/packaging/p11kit-compat.yml"
 
 escrever_compat_neutro() {
     /usr/bin/cat > "$COMPAT" <<'FIM'
-# GERADO por ./instalar.sh — não edite à mão.
+# GERADO por ./instalar.sh: não edite à mão.
 #
 # O p11-kit do host está na mesma série do runtime, então não há nada a
 # compilar. Ver packaging/p11kit-series.txt.
@@ -238,7 +238,7 @@ FIM
 
 escrever_compat_com() { # <serie> <versao> <sha256>
     /usr/bin/cat > "$COMPAT" <<FIM
-# GERADO por ./instalar.sh — não edite à mão.
+# GERADO por ./instalar.sh: não edite à mão.
 #
 # O p11-kit do host está na série $1 e o do runtime não. Este módulo compila um
 # p11-kit $2 dentro do pacote, isolado em /app/lib/p11kit-compat, para que a
@@ -317,7 +317,7 @@ else
     [ -d "$TRABALHO/base/files" ] ||
         erro "a construção falhou (não há $TRABALHO/base/files); veja o erro acima."
 
-    aviso "a construção terminou, mas a instalação falhou — normalmente é o
+    aviso "a construção terminou, mas a instalação falhou: normalmente é o
       remoto lento no último passo. Instalando a partir do que já foi
       construído, sem consultar remoto."
 

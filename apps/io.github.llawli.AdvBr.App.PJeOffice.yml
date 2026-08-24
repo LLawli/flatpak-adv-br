@@ -4,7 +4,7 @@
 #
 # Ele é aplicativo, não biblioteca: sobe um servidor em 127.0.0.1:8800 e os
 # sistemas do Judiciário falam com ele pelo navegador. Está aqui pelo mesmo
-# motivo dos outros assinadores — é onde os drivers de token funcionam — e é
+# motivo dos outros assinadores, porque é onde os drivers de token funcionam. E é
 # extensão pelo mesmo motivo de sempre: quem não usa o PJe não deve baixar
 # 300 MB de Java para descobrir isso.
 #
@@ -25,7 +25,7 @@ build-options:
   prefix: /app/lib/apps/PJeOffice
 
 modules:
-  # Java 11 — a versão que o PJeOffice Pro 2.5.16u exige.
+  # Java 11: a versão que o PJeOffice Pro 2.5.16u exige.
   #
   # O install.sh da extensão do SDK copia para /app/jre, um caminho fixo, e o
   # que uma extensão instala fora do próprio prefixo não é coletado. Então o

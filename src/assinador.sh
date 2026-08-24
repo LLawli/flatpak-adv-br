@@ -8,7 +8,7 @@
 # Qual assinador é decidido pelo nome pelo qual este script foi chamado
 # (adv-br-webpki, adv-br-websigner, adv-br-certisign), que é como se expõe um
 # comando por assinador sem três cópias deste arquivo. O comando existe no
-# pacote base mesmo sem a extensão correspondente instalada — é ele que dá a
+# pacote base mesmo sem a extensão correspondente instalada: é ele que dá a
 # mensagem em vez de o navegador falhar sem explicação.
 set -euo pipefail
 

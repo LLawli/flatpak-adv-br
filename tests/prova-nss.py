@@ -9,7 +9,7 @@ o aplicativo o enxerga; esta prova fecha essa lacuna.
 Uso: prova-nss.py <diretório-do-banco>
 
 Nenhum PIN é pedido em momento algum: listar tokens não exige login, e tentar
-login em token de hardware gasta tentativa — num token com "final try", a
+login em token de hardware gasta tentativa: num token com "final try", a
 tentativa seguinte o bloqueia.
 """
 import ctypes

@@ -30,7 +30,7 @@ caminho_do_proxy() {
     return 1
 }
 
-# LD_LIBRARY_PATH e preparar.sh de cada extensão instalada — de driver, de
+# LD_LIBRARY_PATH e preparar.sh de cada extensão instalada: de driver, de
 # assinador ou de aplicativo. Precisa rodar antes de qualquer coisa carregar um
 # módulo PKCS#11 ou abrir um assinador.
 #
@@ -81,7 +81,7 @@ listar_modulos() {
 # responda por todos eles de uma vez. É o que os assinadores consomem.
 #
 # /etc é um tmpfs recriado a cada execução, então isto é refeito em todo
-# começo — e é o que permite um pacote somente-leitura responder por drivers
+# começo, e é o que permite um pacote somente-leitura responder por drivers
 # instalados depois, como extensão.
 registrar_modulos_no_sandbox() {
     [ -w "$MODULOS_SANDBOX" ] || {
@@ -90,7 +90,7 @@ registrar_modulos_no_sandbox() {
     }
     local rotulo biblioteca
     while IFS=$'\t' read -r rotulo biblioteca; do
-        # critical: no — com mais de um driver instalado, um deles recusar o
+        # critical: no. Com mais de um driver instalado, um deles recusar o
         # cartão presente é o caso comum, não a exceção.
         printf 'module: %s\ncritical: no\n' "$biblioteca" \
             > "$MODULOS_SANDBOX/$rotulo.module"
@@ -101,7 +101,7 @@ registrar_modulos_no_sandbox() {
 #
 # Um .module cujo driver não carrega simplesmente SOME da listagem, sem erro,
 # porque todos são registrados com 'critical: no'. A diferença entre os dois
-# números é o único sinal de que um driver não subiu — foi assim que se
+# números é o único sinal de que um driver não subiu: foi assim que se
 # descobriu o SerproID falhando antes de existir o diretório de certificados
 # que ele exige. Contar só os carregados, e comparar com um número fixo, não
 # detecta nada.

@@ -1,11 +1,11 @@
 /*
- * pkcs11.so — a única biblioteca PKCS#11 que o PJeOffice carrega no sandbox.
+ * pkcs11.so: a única biblioteca PKCS#11 que o PJeOffice carrega no sandbox.
  *
  * O assinador aceita a variável PKCS11_DRIVER como diretório e carrega dali um
  * arquivo chamado "pkcs11.so". Quem faz o trabalho é o p11-kit-proxy do
  * runtime, que agrega todos os módulos configurados em /etc/pkcs11/modules.
  *
- * Um symlink para o proxy resolveria — se o signer4j não canonicasse o caminho
+ * Um symlink para o proxy resolveria: se o signer4j não canonicasse o caminho
  * com toRealPath() antes de gravá-lo em ~/.pjeoffice-pro/pjeoffice-pro.config.
  * O que fica gravado então é o alvo final do symlink, hoje
  * libp11-kit.so.0.4.10, e a próxima atualização do runtime que mude esse

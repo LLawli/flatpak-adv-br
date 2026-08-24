@@ -3,7 +3,7 @@
 #   ./instalar.sh --with-certisign
 #
 # Ele carrega driver por dlopen de nome simples (libeToken.so, libeTPkcs11.so),
-# o que o LD_LIBRARY_PATH montado pelo lançador já resolve — e abre os .glade
+# o que o LD_LIBRARY_PATH montado pelo lançador já resolve, e abre os .glade
 # da interface por caminho absoluto em /opt, que o preparar.sh acomoda.
 id: io.github.llawli.AdvBr.Assinador.Certisign
 branch: master

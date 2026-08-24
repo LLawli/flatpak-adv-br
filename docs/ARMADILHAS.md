@@ -6,7 +6,7 @@ por que enganou e o que resolveu.
 ## O Flatpak fecha a porta da configuração do p11-kit, e abre outra
 
 Todo sandbox Flatpak recebe um `/etc/pkcs11/pkcs11.conf` com
-`user-config: none` — a string está no binário do `flatpak`, não no runtime,
+`user-config: none`. A string está no binário do `flatpak`, não no runtime,
 então vale para qualquer app, runtime e distribuição. Nenhum `.module` de
 usuário é lido lá dentro.
 
@@ -46,7 +46,7 @@ Um app Flatpak com `--filesystem=home` (o Papers tem `home:ro`) **não** usa o
 ele abre é o seu, `~/.pki/nssdb`.
 
 Como as bibliotecas ficam em caminhos diferentes nos dois mundos, o
-`pkcs11.txt` recebe os dois registros — o `p11-kit-proxy.so` do host e o
+`pkcs11.txt` recebe os dois registros: o `p11-kit-proxy.so` do host e o
 `p11-kit-client.so` do runtime. O NSS ignora em silêncio o que não conseguir
 carregar, e em cada lado é justamente um deles que não carrega.
 
@@ -57,7 +57,7 @@ Conferir de que tipo é o app: `flatpak info --show-permissions <app>`.
 Num banco moderno (cert9.db + key4.db) a lista de módulos não vive dentro do
 banco: vive em `pkcs11.txt`, texto puro ao lado dele. É esse arquivo que o
 `modutil -add` edita. Editá-lo direto evita exigir `nss-tools`, que num Fedora
-atômico custa um `rpm-ostree` e um reboot — e resolve de graça o caso que
+atômico custa um `rpm-ostree` e um reboot. E resolve de graça o caso que
 exigiria `modutil -rawadd`: registrar, do host, um caminho que só existe dentro
 de um sandbox.
 
@@ -88,7 +88,7 @@ se confunde com ponte quebrada.
 `cswebsigner` sai com código 1, sem stdout e sem stderr, para `getVersion`,
 `getInfo` e `listTokens`, com e sem a origem que o manifesto dele autoriza. Ele
 faz o mesmo **no host, fora de qualquer sandbox, e dentro de um contêiner
-Debian** — não é empacotamento. Os comandos que o binário conhece são
+Debian**, então não é empacotamento. Os comandos que o binário conhece são
 `getInfo`, `listCertificates`, `listTokens`, `sign` e `signCades`; `getVersion`
 não está lá. Quem o exercita de verdade é a extensão no navegador.
 
@@ -115,7 +115,7 @@ intermediário que falta, emitido pela DigiCert Global Root G2, que o sistema j�
 confia. Com ele, `openssl s_client` devolve `Verify return code: 0 (ok)`.
 
 O downloader do `flatpak-builder` **ignora `SSL_CERT_FILE` e `CURL_CA_BUNDLE`**
-— testado. Por isso esse é o único módulo que baixa dentro do build
+(testado). Por isso esse é o único módulo que baixa dentro do build
 (`build-args: --share=network`), com `curl --cacert` e `sha256sum -c` em
 seguida.
 
@@ -137,7 +137,7 @@ O que foi isolado, medindo:
 | a mesma biblioteca dentro de **outro** Flatpak (`br.jus.cnj.PJeOffice`) | > 60 s |
 
 Ou seja: é a conversa com o pcscd através do socket montado no sandbox, e não
-é o empacotamento deste projeto — acontece igual em outro pacote. O processo
+é o empacotamento deste projeto: acontece igual em outro pacote. O processo
 fica em `clock_nanosleep`, o que tem cara de laço de nova tentativa dentro da
 `libeToken`.
 
@@ -150,7 +150,7 @@ seguido de `./host/publicar.sh`, que também apaga o `.module` órfão.
 
 A `libserproidp11.so` do SerproID usa símbolos da `libgcc_s`
 (`_Unwind_Resume_or_Rethrow`) e **não a declara** em `DT_NEEDED`. O `ldd` fica
-verde — ele lista o que falta entre as dependências declaradas, e não há
+verde, porque ele lista o que falta entre as dependências declaradas, e não há
 nenhuma faltando. Quem abre a biblioteca com `dlopen` é que descobre:
 
 ```
@@ -159,7 +159,7 @@ undefined symbol: _Unwind_Resume_or_Rethrow
 
 E descobre tarde: o p11-kit, o assinador e o PJeOffice abrem o módulo na hora
 de listar certificados, que é a hora de assinar, com o token na mão. Pior: se
-alguma outra coisa já tiver trazido a `libgcc_s` para o processo, funciona — o
+alguma outra coisa já tiver trazido a `libgcc_s` para o processo, funciona, e o
 mesmo pacote passa numa máquina e falha em outra.
 
 Duas consequências no projeto:
@@ -195,8 +195,8 @@ usam.
 ## O Flatpak não exporta arquivos de extensão
 
 O `.desktop` que uma extensão instala não vira atalho de menu. O Flatpak
-exporta o que está no **aplicativo**, no momento em que ele foi construído —
-uma extensão instalada depois nunca passa por lá. Por isso o
+exporta o que está no **aplicativo**, no momento em que ele foi construído.
+Uma extensão instalada depois nunca passa por lá. Por isso o
 `./host/publicar.sh` lê o `.desktop` e o ícone de dentro do sandbox e os
 escreve em `~/.local/share`.
 
@@ -212,11 +212,11 @@ Contar módulos ou verificar se um socket existe não prova nada: o Flatpak já 
 um socket do p11-kit em todo sandbox, e um `p11-kit-proxy` sem módulo nenhum
 falha igual a um driver quebrado. As provas deste repositório chamam:
 
-- `tests/prova-pkcs11.py` — `C_GetFunctionList` → `C_Initialize` →
+- `tests/prova-pkcs11.py`: `C_GetFunctionList` → `C_Initialize` →
   `C_GetSlotList` → `C_GetTokenInfo`. O `p11-kit-proxy.so` exporta **só**
   `C_GetFunctionList`; os demais símbolos têm de sair da `CK_FUNCTION_LIST`, não
   de `dlsym`.
-- `tests/prova-nss.py` — `NSS_Init` → `PK11_GetAllTokens`. O mecanismo é
+- `tests/prova-nss.py`: `NSS_Init` → `PK11_GetAllTokens`. O mecanismo é
   `CKM_INVALID_MECHANISM` (`0xFFFFFFFF`); passar `0` devolve só os dois slots
   internos do NSS, o que parece sucesso e não é.
 
@@ -224,7 +224,7 @@ falha igual a um driver quebrado. As provas deste repositório chamam:
 
 O engano natural é achar que `~/.var/app/<id>` é a home do aplicativo e que
 tudo o que se põe ali ele vê. Não é. O Flatpak monta de lá apenas os
-diretórios XDG — `cache`, `config`, `data` — e o que o manifesto declarar como
+diretórios XDG (`cache`, `config`, `data`) e o que o manifesto declarar como
 `persistent`. O Firefox declara `persistent=.mozilla`, e mais nada: dentro do
 sandbox dele, `$HOME/.mozilla` existe e `$HOME/.local/bin` **não**.
 
@@ -232,23 +232,23 @@ Isso mordeu de verdade aqui. O atalho de native messaging estava sendo escrito
 em `~/.var/app/<id>/.local/bin/`, o manifesto apontava para
 `$HOME/.local/bin/...`, e o resultado era um arquivo que existe para o host e
 não existe para o navegador. A extensão informa que o assinador não está
-instalado — o mesmo sintoma de um manifesto no formato errado, e por causa
-diferente.
+instalado, que é o mesmo sintoma de um manifesto no formato errado, por causa
+completamente diferente.
 
 O atalho mora agora em `~/.var/app/<id>/data/adv-br/`, que tem uma propriedade
 útil: **o caminho absoluto é o mesmo dentro e fora do sandbox**. O que se grava
 no manifesto vale dos dois lados, e o `./diagnostico.sh` consegue conferir, do
 host, se o arquivo existe e é executável.
 
-Conferir de qual tipo é um app: `flatpak info --show-permissions <app>` —
+Conferir de qual tipo é um app: `flatpak info --show-permissions <app>`.
 `filesystems=home` ou `host` significa home real; `persistent=` significa que
 só aquilo é montado.
 
 ## Um caminho de módulo vale dentro de um sandbox só
 
 `/pkcs11/adv-br.so` é criado pelo **lançador deste pacote**, na raiz tmpfs do
-sandbox dele. Digitá-lo na configuração de outro Flatpak — o PJeOffice, por
-exemplo — aponta para um arquivo que lá não existe, e o sintoma é uma lista de
+sandbox dele. Digitá-lo na configuração de outro Flatpak (o PJeOffice, por
+exemplo) aponta para um arquivo que lá não existe, e o sintoma é uma lista de
 certificados vazia, sem erro.
 
 A saída não foi ensinar dois caminhos: foi o lançador do PJeOffice passar a
@@ -280,7 +280,7 @@ Medido no mesmo minuto, com o mesmo token e o mesmo assinador:
 | o mesmo, antes, com processos remotos ocupados | > 150 s |
 
 A conclusão que **não** se deve tirar disso é que um caminho é melhor que o
-outro — foi o que se tentou aqui, e o uso real desmentiu: assinar num site pelo
+outro. Foi o que se tentou aqui, e o uso real desmentiu: assinar num site pelo
 Lacuna Web PKI, com `/pkcs11/adv-br.so`, funcionou de primeira. O que a
 variação mede é contenção, não caminho.
 
@@ -294,13 +294,13 @@ enumeram, o PIN é aceito, o `C_FindObjects` devolve as chaves, e **todo**
 `C_SignInit` falha, com `CKR_DEVICE_ERROR`. Nenhum mecanismo escapa.
 
 Isso não atinge só assinar documento. A autenticação por certificado também
-exige uma assinatura, no `CertificateVerify` do handshake TLS — então Projudi,
+exige uma assinatura, no `CertificateVerify` do handshake TLS, então Projudi,
 eproc e login do gov.br param de autenticar **com a lista de certificados
 aparecendo normalmente**. É o modo de falha mais caro que existe aqui: tudo
 parece certo até o último passo.
 
 A causa está a montante, na 0.26.0 ("pkcs11: Update PKCS11 headers to version
-3.2"), e não é acidente isolado — a 0.25.8 foi um "rpc: Unbreak protocol
+3.2"), e não é acidente isolado: a 0.25.8 foi um "rpc: Unbreak protocol
 compatibility by reverting …".
 
 Aqui o runtime é fixo (série 0.26), então quem varia é o host: **Debian trixie e
@@ -315,8 +315,8 @@ host, isolado em `/app/lib/p11kit-compat`. Só o processo da ponte
 precisa concordar com ninguém porque não atravessa pipe nenhum.
 
 As versões por série estão em `packaging/p11kit-series.txt`, com sha256. O
-módulo gerado é `packaging/p11kit-compat.yml`, que no caso normal — host e
-runtime na mesma série — não faz nada.
+módulo gerado é `packaging/p11kit-compat.yml`, que no caso normal (host e
+runtime na mesma série) não faz nada.
 
 Dois detalhes que custaram uma rodada cada:
 
@@ -325,13 +325,13 @@ Dois detalhes que custaram uma rodada cada:
   registra;
 - o campo `library-version` do `p11-kit list-modules` é a versão reportada pelo
   **módulo**, não a da `libp11-kit` do processo. Perguntar ao módulo de
-  confiança do runtime devolve `0.26` mesmo com a ponte usando uma 0.25 — o que
+  confiança do runtime devolve `0.26` mesmo com a ponte usando uma 0.25, o que
   parece certo e é exatamente o engano a evitar. A pergunta tem de ir ao trust
   do p11-kit que a ponte de fato usa.
 
 A série sai do próprio p11-kit (`library-version` do módulo de confiança), e
 não do nome do arquivo: o soname é `libp11-kit.so.0.4.1` na 0.25 e `0.4.10`/
-`0.4.11` na 0.26 — distingue por acaso e ordena errado como texto.
+`0.4.11` na 0.26, o que distingue por acaso e ordena errado como texto.
 
 ## Um módulo que não carrega desaparece da contagem, calado
 
@@ -340,7 +340,7 @@ quebrado não derrube os outros. O preço é que um driver que **não sobe** nã
 produz erro nenhum: ele apenas some da saída do `p11-kit list-modules`.
 
 O único sinal é a diferença entre o número de módulos registrados e o de
-módulos listados — foi assim que se detectou o SerproID falhando antes de
+módulos listados. Foi assim que se detectou o SerproID falhando antes de
 existir o diretório de certificados que ele exige. O `./diagnostico.sh` compara
 os dois.
 
@@ -357,7 +357,7 @@ crash é depois de o trabalho terminar.
 
 O que custa tempo é o disfarce: por padrão a JVM escreve um core dump antes de
 morrer, e a espera faz o crash parecer travamento. O lançador do PJeOffice
-passa `-XX:-CreateCoredumpOnCrash` por isso — com ele, o crash aparece em
+passa `-XX:-CreateCoredumpOnCrash` por isso. Com ele, o crash aparece em
 segundos, com a pilha.
 
 E cuidado com o diagnóstico por eliminação: a primeira suspeita foi o SerproID,
@@ -369,7 +369,7 @@ apareceu.
 
 O `grep -q` sai assim que encontra a primeira ocorrência. Quem estava
 escrevendo do outro lado do cano leva SIGPIPE, termina com 141, e com
-`set -o pipefail` o pipeline inteiro devolve 141 — ou seja, **falha** — mesmo
+`set -o pipefail` o pipeline inteiro devolve 141, ou seja, **falha**, mesmo
 tendo encontrado o que procurava.
 
 O efeito é cruel porque depende da **posição** da linha que casou: se ela vier

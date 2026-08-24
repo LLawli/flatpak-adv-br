@@ -5,8 +5,8 @@
 # como um .cer em ~/.config/serproid/certificados, e a biblioteca PKCS#11 lê
 # esse diretório e fala direto com a nuvem na hora de usar a chave privada.
 #
-# A interface entre as duas metades é esse diretório de arquivos — não um
-# socket, não um serviço — e é por isso que dá para trazer as duas para dentro
+# A interface entre as duas metades é esse diretório de arquivos: não um
+# socket, não um serviço, e é por isso que dá para trazer as duas para dentro
 # do Flatpak. Esta extensão traz o aplicativo inteiro, com o JRE Zulu 8 e o
 # JavaFX que ele embarca, e não depende de nada instalado no host.
 #
@@ -58,8 +58,8 @@ modules:
       # Atalho de menu. A convenção está em drivers/README.md: o que estiver em
       # atalhos/<nome>.{desktop,png} é oferecido ao host pelo
       # ./host/publicar.sh, que substitui @EXEC@ e @ICONE@ pelos caminhos de
-      # lá. Um .desktop dentro da extensão não é exportado pelo Flatpak — só o
-      # do aplicativo é — e por isso a travessia é explícita.
+      # lá. Um .desktop dentro da extensão não é exportado pelo Flatpak: só o
+      # do aplicativo é, e por isso a travessia é explícita.
       - install -Dm644 serproid.desktop "${FLATPAK_DEST}/atalhos/serproid.desktop"
       - install -Dm644 deb/usr/share/serproid-desktop/SerproID.png
         "${FLATPAK_DEST}/atalhos/serproid.png"
@@ -68,13 +68,13 @@ modules:
       - test -x "${FLATPAK_DEST}/app/jre/bin/java"
       - test -s "${FLATPAK_DEST}/app/lib/NeoID.jar"
       # A libserproidp11.so usa símbolos da libgcc_s (_Unwind_Resume_or_Rethrow)
-      # e NÃO a declara em DT_NEEDED. Quem a abre com dlopen — o p11-kit, o
-      # assinador, o PJeOffice — falha com "undefined symbol", a não ser que
+      # e NÃO a declara em DT_NEEDED. Quem a abre com dlopen (o p11-kit, o
+      # assinador, o PJeOffice) falha com "undefined symbol", a não ser que
       # alguma outra coisa já tenha trazido a libgcc_s para aquele processo.
       # Declarar a dependência que falta faz a biblioteca se bastar em qualquer
       # processo, em vez de depender de sorte ou de LD_PRELOAD no chamador.
       # Pelo caminho: o prefixo desta extensão não está no PATH do build. As
-      # aspas simples são do YAML — um escalar não pode começar com aspas
+      # aspas simples são do YAML: um escalar não pode começar com aspas
       # duplas e continuar depois delas.
       - '"${FLATPAK_DEST}/bin/patchelf" --add-needed libgcc_s.so.1 "${FLATPAK_DEST}/pkcs11/libserproidp11.so"'
       - '"${FLATPAK_DEST}/bin/patchelf" --print-needed "${FLATPAK_DEST}/pkcs11/libserproidp11.so" | grep -qx libgcc_s.so.1'

@@ -4,12 +4,12 @@
 #
 # Este é o único manifesto do projeto que baixa durante a construção, e não
 # pela lista de fontes. O servidor da Softplan serve uma cadeia TLS incompleta
-# — repete o certificado do servidor no lugar do intermediário — e o
+# repete o certificado do servidor no lugar do intermediário, e o
 # downloader do flatpak-builder ignora SSL_CERT_FILE e CURL_CA_BUNDLE. A saída
 # não é desligar a verificação com "curl -k", que é o que outros projetos
 # fazem: é COMPLETAR a cadeia. packaging/ca/ traz o intermediário que falta,
 # emitido por uma raiz que o sistema já confia, e o sha256 é conferido logo em
-# seguida — o resultado é mais verificado que o de uma fonte comum, não menos.
+# seguida: o resultado é mais verificado que o de uma fonte comum, não menos.
 id: io.github.llawli.AdvBr.Assinador.WebSigner
 branch: master
 runtime: io.github.llawli.AdvBr

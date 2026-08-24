@@ -8,7 +8,7 @@ num arquivo de texto ao lado dele, `pkcs11.txt`. É esse arquivo que o
 
 A diferença que importa: o `modutil -add` carrega a biblioteca para validá-la,
 e por isso não serve para registrar, a partir do host, um caminho que só existe
-dentro do sandbox de um navegador em Flatpak — para esse caso ele exige
+dentro do sandbox de um navegador em Flatpak; para esse caso ele exige
 `-rawadd`. Aqui os dois casos são a mesma operação.
 
 O formato do arquivo são blocos separados por linha em branco, cada linha um

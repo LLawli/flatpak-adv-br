@@ -6,7 +6,7 @@ Um Flatpak que reúne drivers de token e assinadores e os publica para os
 navegadores, o Papers e os aplicativos que já existem na máquina. O desenho
 está em [docs/arquitetura.md](docs/arquitetura.md); o que já foi medido e
 enganou, em [docs/ARMADILHAS.md](docs/ARMADILHAS.md). **Leia as armadilhas
-antes de mexer na camada PKCS#11** — quase toda falha ali é silenciosa.
+antes de mexer na camada PKCS#11**, porque quase toda falha ali é silenciosa.
 
 ## Antes de abrir um PR
 
@@ -54,7 +54,7 @@ Ao contribuir, você concorda em licenciar sua contribuição sob a
 
 ## Commits e releases
 
-Conventional commits, em português. A mensagem registra a decisão e o porquê —
+Conventional commits, em português. A mensagem registra a decisão e o porquê;
 não repita o diff.
 
 Uma release é `bin/release X.Y.Z`, que confere o repositório, exige a seção da

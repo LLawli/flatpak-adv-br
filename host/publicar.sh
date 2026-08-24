@@ -263,7 +263,7 @@ titulo "2/4 · Bancos NSS"
 #   navegador em Flatpak   não lê módulo de usuário nenhum: todo sandbox recebe
 #                          um /etc/pkcs11/pkcs11.conf com "user-config: none".
 #                          A porta que sobra é o p11-kit-client.so do runtime
-#                          dele, que fala com o socket do p11-kit do host — e
+#                          dele, que fala com o socket do p11-kit do host, e
 #                          esse socket serve tudo o que o host conhece,
 #                          inclusive os módulos acima.
 FLATPAKS_COM_CLIENT=()
@@ -350,7 +350,7 @@ with open(sys.argv[3], "w", encoding="utf-8") as f:
     # variável local com esse nome, para a família do navegador da vez, e ela
     # sombreia a de fora. O efeito era mudo e caro: a comparação lá dentro
     # virava "a família do navegador é igual a ela mesma", sempre verdadeira, e
-    # cada navegador recebia o manifesto do último assinador processado — o do
+    # cada navegador recebia o manifesto do último assinador processado: o do
     # Firefox, com allowed_extensions, dentro do diretório do Chrome, que exige
     # allowed_origins. O navegador ignora o arquivo sem dizer nada e a extensão
     # informa que o assinador não está instalado.
@@ -408,7 +408,7 @@ fi
 # ---------------------------------------------------------------------------
 titulo "4/4 · Atalhos de aplicativo"
 
-# Algumas extensões trazem aplicativo, não só biblioteca — o SerproID é o caso:
+# Algumas extensões trazem aplicativo, não só biblioteca. O SerproID é o caso:
 # sem abrir o aplicativo uma vez para associar o certificado, não há o que
 # assinar. Um .desktop dentro de uma extensão não é exportado pelo Flatpak, que
 # só exporta o do aplicativo, e no momento em que ele foi construído. Daí este

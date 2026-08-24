@@ -14,15 +14,15 @@ têm janela própria e o usuário os abre.
 Quase todo esse tamanho é o Java que o PJeOffice exige, e é por isso que ele é
 extensão: quem não usa o PJe não deve baixar 300 MB para descobrir isso.
 
-Depois de instalado, ele **aparece no menu** — o `./host/publicar.sh` leva o
-atalho para o host. Pela linha de comando:
+Depois de instalado, ele **aparece no menu**, porque o `./host/publicar.sh`
+leva o atalho para o host. Pela linha de comando:
 
 ```sh
 flatpak run --command=adv-br-ferramentas io.github.llawli.AdvBr pjeoffice-pro
 ```
 
 Para encerrá-lo com o shutdown hook rodando, `flatpak kill
-io.github.llawli.AdvBr` — e não `pkill -f pjeoffice-pro.jar`, que casa a linha
+io.github.llawli.AdvBr`, e não `pkill -f pjeoffice-pro.jar`, que casa a linha
 de comando de quem está rodando o `pkill`.
 
 ## A convenção que uma extensão de aplicativo segue
@@ -40,7 +40,7 @@ O prefixo de build é `/app/lib/apps/<Nome>`, e dentro dele:
 O `.desktop` sai da extensão e vai para `~/.local/share/applications` porque o
 Flatpak **não** exporta arquivos de extensão: ele exporta o que está no
 aplicativo, no momento em que o aplicativo foi construído. Uma extensão que a
-pessoa instala depois nunca passaria por lá — e um atalho que aparecesse sem a
+pessoa instala depois nunca passaria por lá. E um atalho que aparecesse sem a
 extensão instalada seria pior que nenhum.
 
 ## O que se sabe do PJeOffice

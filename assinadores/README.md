@@ -12,8 +12,8 @@ e cada um serve a um conjunto de sistemas:
 | `--with-certisign` | Certisign WebSigner, do portal da OAB | ~2 MB |
 
 Nenhum vem no pacote base, por dois motivos que se somam: eles não podem ser
-redistribuídos — cada manifesto baixa da URL do próprio fabricante, na sua
-máquina — e quem usa só um não deve baixar os três.
+redistribuídos (cada manifesto baixa da URL do próprio fabricante, na sua
+máquina) e quem usa só um não deve baixar os três.
 
 ```sh
 ./instalar.sh --with-webpki        # só o que você usa
@@ -38,8 +38,8 @@ Os manifestos vêm do fabricante e **não** são reescritos aqui: quem responde
 por "quais extensões de navegador podem falar com este assinador" é ele. O
 `./host/publicar.sh` copia o arquivo trocando um campo só, o `path`.
 
-As duas famílias de navegador exigem campos diferentes — `allowed_extensions`
-no Firefox, `allowed_origins` na família Chromium — e um navegador que receba o
+As duas famílias de navegador exigem campos diferentes (`allowed_extensions`
+no Firefox, `allowed_origins` na família Chromium) e um navegador que receba o
 formato do outro **ignora o arquivo em silêncio**, deixando a extensão dizer
 que o assinador não está instalado. Por isso são dois arquivos, e por isso o
 `./diagnostico.sh` confere o formato de cada um.
@@ -48,12 +48,12 @@ que o assinador não está instalado. Por isso são dois arquivos, e por isso o
 
 - **Lacuna e Softplan** são .NET com Avalonia, que só tem backend X11. Sob
   Wayland eles morrem com `XOpenDisplay failed` antes de ler a primeira
-  mensagem — daí o `--socket=x11` de verdade no pacote base, e não
+  mensagem. Daí o `--socket=x11` de verdade no pacote base, e não
   `fallback-x11`.
 - **Assinar exige licença da aplicação**, que quem fornece é o site. Um teste
   de linha de comando consegue listar certificados e nunca vai assinar: a
   resposta é `CheckLicenseAsync`, e não é falha do empacotamento.
-- **Certisign** não responde a `getVersion` — o protocolo dele conhece
+- **Certisign** não responde a `getVersion`: o protocolo dele conhece
   `getInfo`, `listCertificates`, `listTokens` e `sign`. Verificado que ele se
   comporta igual fora do Flatpak, no host e num contêiner Debian.
 - **Certisign** abre os `.glade` da interface por caminho absoluto em `/opt`,

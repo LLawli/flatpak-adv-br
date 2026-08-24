@@ -14,7 +14,7 @@
 # atinge só assinar documento: a autenticação por certificado também exige uma
 # assinatura, no CertificateVerify do handshake TLS, então o login por
 # certificado para de funcionar com a lista de certificados aparecendo
-# normalmente. É o modo de falha mais caro que existe aqui — tudo parece certo
+# normalmente. É o modo de falha mais caro que existe aqui: tudo parece certo
 # até o último passo.
 #
 # A causa está a montante, na 0.26.0 do p11-kit ("pkcs11: Update PKCS11 headers
@@ -30,7 +30,7 @@
 set -euo pipefail
 
 # Um laço, e não 'ls a b | head -1': com 'set -e' e 'pipefail', o ls que não
-# acha um dos caminhos derruba o script antes da primeira linha útil — e o
+# acha um dos caminhos derruba o script antes da primeira linha útil, e o
 # comando falha sem dizer nada, que é o pior jeito de falhar.
 procurar_trust() { # <prefixo>
     local candidato
@@ -48,7 +48,7 @@ procurar_trust() { # <prefixo>
 # E a pergunta tem de ser feita ao módulo de confiança DAQUELE p11-kit: o campo
 # library-version que o list-modules imprime é a versão reportada pelo módulo,
 # não a da libp11-kit do processo. Perguntar ao trust do runtime devolve 0.26
-# mesmo com a ponte usando uma 0.25 — o que parece certo e é justamente o
+# mesmo com a ponte usando uma 0.25, o que parece certo e é justamente o
 # engano que este comando existe para evitar.
 COMPAT=/app/lib/p11kit-compat
 if [ -x "$COMPAT/bin/p11-kit" ]; then

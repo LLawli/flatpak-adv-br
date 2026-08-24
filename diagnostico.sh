@@ -24,7 +24,7 @@ if command -v python3 >/dev/null; then ok "python3"; else falha_conta "python3 n
 
 # As duas pontas da ponte precisam estar na mesma série do p11-kit. Quando não
 # estão, nada recusa a conexão: os slots enumeram, o PIN é aceito, e toda
-# assinatura falha — inclusive a do login por certificado, que assina no
+# assinatura falha, inclusive a do login por certificado, que assina no
 # handshake TLS. É o modo de falha mais caro daqui.
 SERIE_HOST=$(serie_p11kit_host)
 if [ -n "$SERIE_HOST" ]; then
@@ -69,12 +69,12 @@ elif [ -n "$SERIE_HOST" ]; then
     else
         falha_conta "o p11-kit do host está na série $SERIE_HOST e a ponte deste pacote
       na $SERIE_PACOTE. Assim, o token aparece no navegador, o PIN é aceito e
-      TODA assinatura falha — inclusive a do login por certificado.
+      TODA assinatura falha, inclusive a do login por certificado.
       O ./instalar.sh resolve: ele compila, dentro do pacote, um p11-kit da
       série do host. Rode-o de novo. Se ele disser que não conhece a série
       $SERIE_HOST, acrescente-a em packaging/p11kit-series.txt.
-      (Os aplicativos deste pacote — PJeOffice, assinadores — não passam pela
-      ponte e funcionam de qualquer jeito.)"
+      (Os aplicativos deste pacote, como o PJeOffice e os assinadores, não
+      passam pela ponte e funcionam de qualquer jeito.)"
     fi
 fi
 
@@ -99,7 +99,7 @@ if [ -n "$REGISTRADOS" ] && [ -n "$CARREGADOS" ]; then
       menos o OpenSC do pacote e o módulo de confiança do Flatpak."
     elif [ "$CARREGADOS" -lt "$REGISTRADOS" ]; then
         falha_conta "$REGISTRADOS módulos registrados, $CARREGADOS carregados: algum driver
-      não sobe. Não há erro porque todos são registrados com 'critical: no' —
+      não sobe. Não há erro porque todos são registrados com 'critical: no',
       o que denuncia é a diferença. Veja qual falta:
           flatpak run --command=sh $APP_ID -c 'p11-kit list-modules'"
     else
@@ -138,7 +138,7 @@ done
 
 # Cada família de navegador exige um campo diferente, e trocá-los é um erro
 # mudo: o navegador ignora o manifesto sem dizer nada, e a extensão informa que
-# o assinador não está instalado — mandando instalar o .deb que o Flatpak
+# o assinador não está instalado, mandando instalar o .deb que o Flatpak
 # justamente substitui. Foi o que aconteceu, e é barato conferir.
 declare -A MANIFESTO_VISTO=()
 conferir_manifesto() {
@@ -167,7 +167,7 @@ conferir_manifesto() {
         done
         # O 'path' de cada manifesto é o que o navegador vai executar. Para um
         # navegador em Flatpak, esse caminho tem de existir DENTRO do sandbox
-        # dele — e é por isso que o atalho mora em ~/.var/app/<id>/data, cujo
+        # dele, e é por isso que o atalho mora em ~/.var/app/<id>/data, cujo
         # caminho absoluto é o mesmo dos dois lados e portanto pode ser
         # conferido daqui. Um atalho que existe só para o host deixa a extensão
         # dizendo que o assinador não está instalado.
@@ -187,7 +187,7 @@ conferir_manifesto() {
       (falta \"$campo\"). O navegador ignora o arquivo em silêncio e a extensão
       diz que o assinador não está instalado.  ./host/publicar.sh"
         elif [ "$certos" -gt 0 ]; then
-            ok "$(printf '%s' "$dir" | sed "s|^$HOME|~|") — $certos manifesto(s) $familia"
+            ok "$(printf '%s' "$dir" | sed "s|^$HOME|~|") ($certos manifesto(s) $familia)"
         fi
     done <<<"$manifestos"
     return 0
@@ -267,7 +267,7 @@ titulo "6 · Quanto custa cada driver"
 
 # Um driver lento não é detalhe: o navegador enumera os slots ao abrir, e
 # espera. O SafeNet, sem token SafeNet espetado, leva mais de um minuto dentro
-# do sandbox — medido, e não só aqui: acontece igual em outro Flatpak, com
+# do sandbox. Medido, e não só aqui: acontece igual em outro Flatpak, com
 # outro pacote, e não acontece com a mesma biblioteca no host.
 TEMP=$(mktemp -d)
 cp "$RAIZ/tests/prova-pkcs11.py" "$TEMP/prova.py"

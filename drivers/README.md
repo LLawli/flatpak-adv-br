@@ -100,16 +100,16 @@ assinador, um driver quebrado impediria assinar **com qualquer outro token**.
 ## O que cada driver exige do ambiente
 
 - **SafeSign**: `libgdbm_compat.so.4`, que o runtime não traz. É a interface
-  antiga do gdbm, e só existe com `--enable-libgdbm-compat` — daí o módulo
+  antiga do gdbm, e só existe com `--enable-libgdbm-compat`. Daí o módulo
   `gdbm` no manifesto da extensão.
 - **SafeNet**: procura `/etc/eToken.conf` e `/etc/eToken.common.conf` por
   caminho absoluto, sem forma de redirecionar. No sandbox `/etc` é tmpfs
   gravável, então o `preparar.sh` copia os arquivos no início de cada execução.
   Também quer `/var/tmp/eToken.cache`, e abre as demais bibliotecas por
-  `dlopen` — todas precisam estar no `LD_LIBRARY_PATH`.
+  `dlopen`, então todas precisam estar no `LD_LIBRARY_PATH`.
 - **SerproID**: a `libserproidp11.so` usa símbolos da `libgcc_s`
   (`_Unwind_Resume_or_Rethrow`) e **não a declara** em `DT_NEEDED`. Quem a abre
-  com `dlopen` — o p11-kit, o assinador, o PJeOffice — falha com
+  com `dlopen` (o p11-kit, o assinador, o PJeOffice) falha com
   `undefined symbol`, a menos que alguma outra coisa já tenha trazido a
   `libgcc_s` para aquele processo. O manifesto corrige com
   `patchelf --add-needed`, o que faz a biblioteca se bastar em qualquer
@@ -135,5 +135,5 @@ Cada extensão confere, ainda no build, duas coisas diferentes:
 
 A segunda existe porque a primeira não bastou: o `ldd` lista o que falta em
 `DT_NEEDED` e não vê símbolo indefinido. Foi assim que o driver do SerproID
-passou no build e falhou só na hora de ser carregado — que é, na prática, a
+passou no build e falhou só na hora de ser carregado, que é, na prática, a
 hora de assinar, com o token na mão.

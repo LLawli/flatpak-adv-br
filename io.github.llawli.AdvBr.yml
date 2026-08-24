@@ -35,7 +35,7 @@ command: adv-br
 # em pkcs11/ e as bibliotecas de apoio em lib/. Ver drivers/README.md.
 # Tudo o que é opcional é extensão, e por três motivos que se somam: licença
 # (nada aqui pode ser redistribuído), tamanho (quem não usa o PJe não deve
-# baixar 300 MB de Java para descobrir isso) e instalação incremental — dá para
+# baixar 300 MB de Java para descobrir isso) e instalação incremental: dá para
 # instalar um driver hoje e um assinador amanhã, rodando o mesmo comando de
 # novo, sem refazer o que já está pronto.
 add-extensions:
@@ -68,7 +68,7 @@ finish-args:
   # Os assinadores desenham diálogo de PIN e de escolha de certificado.
   #
   # x11 de verdade, e não fallback-x11: o Lacuna Web PKI e o Softplan WebSigner
-  # são Avalonia, que só tem backend X11 — sob Wayland eles morrem no início
+  # são Avalonia, que só tem backend X11: sob Wayland eles morrem no início
   # com "XOpenDisplay failed", antes de ler a primeira mensagem. Com
   # fallback-x11 o socket X11 só aparece quando não há Wayland, que é
   # exatamente o caso em que eles não precisariam dele. O wayland continua aqui
@@ -76,7 +76,7 @@ finish-args:
   - --socket=wayland
   - --socket=x11
   - --share=ipc
-  # CRL, OCSP e carimbo do tempo — e o servidor local do PJeOffice, em
+  # CRL, OCSP e carimbo do tempo, e o servidor local do PJeOffice, em
   # 127.0.0.1:8800, que os sistemas do Judiciário procuram pelo navegador. Como
   # o sandbox compartilha a pilha de rede do host, esse servidor fica visível
   # para qualquer navegador, dentro ou fora de sandbox.
@@ -147,7 +147,7 @@ modules:
   # PJeOffice aceita um diretório em PKCS11_DRIVER e carrega dali um
   # "pkcs11.so"; este repassa ao p11-kit-proxy do runtime, que responde por
   # todos os módulos registrados. Fica no pacote base, e não na extensão que
-  # precisa dele, porque é o alvo dos atalhos em /pkcs11 — que existem mesmo
+  # precisa dele, porque é o alvo dos atalhos em /pkcs11: que existem mesmo
   # sem nenhuma extensão instalada.
   - name: pkcs11-shim
     buildsystem: simple
