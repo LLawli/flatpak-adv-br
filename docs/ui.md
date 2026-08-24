@@ -231,3 +231,12 @@ são as permissões de OUTROS programas, que este aplicativo não pode conceder:
   que é o sintoma mais caro de todos: não há erro para procurar. `tests/
   prova-atributos.py` procura `self._alguma_coisa` que não existe na classe, e
   foi verificado que ele pega exatamente esse caso.
+- **O corpo de um `Adw.MessageDialog` não serve para comando de terminal.** É
+  um parágrafo só, estreito e centralizado: uma linha como `flatpak override
+  --user --filesystem=xdg-run/p11-kit/pkcs11 org.mozilla.firefox` não cabe na
+  largura, e o diálogo cresce para baixo quebrando a linha em qualquer ponto
+  até sair da tela. O que sobra é um bloco alto e estreito de fragmentos, que
+  ninguém confere antes de colar. Os comandos passaram a ir num `extra_child`:
+  fonte monoespaçada, uma linha cada, selecionáveis, com rolagem horizontal
+  própria, e a lista inteira rolando na vertical se for longa. Medido: 668x550
+  px para o aviso dos navegadores, contra uma tela de 1080 de altura.

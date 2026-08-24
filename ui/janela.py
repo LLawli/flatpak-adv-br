@@ -271,6 +271,72 @@ class Janela(Adw.ApplicationWindow):
         self.toasts.add_toast(Adw.Toast(
             title="Publicado. Feche e reabra os navegadores."))
 
+    def _dialogo_de_comandos(self, titulo, paragrafos, comandos, rodape=(),
+                             confirmar="Copiar comando"):
+        """Diálogo que entrega comandos para colar, legível.
+
+        O corpo de um Adw.MessageDialog é um parágrafo só, centralizado e com
+        largura estreita. Um comando como
+
+            flatpak override --user --filesystem=xdg-run/p11-kit/pkcs11 org...
+
+        não cabe nessa largura, e o diálogo cresce para baixo quebrando a linha
+        em qualquer lugar, até sair da tela. O que se lê então é um bloco alto e
+        estreito de fragmentos de comando, que ninguém consegue conferir antes
+        de colar num terminal.
+
+        Aqui o texto fica no corpo e os comandos vão num filho à parte: cada um
+        em fonte monoespaçada, numa linha só, selecionável, com rolagem
+        horizontal própria. O diálogo tem largura mínima suficiente para uma
+        linha de comando de tamanho normal, e a lista inteira rola na vertical
+        se for longa.
+        """
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        # Largura pensada para o comando mais longo que este aplicativo
+        # mostra (o override do socket do p11-kit, com o id do navegador no
+        # fim). O que passar disso rola na horizontal em vez de quebrar.
+        caixa.set_size_request(620, -1)
+
+        for comando in comandos:
+            rotulo = Gtk.Label(label=comando, xalign=0, selectable=True)
+            rotulo.add_css_class("monospace")
+            rolagem = Gtk.ScrolledWindow(
+                hscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+                vscrollbar_policy=Gtk.PolicyType.NEVER,
+                propagate_natural_width=False)
+            rolagem.set_child(rotulo)
+            moldura = Gtk.Frame()
+            moldura.add_css_class("view")
+            moldura.set_child(rolagem)
+            caixa.append(moldura)
+
+        for texto in rodape:
+            nota = Gtk.Label(label=texto, xalign=0, wrap=True)
+            nota.add_css_class("dim-label")
+            nota.add_css_class("caption")
+            caixa.append(nota)
+
+        # Se houver muito comando, a lista rola em vez de empurrar o diálogo
+        # para fora da tela.
+        externa = Gtk.ScrolledWindow(
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+            propagate_natural_height=True, max_content_height=320)
+        externa.set_child(caixa)
+
+        dialogo = Adw.MessageDialog(
+            transient_for=self,
+            heading=titulo,
+            body="\n\n".join(paragrafos))
+        dialogo.set_extra_child(externa)
+        dialogo.add_response("fechar", "Fechar")
+        dialogo.add_response("copiar", confirmar)
+        dialogo.set_response_appearance("copiar", Adw.ResponseAppearance.SUGGESTED)
+        dialogo.connect("response", self._respondeu_comando,
+                        "\n".join(comandos))
+        dialogo.present()
+        return dialogo
+
     def _pedir_permissao_de_navegador(self, pedidos):
         """O que falta do lado do navegador em Flatpak, que só ele pode dar.
 
@@ -280,42 +346,33 @@ class Janela(Adw.ApplicationWindow):
         descobrir quais permissões faltavam, o que é pedir demais de quem só
         quer assinar uma petição.
         """
-        corpo = ["Publiquei tudo. Os navegadores que rodam em Flatpak "
-                 "precisam de uma permissão a mais, que só você pode dar:", ""]
-        for para_que, _ in pedidos:
-            corpo.append("   •  %s" % para_que)
-        corpo += ["", "Cole isto num terminal:", ""]
-        corpo += [comando for _, comando in pedidos]
+        paragrafos = ["Publiquei tudo. Os navegadores que rodam em Flatpak "
+                      "precisam de uma permissão a mais, que só você pode dar:"]
+        paragrafos.append("\n".join("•  %s" % para_que
+                                    for para_que, _ in pedidos))
+        paragrafos.append("Cole no terminal:")
 
         # Nem todo mundo abre terminal, e as permissões de um Flatpak têm
         # editor gráfico: o Flatseal, e a aba de permissões do próprio
         # gerenciador de aplicativos. Só a linha do systemctl não tem
         # equivalente, e é honesto dizer qual é qual em vez de mandar a pessoa
         # procurar tudo num lugar onde metade não está.
+        rodape = []
         if any(c.startswith("flatpak override") for _, c in pedidos):
-            corpo += ["", "Sem terminal, dá para fazer as linhas de permissão "
-                      "pelo Flatseal, ou pela aba de permissões do seu "
-                      "gerenciador de aplicativos (Ajustes, no GNOME "
-                      "Aplicativos; Permissões, no Discover). Procure o "
-                      "navegador na lista e ligue o que está acima."]
+            rodape.append("As linhas de permissão também dão para fazer sem "
+                          "terminal, pelo Flatseal ou pela aba de permissões "
+                          "do seu gerenciador de aplicativos. Procure o "
+                          "navegador na lista.")
         if any(c.startswith("systemctl") for _, c in pedidos):
-            corpo += ["", "A linha do systemctl não tem como ser feita fora do "
-                      "terminal. Ela liga um serviço do seu sistema, que é o "
-                      "que leva o token para dentro do navegador."]
+            rodape.append("A linha do systemctl não tem equivalente gráfico: "
+                          "ela liga um serviço do seu sistema.")
+        rodape.append("Se você já fez isto antes, pode fechar. Depois, feche e "
+                      "reabra os navegadores.")
 
-        corpo += ["", "Se você já fez isto antes, pode fechar: continua "
-                  "valendo. Depois, feche e reabra os navegadores."]
-
-        tudo = "\n".join(comando for _, comando in pedidos)
-        dialogo = Adw.MessageDialog(
-            transient_for=self,
-            heading="Falta permissão nos navegadores",
-            body="\n".join(corpo))
-        dialogo.add_response("fechar", "Fechar")
-        dialogo.add_response("copiar", "Copiar comandos")
-        dialogo.set_response_appearance("copiar", Adw.ResponseAppearance.SUGGESTED)
-        dialogo.connect("response", self._respondeu_comando, tudo)
-        dialogo.present()
+        self._dialogo_de_comandos(
+            "Falta permissão nos navegadores", paragrafos,
+            [comando for _, comando in pedidos], rodape,
+            confirmar="Copiar comandos")
 
     def _pedir_permissao(self, pendencias):
         """O diálogo que aparece quando o sandbox não alcança o que precisa.
@@ -324,45 +381,23 @@ class Janela(Adw.ApplicationWindow):
         permissões, e fingir que sim seria pior. O que ele faz é dizer o que
         falta, para que serve, e entregar o comando pronto para colar.
         """
-        corpo = ["Este aplicativo roda numa caixa fechada e, para levar o seu "
-                 "certificado aos navegadores, precisa escrever em alguns "
-                 "lugares da sua pasta pessoal. Faltam:", ""]
-        for _, para_que, _ in pendencias:
-            corpo.append("   •  %s" % para_que)
-        corpo += ["", "Cole isto num terminal e tente de novo:", "",
-                  permissoes.comando(pendencias)]
+        paragrafos = ["Este aplicativo roda numa caixa fechada e, para levar "
+                      "o seu certificado aos navegadores, precisa escrever em "
+                      "alguns lugares da sua pasta pessoal. Faltam:"]
+        paragrafos.append("\n".join("•  %s" % para_que
+                                    for _, para_que, _ in pendencias))
+        paragrafos.append("Cole no terminal e tente de novo:")
 
-        dialogo = Adw.MessageDialog(
-            transient_for=self,
-            heading="Falta permissão",
-            body="\n".join(corpo))
-        dialogo.add_response("fechar", "Fechar")
-        dialogo.add_response("copiar", "Copiar comando")
-        dialogo.set_response_appearance("copiar", Adw.ResponseAppearance.SUGGESTED)
-        dialogo.connect("response", self._respondeu_permissao, pendencias)
-        dialogo.present()
+        self._dialogo_de_comandos(
+            "Falta permissão", paragrafos, [permissoes.comando(pendencias)])
 
     def _respondeu_comando(self, dialogo, resposta, comando):
-        """Resposta de qualquer diálogo que entrega um comando para colar.
-
-        Serve aos dois: o das permissões dos navegadores e o da permissão
-        opcional de um componente. Sumiu junto com o diálogo do modelo de
-        extensão, que era um terceiro uso, e a falta só aparecia ao clicar:
-        o diálogo era construído e a exceção estourava na linha seguinte,
-        antes do present(). Dentro de um handler do GTK isso vira uma linha no
-        stderr que ninguém vê, e o clique parece não fazer nada.
-        """
+        """Resposta de qualquer diálogo que entrega comandos para colar."""
         if resposta != "copiar":
             return
         self.get_clipboard().set(comando)
         self.toasts.add_toast(Adw.Toast(
-            title="Comando copiado. Depois de rodá-lo, toque em atualizar."))
-
-    def _respondeu_permissao(self, dialogo, resposta, pendencias):
-        if resposta != "copiar":
-            return
-        self.get_clipboard().set(permissoes.comando(pendencias))
-        self.toasts.add_toast(Adw.Toast(title="Comando copiado"))
+            title="Copiado. Depois de rodar, toque em atualizar."))
 
     def _avisar(self, titulo, corpo):
         dialogo = Adw.MessageDialog(transient_for=self, heading=titulo, body=corpo)
@@ -379,21 +414,14 @@ class Janela(Adw.ApplicationWindow):
         aí não havia motivo nenhum para pedi-la.
         """
         argumento, para_que = componente.permissao
-        dialogo = Adw.MessageDialog(
-            transient_for=self,
-            heading="Quer poder %s?" % para_que,
-            body="\n".join([
-                "O %s funciona sem isso: assinando pelo PJe, quem entrega o "
-                "documento é o navegador." % componente.nome, "",
-                "Se você também for assinar arquivos guardados no computador, "
-                "cole isto num terminal:", "",
-                permissoes.comando_opcional(argumento)]))
-        dialogo.add_response("fechar", "Agora não")
-        dialogo.add_response("copiar", "Copiar comando")
-        dialogo.set_response_appearance("copiar", Adw.ResponseAppearance.SUGGESTED)
-        dialogo.connect("response", self._respondeu_comando,
-                        permissoes.comando_opcional(argumento))
-        dialogo.present()
+        self._dialogo_de_comandos(
+            "Quer poder %s?" % para_que,
+            ["O %s funciona sem isso: assinando pelo PJe, quem entrega o "
+             "documento é o navegador." % componente.nome,
+             "Se você também for assinar arquivos guardados no computador, "
+             "cole no terminal:"],
+            [permissoes.comando_opcional(argumento)],
+            confirmar="Copiar comando")
 
     def _clicou(self, botao, componente):
         partes = self.linhas[componente.chave]
