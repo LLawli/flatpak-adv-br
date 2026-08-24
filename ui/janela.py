@@ -327,6 +327,10 @@ class Janela(Adw.ApplicationWindow):
         else:
             comando = instalador.comando_de_instalar(componente)
             corpo = [componente.detalhe, "",
+                     "Ele é construído no seu computador, a partir do pacote "
+                     "publicado pelo CNJ: o programa é gratuito, mas ninguém "
+                     "além do CNJ pode distribuí-lo pronto. Precisa do "
+                     "flatpak-builder instalado, e demora alguns minutos.", "",
                      "Cole isto num terminal e volte aqui:", "", comando]
             # A permissão opcional aparece aqui, junto do resto, e não como um
             # segundo diálogo depois: quem está lendo comandos já está no

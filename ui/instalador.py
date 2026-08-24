@@ -158,14 +158,25 @@ def lancador(componente):
     return caminho if os.access(caminho, os.X_OK) else ""
 
 
+# De onde sai o que a pessoa constrói. O ramo entra separado porque é o que
+# muda enquanto esta versão não é a publicada.
+RECEITAS = "https://raw.githubusercontent.com/LLawli/flatpak-adv-br/main"
+
+
 def comando_de_instalar(componente):
     """O comando que instala uma extensão, para a janela mostrar.
 
-    Sem o nome do repositório: quem chegou até aqui instalou o aplicativo de
-    algum lugar, e o Flatpak procura a referência nos repositórios que a pessoa
-    já tem. Fixar um nome aqui quebraria quem o adicionou com outro.
+    É um build na máquina de quem usa, e não um `flatpak install` de um
+    repositório pronto. A diferença não é técnica, é de licença: o PJeOffice é
+    distribuído gratuitamente pelo CNJ, e gratuito não é redistribuível. Não há
+    licença publicada que autorize terceiros a redistribuir os binários dele.
+    Um repositório Flatpak com ele dentro seria redistribuição; um manifesto
+    que a pessoa constrói a partir do pacote publicado pelo CNJ não é.
+
+    É a mesma regra que vale para os drivers proprietários, e a razão de este
+    aplicativo nunca trazer binário de terceiro embutido.
     """
-    return "flatpak install --user %s" % componente.extensao
+    return "curl -fsSL %s/apps/instalar-%s.sh | sh" % (RECEITAS, componente.chave)
 
 
 def comando_de_desinstalar(componente):

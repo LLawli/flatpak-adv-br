@@ -84,12 +84,27 @@ abriu o PJe. Como extensão ele é construído contra este aplicativo, monta em
 `/app/lib/apps/PJeOffice`, usa os mesmos drivers e o mesmo p11-kit, e quem não
 usa o PJe não baixa nada.
 
-O preço da extensão é que instalar exige `flatpak install`, e um aplicativo em
-sandbox não executa isso sozinho. Poderia: bastaria pedir `--talk-name=
+E é construído na máquina de quem usa, e não baixado pronto de um repositório.
+A diferença não é técnica, é de licença: o PJeOffice é distribuído
+gratuitamente pelo CNJ, e gratuito não é o mesmo que redistribuível. Não há
+licença publicada que autorize terceiros a redistribuir os binários, e para
+obter o código-fonte é preciso ofício à Secretaria-Geral do CNJ. Um repositório
+Flatpak com ele dentro seria redistribuição; um manifesto que a pessoa constrói
+a partir do pacote publicado pelo CNJ não é. É a mesma regra que faz os drivers
+proprietários serem baixados do site do fabricante, e não embutidos aqui.
+
+Publicar um repositório próprio muda o que se pode distribuir por ele, mas não
+muda isso: o que dita a regra é a licença de cada binário, e não onde ele
+estaria hospedado.
+
+O preço é que instalar exige `flatpak-builder`, e um aplicativo em sandbox não
+executa isso sozinho. Poderia: bastaria pedir `--talk-name=
 org.freedesktop.Flatpak`, que é a permissão de rodar comandos fora da caixa.
 Seria trocar um comando eventual por acesso irrestrito à máquina, permanente, e
 não vale. Então a janela faz o que pode, que é mostrar o comando pronto para
-copiar, e reconhecer sozinha quando a extensão apareceu.
+copiar, e reconhecer sozinha quando a extensão apareceu. O comando é um
+`curl | sh` que baixa só o manifesto, constrói num diretório temporário em
+disco (nunca em /tmp, que é memória) e o apaga ao fim, dê certo ou não.
 
 ### Permissão nenhuma entra por padrão
 
