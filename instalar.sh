@@ -16,40 +16,78 @@ cd "$RAIZ"
 
 MANIFESTO="$RAIZ/$APP_ID.yml"
 REMOTO_LOCAL=adv-br-local
-DRIVERS_PEDIDOS=()
+PEDIDOS=()
 PUBLICAR=1
 CONCEDER=0
 REFAZER=0
+
+# opção            → manifesto da extensão
+#
+# Tudo o que é opcional está aqui, e a lista é a única coisa que precisa mudar
+# quando entrar um assinador ou um aplicativo novo.
+declare -A EXTENSOES=(
+    [safesign]=drivers/io.github.llawli.AdvBr.Driver.SafeSign.yml
+    [safenet]=drivers/io.github.llawli.AdvBr.Driver.SafeNet.yml
+    [serproid]=drivers/io.github.llawli.AdvBr.Driver.SerproID.yml
+    [webpki]=assinadores/io.github.llawli.AdvBr.Assinador.WebPKI.yml
+    [websigner]=assinadores/io.github.llawli.AdvBr.Assinador.WebSigner.yml
+    [certisign]=assinadores/io.github.llawli.AdvBr.Assinador.Certisign.yml
+    [pjeoffice]=apps/io.github.llawli.AdvBr.App.PJeOffice.yml
+)
+DRIVERS_TODOS=(safesign safenet serproid)
+ASSINADORES_TODOS=(webpki websigner certisign)
 
 ajuda() {
     /usr/bin/cat <<'FIM'
 Uso: ./instalar.sh [opções]
 
-  --with-safesign    driver do token GD Burti (o mais usado na advocacia)
-  --with-safenet     driver dos tokens SafeNet (eToken 5100, 5110, IDPrime)
-  --with-serproid    certificado em nuvem do Serpro (aplicativo + biblioteca)
-  --with-drivers     os três acima
-  --refazer          reconstrói as extensões mesmo que já estejam instaladas
+Sem nenhuma opção, instala só o pacote base: o OpenSC, que já reconhece parte
+dos cartões ICP-Brasil, e a ponte que leva o token aos navegadores e ao Papers.
+São poucos megabytes.
+
+O resto se instala quando você for usar, e pode ser depois — rodar de novo com
+outra opção acrescenta sem refazer o que já está pronto:
+
+  drivers de token
+    --with-safesign    token GD Burti, o mais usado na advocacia
+    --with-safenet     eToken 5100, 5110, IDPrime
+    --with-serproid    certificado em nuvem do Serpro (traz o aplicativo)
+    --with-drivers     os três acima
+
+  assinadores em navegador
+    --with-webpki      Lacuna Web PKI
+    --with-websigner   Softplan WebSigner, dos sistemas SAJ
+    --with-certisign   Certisign WebSigner, do portal da OAB
+    --with-assinadores os três acima
+
+  aplicativos
+    --with-pjeoffice   PJeOffice Pro, para assinar no PJe (CNJ)
+
+  --with-tudo        tudo o que está acima
+  --refazer          reconstrói o que já está instalado
   --sem-publicar     só constrói e instala; não toca em nada fora do Flatpak
   --conceder         concede as permissões dos navegadores em Flatpak
   --ajuda            esta mensagem
 
-Os drivers são extensões separadas porque as licenças de SafeSign, SafeNet e
-SerproID permitem ao licenciado usar e guardar uma cópia de backup, não
-redistribuir. Cada extensão baixa o instalador da URL do próprio fabricante, na
-sua máquina. Ver drivers/README.md.
+Nada disso vem no pacote base porque nada disso pode ser redistribuído: cada
+extensão baixa da URL do próprio fabricante, na sua máquina. E porque quem não
+usa o PJe não deve baixar 300 MB de Java para descobrir isso.
 
-Sem nenhum --with-*, você fica com o OpenSC, que já cobre parte dos cartões e
-tokens ICP-Brasil. Acrescentar um driver depois é rodar de novo com a opção.
+O comando é idempotente: pode ser repetido à vontade.
 FIM
 }
 
 while [ $# -gt 0 ]; do
     case $1 in
-        --with-safesign) DRIVERS_PEDIDOS+=(SafeSign) ;;
-        --with-safenet)  DRIVERS_PEDIDOS+=(SafeNet) ;;
-        --with-serproid) DRIVERS_PEDIDOS+=(SerproID) ;;
-        --with-drivers)  DRIVERS_PEDIDOS+=(SafeSign SafeNet SerproID) ;;
+        --with-drivers)     PEDIDOS+=("${DRIVERS_TODOS[@]}") ;;
+        --with-assinadores) PEDIDOS+=("${ASSINADORES_TODOS[@]}") ;;
+        --with-tudo)        PEDIDOS+=("${!EXTENSOES[@]}") ;;
+        --with-*)
+            alvo=${1#--with-}
+            [ -n "${EXTENSOES[$alvo]:-}" ] ||
+                erro "não conheço '--with-$alvo'. Veja ./instalar.sh --ajuda"
+            PEDIDOS+=("$alvo")
+            ;;
         --refazer)       REFAZER=1 ;;
         --sem-publicar)  PUBLICAR=0 ;;
         --conceder)      CONCEDER=1 ;;
@@ -117,7 +155,11 @@ fi
 titulo "Runtime"
 
 remoto_flathub() {
-    flatpak remotes --columns=name | grep -qx flathub && return 0
+    # A saída é capturada antes de filtrar: "cmd | grep -q" faz o grep sair na
+    # primeira ocorrência, o produtor levar SIGPIPE e, com pipefail, o pipeline
+    # inteiro retornar 141 — sucesso que vira falha conforme a POSIÇÃO da linha
+    # que casou.
+    printf '%s\n' "$(flatpak remotes --columns=name)" | grep -qx flathub && return 0
     log "acrescentando o remoto flathub (usuário)"
     flatpak remote-add --user --if-not-exists flathub \
         https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -279,30 +321,38 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-if [ ${#DRIVERS_PEDIDOS[@]} -gt 0 ]; then
-    titulo "Drivers (extensões)"
-    for driver in "${DRIVERS_PEDIDOS[@]}"; do
-        manifesto="$RAIZ/drivers/$APP_ID.Driver.$driver.yml"
-        [ -e "$manifesto" ] || { aviso "não há manifesto para $driver."; continue; }
-        if [ "$REFAZER" = 0 ] &&
-            flatpak info --user "$APP_ID.Driver.$driver" >/dev/null 2>&1; then
-            ok "$driver já instalado (--refazer reconstrói)"
+if [ ${#PEDIDOS[@]} -gt 0 ]; then
+    titulo "Extensões"
+
+    # Sem repetição: "--with-tudo --with-webpki" pede o Lacuna duas vezes, e
+    # construir de novo o que acabou de ser construído é só tempo perdido.
+    declare -A JA_PEDIDO=()
+    for alvo in "${PEDIDOS[@]}"; do
+        [ -n "${JA_PEDIDO[$alvo]:-}" ] && continue
+        JA_PEDIDO[$alvo]=1
+
+        manifesto="$RAIZ/${EXTENSOES[$alvo]}"
+        [ -e "$manifesto" ] || { aviso "não há manifesto para $alvo."; continue; }
+
+        # O id sai do próprio manifesto: manter uma segunda tabela de "opção →
+        # id" só criaria um lugar a mais para desencontrar.
+        extensao=$(sed -n 's/^id: *//p' "$manifesto" | head -1)
+
+        if [ "$REFAZER" = 0 ] && flatpak info --user "$extensao" >/dev/null 2>&1; then
+            ok "$alvo já instalado (--refazer reconstrói)"
             continue
         fi
-        log "construindo o driver $driver ..."
-        # Diretório de build por driver: um build compartilhado misturaria as
-        # árvores de duas extensões diferentes.
-        "${construtor[@]}" --user --force-clean --disable-rofiles-fuse --install \
-            "$RAIZ/build-driver-$(printf '%s' "$driver" | tr 'A-Z' 'a-z')" \
-            "$manifesto" || { aviso "o driver $driver falhou."; continue; }
-        ok "$driver instalado"
-        # Um driver instalado é um módulo a mais que todo navegador enumera ao
-        # abrir, e este cobra caro: sem token SafeNet espetado, a enumeração
-        # passa de um minuto dentro do sandbox. Ver docs/ARMADILHAS.md.
-        [ "$driver" = SafeNet ] && aviso "o SafeNet, sem um token SafeNet espetado, leva mais de um minuto
-      para enumerar, e é esse tempo que o navegador espera ao abrir. Se você
-      não usa esse token, remova-o depois de testar:
-          flatpak uninstall --user $APP_ID.Driver.SafeNet && ./host/publicar.sh"
+
+        log "construindo $alvo ..."
+        # Um diretório de build por extensão: um compartilhado misturaria as
+        # árvores de duas delas.
+        if "${construtor[@]}" --user --force-clean --disable-rofiles-fuse --install \
+            "$RAIZ/build-$alvo" "$manifesto"; then
+            ok "$alvo instalado"
+        else
+            aviso "$alvo falhou. As outras extensões seguem; para tentar de novo:
+      ./instalar.sh --with-$alvo --refazer"
+        fi
     done
 fi
 

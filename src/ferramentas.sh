@@ -14,7 +14,7 @@ set -euo pipefail
 
 listar() {
     local driver achou=0
-    for driver in "$DRIVERS"/*/bin/*; do
+    for driver in "$DRIVERS"/*/bin/* "$APPS"/*/bin/*; do
         [ -x "$driver" ] || continue
         achou=1
         printf '  %s (de %s)\n' "$(basename "$driver")" \
@@ -35,7 +35,7 @@ shift
 
 preparar_drivers
 
-for driver in "$DRIVERS"/*/bin/"$NOME"; do
+for driver in "$DRIVERS"/*/bin/"$NOME" "$APPS"/*/bin/"$NOME"; do
     [ -x "$driver" ] || continue
     exec "$driver" "$@"
 done

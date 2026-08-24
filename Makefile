@@ -2,9 +2,8 @@
 # ./instalar.sh; isto aqui é para quem já conhece o projeto.
 APP_ID = io.github.llawli.AdvBr
 
-.PHONY: ajuda instalar publicar despublicar diagnostico testar lint \
-        driver-safesign driver-safenet driver-serproid drivers-desinstalar \
-        serproid desinstalar limpar
+.PHONY: ajuda instalar tudo publicar despublicar diagnostico testar lint \
+        serproid pjeoffice desinstalar limpar
 
 ajuda:
 	@echo 'make instalar            constrói e instala o Flatpak, e publica'
@@ -13,15 +12,16 @@ ajuda:
 	@echo 'make diagnostico         confere o encanamento inteiro'
 	@echo 'make testar              testes do repositório (não precisam de token)'
 	@echo 'make lint                shellcheck nos scripts'
-	@echo 'make driver-safesign     extensão do driver SafeSign (GD Burti)'
-	@echo 'make driver-safenet      extensão do driver SafeNet (eToken)'
-	@echo 'make driver-serproid     extensão do SerproID (certificado em nuvem)'
+	@echo 'make tudo                instala o pacote e todas as extensões'
 	@echo 'make serproid            abre o aplicativo SerproID para associar o certificado'
-	@echo 'make drivers-desinstalar remove as extensões de driver'
+	@echo 'make pjeoffice           abre o PJeOffice Pro'
 	@echo 'make desinstalar         remove o Flatpak e desfaz a publicação'
 
 instalar:
 	./instalar.sh
+
+tudo:
+	./instalar.sh --with-tudo
 
 publicar:
 	./host/publicar.sh
@@ -37,32 +37,20 @@ testar:
 
 lint:
 	shellcheck -S warning src/*.sh host/*.sh tests/*.sh drivers/*.sh \
-	    packaging/*.sh instalar.sh diagnostico.sh
-
-driver-safesign:
-	./instalar.sh --with-safesign --sem-publicar
-	./host/publicar.sh
-
-driver-safenet:
-	./instalar.sh --with-safenet --sem-publicar
-	./host/publicar.sh
-
-driver-serproid:
-	./instalar.sh --with-serproid --sem-publicar
-	./host/publicar.sh
+	    assinadores/*.sh apps/*.sh packaging/*.sh instalar.sh diagnostico.sh \
+	    bin/release
 
 serproid:
 	flatpak run --command=adv-br-ferramentas $(APP_ID) serproid
 
-drivers-desinstalar:
-	-flatpak uninstall --user -y $(APP_ID).Driver.SafeSign
-	-flatpak uninstall --user -y $(APP_ID).Driver.SafeNet
-	-flatpak uninstall --user -y $(APP_ID).Driver.SerproID
-	./host/publicar.sh
+pjeoffice:
+	flatpak run --command=adv-br-ferramentas $(APP_ID) pjeoffice-pro
 
+# Remove o pacote e, com ele, todas as extensões: elas são declaradas com
+# autodelete, então saem junto.
 desinstalar:
 	./host/publicar.sh --remover
 	-flatpak uninstall --user -y $(APP_ID)
 
 limpar:
-	rm -rf build-dir build-driver-* .flatpak-builder
+	rm -rf build-dir build-* repo .flatpak-builder

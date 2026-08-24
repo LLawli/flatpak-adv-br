@@ -1,0 +1,42 @@
+# Extensão opcional: Certisign WebSigner, do portal de assinatura da OAB.
+#
+#   ./instalar.sh --with-certisign
+#
+# Ele carrega driver por dlopen de nome simples (libeToken.so, libeTPkcs11.so),
+# o que o LD_LIBRARY_PATH montado pelo lançador já resolve — e abre os .glade
+# da interface por caminho absoluto em /opt, que o preparar.sh acomoda.
+id: io.github.llawli.AdvBr.Assinador.Certisign
+branch: master
+runtime: io.github.llawli.AdvBr
+runtime-version: master
+sdk: org.freedesktop.Sdk//24.08
+build-extension: true
+appstream-compose: false
+separate-locales: false
+
+build-options:
+  prefix: /app/lib/assinadores/Certisign
+
+modules:
+  - name: certisign-websigner
+    buildsystem: simple
+    build-commands:
+      - ar x certisign.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      - install -Dm755 deb/opt/certisign-websigner/cswebsigner
+        "${FLATPAK_DEST}/bin/certisign"
+      - install -Dm644 -t "${FLATPAK_DEST}/res" deb/opt/certisign-websigner/res/*
+      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/br.com.certisign.websigner.json
+        "${FLATPAK_DEST}/native-messaging/br.com.certisign.websigner.firefox.json"
+      - install -Dm644 deb/opt/certisign-websigner/manifest.json
+        "${FLATPAK_DEST}/native-messaging/br.com.certisign.websigner.chromium.json"
+      - install -Dm755 certisign-preparar.sh "${FLATPAK_DEST}/preparar.sh"
+      - LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" ldd "${FLATPAK_DEST}/bin/certisign"
+        | grep -v 'not found'
+    sources:
+      - type: file
+        url: https://get.websignerplugin.com/Downloads/2.17.7/setup-deb-64
+        sha256: 04981f073f61ac7e8662ec12f3d69be1cb8090131836935a111ef9d5b012abfb
+        dest-filename: certisign.deb
+      - type: file
+        path: certisign-preparar.sh

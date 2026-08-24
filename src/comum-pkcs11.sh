@@ -8,6 +8,10 @@
 MODULOS_SANDBOX=/etc/pkcs11/modules
 MODULOS_APP=/app/share/adv-br/pkcs11-modules
 DRIVERS=/app/lib/pkcs11/drivers
+# Assinadores e aplicativos também são extensões: o pacote base traz só o que
+# pode ser redistribuído e o que todo mundo usa. Ver assinadores/README.md.
+ASSINADORES=/app/lib/assinadores
+APPS=/app/lib/apps
 # Caminhos curtos e estáveis para quem precisa digitar um caminho de módulo na
 # interface de um assinador. Criados no tmpfs da raiz do sandbox a cada
 # execução, e por isso independentes da versão da extensão de driver.
@@ -26,15 +30,16 @@ caminho_do_proxy() {
     return 1
 }
 
-# LD_LIBRARY_PATH e preparar.sh de cada extensão de driver instalada. Precisa
-# rodar antes de qualquer coisa carregar um módulo PKCS#11.
+# LD_LIBRARY_PATH e preparar.sh de cada extensão instalada — de driver, de
+# assinador ou de aplicativo. Precisa rodar antes de qualquer coisa carregar um
+# módulo PKCS#11 ou abrir um assinador.
 #
 # preparar.sh existe por causa do SerproID: a libneoidp11.so faz readdir em
 # ~/.config/serproid/certificados assim que é carregada e derruba com SIGSEGV
 # quem a carregou se o diretório não existir.
 preparar_drivers() {
     local driver nome
-    for driver in "$DRIVERS"/*/; do
+    for driver in "$DRIVERS"/*/ "$ASSINADORES"/*/ "$APPS"/*/; do
         [ -d "$driver" ] || continue
         nome=$(basename "$driver")
         if [ -d "$driver/lib" ]; then

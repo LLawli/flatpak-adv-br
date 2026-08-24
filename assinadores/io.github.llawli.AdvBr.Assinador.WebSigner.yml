@@ -1,0 +1,48 @@
+# Extensão opcional: Softplan WebSigner, usado nos sistemas SAJ.
+#
+#   ./instalar.sh --with-websigner
+#
+# Este é o único manifesto do projeto que baixa durante a construção, e não
+# pela lista de fontes. O servidor da Softplan serve uma cadeia TLS incompleta
+# — repete o certificado do servidor no lugar do intermediário — e o
+# downloader do flatpak-builder ignora SSL_CERT_FILE e CURL_CA_BUNDLE. A saída
+# não é desligar a verificação com "curl -k", que é o que outros projetos
+# fazem: é COMPLETAR a cadeia. packaging/ca/ traz o intermediário que falta,
+# emitido por uma raiz que o sistema já confia, e o sha256 é conferido logo em
+# seguida — o resultado é mais verificado que o de uma fonte comum, não menos.
+id: io.github.llawli.AdvBr.Assinador.WebSigner
+branch: master
+runtime: io.github.llawli.AdvBr
+runtime-version: master
+sdk: org.freedesktop.Sdk//24.08
+build-extension: true
+appstream-compose: false
+separate-locales: false
+
+build-options:
+  prefix: /app/lib/assinadores/WebSigner
+
+modules:
+  - name: softplan-websigner
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
+    build-commands:
+      - cat /etc/ssl/certs/ca-certificates.crt ThawteTLSRSACAG1.pem > bundle.pem
+      - curl -fsSL --cacert bundle.pem -o websigner.deb
+        https://websigner.softplan.com.br/Downloads/2.15.0/webpki-chrome-64-deb
+      - echo "04fa41e962d91e4d7337f4707479437bf660f19057fac63829fb46784ee08289  websigner.deb"
+        | sha256sum -c -
+      - ar x websigner.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      - install -Dm755 deb/opt/softplan-websigner/websigner "${FLATPAK_DEST}/bin/websigner"
+      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/br.com.softplan.webpki.json
+        "${FLATPAK_DEST}/native-messaging/br.com.softplan.webpki.firefox.json"
+      - install -Dm644 deb/opt/softplan-websigner/manifest.json
+        "${FLATPAK_DEST}/native-messaging/br.com.softplan.webpki.chromium.json"
+      - LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" ldd "${FLATPAK_DEST}/bin/websigner"
+        | grep -v 'not found'
+    sources:
+      - type: file
+        path: ../packaging/ca/ThawteTLSRSACAG1.pem

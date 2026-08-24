@@ -1,5 +1,5 @@
 build-dir/
-build-driver-*/
+build-*/
 .flatpak-builder/
 *.flatpak
 repo/

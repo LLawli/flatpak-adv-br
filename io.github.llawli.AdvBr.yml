@@ -23,8 +23,6 @@ id: io.github.llawli.AdvBr
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
-sdk-extensions:
-  - org.freedesktop.Sdk.Extension.openjdk11
 command: adv-br
 
 # Drivers de token proprietários entram como extensões opcionais, não como
@@ -35,9 +33,28 @@ command: adv-br
 #
 # Cada extensão instala em lib/pkcs11/drivers/<Nome>/, com os módulos PKCS#11
 # em pkcs11/ e as bibliotecas de apoio em lib/. Ver drivers/README.md.
+# Tudo o que é opcional é extensão, e por três motivos que se somam: licença
+# (nada aqui pode ser redistribuído), tamanho (quem não usa o PJe não deve
+# baixar 300 MB de Java para descobrir isso) e instalação incremental — dá para
+# instalar um driver hoje e um assinador amanhã, rodando o mesmo comando de
+# novo, sem refazer o que já está pronto.
 add-extensions:
   io.github.llawli.AdvBr.Driver:
     directory: lib/pkcs11/drivers
+    subdirectories: true
+    no-autodownload: true
+    autodelete: true
+    version: master
+
+  io.github.llawli.AdvBr.Assinador:
+    directory: lib/assinadores
+    subdirectories: true
+    no-autodownload: true
+    autodelete: true
+    version: master
+
+  io.github.llawli.AdvBr.App:
+    directory: lib/apps
     subdirectories: true
     no-autodownload: true
     autodelete: true
@@ -125,98 +142,13 @@ modules:
         url: https://github.com/OpenSC/OpenSC/releases/download/0.27.1/opensc-0.27.1.tar.gz
         sha256: 976f4a23eaf3397a1a2c3a7aac80bf971a8c3d829c9a79f06145bfaeeae5eca7
 
-  # ------------------------------------------------------------------
-  # Assinadores. Cada um é um binário único que fala native messaging por
-  # stdin/stdout, mais o manifesto que descreve o host-name e as extensões de
-  # navegador autorizadas. Os manifestos originais são guardados em
-  # share/adv-br/native-messaging/: é deles que o publicador do host tira o
-  # nome e a lista de extensões, em vez de repetir essa tabela em outro lugar.
-  #
-  # Nenhum binário é redistribuído por este repositório: o .deb é baixado da
-  # URL do próprio fabricante, na máquina de quem constrói, e conferido pelo
-  # sha256 aqui declarado.
-  # ------------------------------------------------------------------
-  - name: lacuna-webpki
-    buildsystem: simple
-    build-commands:
-      - ar x webpki.deb
-      - mkdir -p deb && tar -xf data.tar.* -C deb
-      - install -Dm755 deb/opt/lacuna-webpki/webpki /app/opt/lacuna-webpki/webpki
-      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/com.lacunasoftware.webpki.json
-        /app/share/adv-br/native-messaging/com.lacunasoftware.webpki.firefox.json
-      - install -Dm644 deb/opt/lacuna-webpki/manifest.json
-        /app/share/adv-br/native-messaging/com.lacunasoftware.webpki.chromium.json
-    sources:
-      - type: file
-        url: https://get.webpkiplugin.com/Downloads/2.16.0/setup-deb-64
-        sha256: d98752344e050b7fb040df3fb224998ec466bbffb96ac5e96e1ce455adee0a49
-        dest-filename: webpki.deb
-
-  # Único módulo que baixa durante o build, e não pela lista de fontes: o
-  # servidor da Softplan serve uma cadeia TLS incompleta (repete o certificado
-  # do servidor no lugar do intermediário), e o downloader do flatpak-builder
-  # não tem como receber o intermediário que falta — ele ignora SSL_CERT_FILE e
-  # CURL_CA_BUNDLE. A saída não é desligar a verificação com 'curl -k', que é o
-  # que outros projetos fazem: é COMPLETAR a cadeia. packaging/ca/ traz o
-  # intermediário, emitido por uma raiz que o sistema já confia, e o curl aqui
-  # valida contra ele. O sha256 é conferido logo em seguida, então o resultado
-  # é mais verificado que o de uma fonte comum, não menos.
-  - name: softplan-websigner
-    buildsystem: simple
-    build-options:
-      build-args:
-        - --share=network
-    build-commands:
-      - cat /etc/ssl/certs/ca-certificates.crt ThawteTLSRSACAG1.pem > bundle.pem
-      - curl -fsSL --cacert bundle.pem -o websigner.deb
-        https://websigner.softplan.com.br/Downloads/2.15.0/webpki-chrome-64-deb
-      - echo "04fa41e962d91e4d7337f4707479437bf660f19057fac63829fb46784ee08289  websigner.deb"
-        | sha256sum -c -
-      - ar x websigner.deb
-      - mkdir -p deb && tar -xf data.tar.* -C deb
-      - install -Dm755 deb/opt/softplan-websigner/websigner /app/opt/softplan-websigner/websigner
-      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/br.com.softplan.webpki.json
-        /app/share/adv-br/native-messaging/br.com.softplan.webpki.firefox.json
-      - install -Dm644 deb/opt/softplan-websigner/manifest.json
-        /app/share/adv-br/native-messaging/br.com.softplan.webpki.chromium.json
-    sources:
-      - type: file
-        path: packaging/ca/ThawteTLSRSACAG1.pem
-
-  - name: certisign-websigner
-    buildsystem: simple
-    build-commands:
-      - ar x certisign.deb
-      - mkdir -p deb && tar -xf data.tar.* -C deb
-      - install -Dm755 deb/opt/certisign-websigner/cswebsigner
-        /app/opt/certisign-websigner/cswebsigner
-      - install -Dm644 -t /app/opt/certisign-websigner/res deb/opt/certisign-websigner/res/*
-      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/br.com.certisign.websigner.json
-        /app/share/adv-br/native-messaging/br.com.certisign.websigner.firefox.json
-      - install -Dm644 deb/opt/certisign-websigner/manifest.json
-        /app/share/adv-br/native-messaging/br.com.certisign.websigner.chromium.json
-    sources:
-      - type: file
-        url: https://get.websignerplugin.com/Downloads/2.17.7/setup-deb-64
-        sha256: 04981f073f61ac7e8662ec12f3d69be1cb8090131836935a111ef9d5b012abfb
-        dest-filename: certisign.deb
-
-  # ------------------------------------------------------------------
-  # PJeOffice Pro, o assinador do CNJ. Java 11 é a versão que ele exige.
-  #
-  # O .deb é um reempacotamento dos binários oficiais do CNJ; como todo o
-  # resto aqui, ele é baixado na máquina de quem constrói, e nada é
-  # redistribuído por este repositório.
-  # ------------------------------------------------------------------
-  - name: openjdk
-    buildsystem: simple
-    build-commands:
-      - /usr/lib/sdk/openjdk11/install.sh
-
-  # A biblioteca única que o PJeOffice carrega. Ver src/pkcs11-shim.c: ele
-  # aceita um diretório em PKCS11_DRIVER e carrega dali um "pkcs11.so"; este
-  # repassa ao p11-kit-proxy do runtime, que responde por todos os módulos
-  # registrados em /etc/pkcs11/modules. Um caminho serve N drivers.
+  # A biblioteca única que um aplicativo carrega quando descobre driver por
+  # caminho, e não pela configuração do p11-kit. Ver src/pkcs11-shim.c: o
+  # PJeOffice aceita um diretório em PKCS11_DRIVER e carrega dali um
+  # "pkcs11.so"; este repassa ao p11-kit-proxy do runtime, que responde por
+  # todos os módulos registrados. Fica no pacote base, e não na extensão que
+  # precisa dele, porque é o alvo dos atalhos em /pkcs11 — que existem mesmo
+  # sem nenhuma extensão instalada.
   - name: pkcs11-shim
     buildsystem: simple
     build-commands:
@@ -230,45 +162,14 @@ modules:
       - type: file
         path: src/pkcs11-shim.c
 
-  - name: pjeoffice
-    buildsystem: simple
-    build-commands:
-      - ar x pje-office.deb
-      - mkdir -p deb && tar -xf data.tar.* -C deb
-      - install -Dm644 deb/usr/share/pjeoffice-pro/pjeoffice-pro.jar
-        /app/share/pjeoffice-pro/pjeoffice-pro.jar
-      - install -Dm644 deb/usr/share/pjeoffice-pro/cutplayer4jfx.jar
-        /app/share/pjeoffice-pro/cutplayer4jfx.jar
-      - install -Dm755 deb/usr/share/pjeoffice-pro/ffmpeg.exe
-        /app/share/pjeoffice-pro/ffmpeg.exe
-      # O auto-update do CNJ escreveria dentro de /app, que é somente leitura
-      # no Flatpak. Quem atualiza este pacote é o próprio Flatpak.
-      - sed -e 's|^update.url=.*|update.url=disabled|'
-        deb/usr/share/pjeoffice-pro/pjeoffice-update.properties
-        > pjeoffice-update.properties
-      - install -Dm644 pjeoffice-update.properties
-        /app/share/pjeoffice-pro/pjeoffice-update.properties
-      - install -Dm755 pjeoffice-pro.sh /app/bin/pjeoffice-pro
-      - install -Dm644 deb/usr/share/icons/hicolor/512x512/apps/pjeoffice.png
-        /app/share/icons/hicolor/512x512/apps/io.github.llawli.AdvBr.PJeOffice.png
-      - install -Dm644 io.github.llawli.AdvBr.PJeOffice.desktop
-        /app/share/applications/io.github.llawli.AdvBr.PJeOffice.desktop
-    sources:
-      - type: file
-        url: https://github.com/pedrohqb/pje-office-debian/releases/download/2.5.16u-3/pje-office_2.5.16u-3_amd64.deb
-        sha256: d91510730355ebb82cfc7a810a37840392fb25947422ce29ddf6f63a56775cc7
-        dest-filename: pje-office.deb
-      - type: file
-        path: src/pjeoffice-pro.sh
-      - type: file
-        path: io.github.llawli.AdvBr.PJeOffice.desktop
-
   - name: adv-br
     buildsystem: simple
     build-commands:
       # Ponto de montagem das extensões de driver: o diretório precisa existir
       # no app, ou o Flatpak não tem onde montar a extensão.
-      - install -d /app/lib/pkcs11/drivers
+      # Pontos de montagem das extensões: o diretório precisa existir no app,
+      # ou o Flatpak não tem onde montar.
+      - install -d /app/lib/pkcs11/drivers /app/lib/assinadores /app/lib/apps
       - install -Dm644 comum-pkcs11.sh /app/share/adv-br/comum-pkcs11.sh
       - install -Dm644 opensc.module /app/share/adv-br/pkcs11-modules/opensc.module
       - install -Dm755 adv-br.sh /app/bin/adv-br

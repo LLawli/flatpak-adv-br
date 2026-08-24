@@ -18,17 +18,21 @@ preparar_drivers
 registrar_modulos_no_sandbox
 criar_atalhos
 
-titulo "Assinadores"
-for entrada in \
-    "Lacuna Web PKI:/app/opt/lacuna-webpki/webpki" \
-    "Softplan WebSigner:/app/opt/softplan-websigner/websigner" \
-    "Certisign WebSigner:/app/opt/certisign-websigner/cswebsigner" \
-    "PJeOffice Pro:/app/share/pjeoffice-pro/pjeoffice-pro.jar"; do
-    nome=${entrada%%:*}
-    caminho=${entrada#*:}
-    # O PJeOffice é um .jar, não um executável.
-    if [ -e "$caminho" ]; then ok "$nome"; else falha "$nome (ausente)"; fi
+titulo "Assinadores e aplicativos instalados"
+achou=0
+for extensao in "$ASSINADORES"/*/ "$APPS"/*/; do
+    [ -d "$extensao" ] || continue
+    achou=1
+    ok "$(basename "$extensao")"
 done
+if [ "$achou" = 0 ]; then
+    aviso "nenhum. O pacote base traz só o OpenSC e a ponte; assinador e
+   aplicativo se instalam quando você vai usar:
+       ./instalar.sh --with-webpki       assinar com o componente da Lacuna
+       ./instalar.sh --with-websigner    assinar nos sistemas SAJ
+       ./instalar.sh --with-certisign    portal de assinatura da OAB
+       ./instalar.sh --with-pjeoffice    assinar no PJe (CNJ)"
+fi
 
 titulo "Módulos PKCS#11 visíveis aqui dentro"
 achou=0

@@ -1,0 +1,47 @@
+# Extensão opcional: Lacuna Web PKI.
+#
+# Assinador usado por sistemas que adotam o componente da Lacuna. Como os
+# drivers, ele não vem no pacote base: quem constrói baixa da URL do próprio
+# fabricante, na própria máquina.
+#
+#   ./instalar.sh --with-webpki
+#
+# A convenção que uma extensão de assinador segue está em
+# assinadores/README.md.
+id: io.github.llawli.AdvBr.Assinador.WebPKI
+branch: master
+runtime: io.github.llawli.AdvBr
+runtime-version: master
+sdk: org.freedesktop.Sdk//24.08
+build-extension: true
+appstream-compose: false
+separate-locales: false
+
+build-options:
+  prefix: /app/lib/assinadores/WebPKI
+
+modules:
+  - name: lacuna-webpki
+    buildsystem: simple
+    build-commands:
+      - ar x webpki.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      # O nome do executável é o do comando que o publicador aponta:
+      # adv-br-webpki procura bin/webpki em qualquer extensão instalada.
+      - install -Dm755 deb/opt/lacuna-webpki/webpki "${FLATPAK_DEST}/bin/webpki"
+      # Os manifestos do fabricante, de onde saem o host-name e a lista de
+      # extensões de navegador autorizadas. Quem responde por isso é ele, não
+      # este projeto: o publicador só troca o campo "path".
+      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/com.lacunasoftware.webpki.json
+        "${FLATPAK_DEST}/native-messaging/com.lacunasoftware.webpki.firefox.json"
+      - install -Dm644 deb/opt/lacuna-webpki/manifest.json
+        "${FLATPAK_DEST}/native-messaging/com.lacunasoftware.webpki.chromium.json"
+      # Um assinador que não carregue é indistinguível de um ausente na hora de
+      # assinar, e a diferença só apareceria lá.
+      - LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" ldd "${FLATPAK_DEST}/bin/webpki"
+        | grep -v 'not found'
+    sources:
+      - type: file
+        url: https://get.webpkiplugin.com/Downloads/2.16.0/setup-deb-64
+        sha256: d98752344e050b7fb040df3fb224998ec466bbffb96ac5e96e1ce455adee0a49
+        dest-filename: webpki.deb

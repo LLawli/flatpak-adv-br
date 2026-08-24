@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lançador do PJeOffice Pro dentro deste pacote.
+# Lançador do PJeOffice Pro, dentro da extensão que o traz.
 #
 # O PJeOffice é o assinador do CNJ: um aplicativo Java que sobe um servidor em
 # 127.0.0.1:8800 e conversa com os sistemas do Judiciário pelo navegador. Ele
@@ -9,13 +9,15 @@
 # Ele descobre driver de duas formas, e as duas são inúteis num sandbox:
 # varrendo nomes fixos em /usr/lib (que é o runtime, somente leitura) e lendo a
 # variável PKCS11_DRIVER como diretório, de onde carrega um "pkcs11.so". A
-# segunda é a saída, e é um caminho só — daí o shim (ver src/pkcs11-shim.c),
-# que repassa ao p11-kit-proxy e assim responde por todos os drivers de uma vez.
+# segunda é a saída, e é um caminho só — daí o shim do pacote base (ver
+# src/pkcs11-shim.c), que repassa ao p11-kit-proxy e assim responde por todos
+# os drivers de uma vez.
 set -euo pipefail
 
 . /app/share/adv-br/comum-pkcs11.sh
 
-PJE_HOME=/app/share/pjeoffice-pro
+AQUI=$(cd -- "$(dirname -- "$0")/.." && pwd)
+PJE_HOME="$AQUI/share/pjeoffice-pro"
 
 preparar_drivers
 registrar_modulos_no_sandbox
@@ -33,9 +35,8 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 # que o próprio driver criou. Em uso não há problema — o assinador opera
 # normalmente. Sem esta opção, a JVM ainda escreve um core dump antes de morrer,
 # e a espera faz o crash parecer travamento: custou uma rodada inteira de
-# diagnóstico achando que o driver pendurava. O core dump de um crash dentro de
-# driver proprietário não serve para ninguém aqui.
-exec /app/jre/bin/java \
+# diagnóstico achando que o driver pendurava.
+exec "$AQUI/jre/bin/java" \
     -XX:-CreateCoredumpOnCrash \
     -XX:+UseG1GC \
     -XX:MinHeapFreeRatio=3 \

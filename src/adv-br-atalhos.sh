@@ -19,7 +19,7 @@ set -euo pipefail
 
 listar() {
     local atalho nome
-    for atalho in "$DRIVERS"/*/atalhos/*.desktop; do
+    for atalho in "$DRIVERS"/*/atalhos/*.desktop "$APPS"/*/atalhos/*.desktop; do
         [ -e "$atalho" ] || continue
         nome=$(basename "$atalho" .desktop)
         printf '%s\t%s\t%s\n' "$nome" "$atalho" "${atalho%.desktop}.png"

@@ -1,0 +1,82 @@
+# Extensão opcional: PJeOffice Pro, o assinador do CNJ.
+#
+#   ./instalar.sh --with-pjeoffice
+#
+# Ele é aplicativo, não biblioteca: sobe um servidor em 127.0.0.1:8800 e os
+# sistemas do Judiciário falam com ele pelo navegador. Está aqui pelo mesmo
+# motivo dos outros assinadores — é onde os drivers de token funcionam — e é
+# extensão pelo mesmo motivo de sempre: quem não usa o PJe não deve baixar
+# 300 MB de Java para descobrir isso.
+#
+# O .deb é um reempacotamento dos binários oficiais do CNJ, baixado na máquina
+# de quem constrói. Nada é redistribuído por este repositório.
+id: io.github.llawli.AdvBr.App.PJeOffice
+branch: master
+runtime: io.github.llawli.AdvBr
+runtime-version: master
+sdk: org.freedesktop.Sdk//24.08
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.openjdk11
+build-extension: true
+appstream-compose: false
+separate-locales: false
+
+build-options:
+  prefix: /app/lib/apps/PJeOffice
+
+modules:
+  # Java 11 — a versão que o PJeOffice Pro 2.5.16u exige.
+  #
+  # O install.sh da extensão do SDK copia para /app/jre, um caminho fixo, e o
+  # que uma extensão instala fora do próprio prefixo não é coletado. Então o
+  # que ele faz está replicado aqui, com o destino certo. A lista de binários é
+  # a dele: um JRE, não um JDK.
+  - name: openjdk
+    buildsystem: simple
+    build-commands:
+      - mkdir -p "${FLATPAK_DEST}/jre/bin"
+      - cp -ra /usr/lib/sdk/openjdk11/jvm/openjdk-11/conf
+        /usr/lib/sdk/openjdk11/jvm/openjdk-11/lib
+        /usr/lib/sdk/openjdk11/jvm/openjdk-11/release "${FLATPAK_DEST}/jre/"
+      - rm -f "${FLATPAK_DEST}/jre/lib/src.zip" "${FLATPAK_DEST}/jre/lib/ct.sym"
+      - cp -ra /usr/lib/sdk/openjdk11/jvm/openjdk-11/bin/java
+        /usr/lib/sdk/openjdk11/jvm/openjdk-11/bin/keytool "${FLATPAK_DEST}/jre/bin/"
+
+  - name: pjeoffice
+    buildsystem: simple
+    build-commands:
+      - ar x pje-office.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      - install -Dm644 deb/usr/share/pjeoffice-pro/pjeoffice-pro.jar
+        "${FLATPAK_DEST}/share/pjeoffice-pro/pjeoffice-pro.jar"
+      - install -Dm644 deb/usr/share/pjeoffice-pro/cutplayer4jfx.jar
+        "${FLATPAK_DEST}/share/pjeoffice-pro/cutplayer4jfx.jar"
+      - install -Dm755 deb/usr/share/pjeoffice-pro/ffmpeg.exe
+        "${FLATPAK_DEST}/share/pjeoffice-pro/ffmpeg.exe"
+      # O auto-update do CNJ escreveria dentro de /app, que é somente leitura.
+      # Quem atualiza isto é o Flatpak.
+      - sed -e 's|^update.url=.*|update.url=disabled|'
+        deb/usr/share/pjeoffice-pro/pjeoffice-update.properties
+        > pjeoffice-update.properties
+      - install -Dm644 pjeoffice-update.properties
+        "${FLATPAK_DEST}/share/pjeoffice-pro/pjeoffice-update.properties"
+      - install -Dm755 pjeoffice-pro.sh "${FLATPAK_DEST}/bin/pjeoffice-pro"
+      # Atalho de menu, pela convenção de atalhos/: um .desktop dentro de uma
+      # extensão não é exportado pelo Flatpak, então quem o leva para o host é
+      # o ./host/publicar.sh. É também o que faz o atalho aparecer só quando
+      # esta extensão está instalada.
+      - install -Dm644 pjeoffice.desktop "${FLATPAK_DEST}/atalhos/pjeoffice.desktop"
+      - install -Dm644 deb/usr/share/icons/hicolor/512x512/apps/pjeoffice.png
+        "${FLATPAK_DEST}/atalhos/pjeoffice.png"
+      # Sem a JVM não há assinador, e a falta só apareceria ao abrir.
+      - test -x "${FLATPAK_DEST}/jre/bin/java"
+      - test -s "${FLATPAK_DEST}/share/pjeoffice-pro/pjeoffice-pro.jar"
+    sources:
+      - type: file
+        url: https://github.com/pedrohqb/pje-office-debian/releases/download/2.5.16u-3/pje-office_2.5.16u-3_amd64.deb
+        sha256: d91510730355ebb82cfc7a810a37840392fb25947422ce29ddf6f63a56775cc7
+        dest-filename: pje-office.deb
+      - type: file
+        path: pjeoffice-pro.sh
+      - type: file
+        path: pjeoffice.desktop
