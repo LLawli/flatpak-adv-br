@@ -235,6 +235,14 @@ if [ -f ui/publicador.py ]; then
     fi
 fi
 
+if [ -d ui ]; then
+    if python3 tests/prova-atributos.py; then
+        ok "nenhum self._atributo órfão na interface"
+    else
+        falha "há self._atributo órfão na interface"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 printf '\n%d passaram, %d falharam\n\n' "$passou" "$falhou"
 [ "$falhou" = 0 ]

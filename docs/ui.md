@@ -223,3 +223,11 @@ são as permissões de OUTROS programas, que este aplicativo não pode conceder:
   extensão dizendo que o assinador não está instalado, num navegador que estava
   publicado corretamente segundos antes. A casa do próprio aplicativo fica de
   fora da varredura.
+- **Exceção dentro de um handler do GTK é silêncio.** O método que tratava a
+  resposta de um diálogo saiu junto com um diálogo removido, e outros dois
+  ainda o usavam. O `py_compile` passa, o import passa, a janela abre, e ao
+  clicar o diálogo é construído, a exceção estoura antes do `present()`, e o
+  PyGObject a escreve num stderr que ninguém lê. O botão parece não fazer nada,
+  que é o sintoma mais caro de todos: não há erro para procurar. `tests/
+  prova-atributos.py` procura `self._alguma_coisa` que não existe na classe, e
+  foi verificado que ele pega exatamente esse caso.

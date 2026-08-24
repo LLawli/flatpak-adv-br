@@ -38,6 +38,12 @@ jobs:
         run: |
           python3 -m py_compile host/*.py tests/*.py ui/*.py
 
+      - name: A interface, no que roda sem sessão gráfica
+        run: |
+          python3 tests/prova-janela.py
+          python3 tests/prova-navegadores.py
+          python3 tests/prova-atributos.py
+
       - name: Manifestos
         run: |
           python3 - <<'PY'

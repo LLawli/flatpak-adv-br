@@ -342,6 +342,22 @@ class Janela(Adw.ApplicationWindow):
         dialogo.connect("response", self._respondeu_permissao, pendencias)
         dialogo.present()
 
+    def _respondeu_comando(self, dialogo, resposta, comando):
+        """Resposta de qualquer diálogo que entrega um comando para colar.
+
+        Serve aos dois: o das permissões dos navegadores e o da permissão
+        opcional de um componente. Sumiu junto com o diálogo do modelo de
+        extensão, que era um terceiro uso, e a falta só aparecia ao clicar:
+        o diálogo era construído e a exceção estourava na linha seguinte,
+        antes do present(). Dentro de um handler do GTK isso vira uma linha no
+        stderr que ninguém vê, e o clique parece não fazer nada.
+        """
+        if resposta != "copiar":
+            return
+        self.get_clipboard().set(comando)
+        self.toasts.add_toast(Adw.Toast(
+            title="Comando copiado. Depois de rodá-lo, toque em atualizar."))
+
     def _respondeu_permissao(self, dialogo, resposta, pendencias):
         if resposta != "copiar":
             return
