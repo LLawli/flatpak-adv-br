@@ -29,6 +29,16 @@ PYTHONPATH=/app/share/adv-br-ui python3 -c 'import pkcs11; pkcs11.registrar()' \
 
 export PKCS11_DRIVER=/app/lib/pkcs11
 
+# Onde a JVM grava o relatório quando morre em código nativo, que é o modo como
+# um driver de token a derruba.
+#
+# O padrão dela é o diretório atual, e no sandbox isso é o $HOME, que é um
+# tmpfs: o relatório é escrito, a mensagem diz onde, e o arquivo já não existe
+# quando alguém vai procurá-lo. Um crash sem relatório custou uma rodada
+# inteira de diagnóstico, e o custo de evitá-lo é esta linha.
+RELATORIOS="${XDG_DATA_HOME:-$HOME/.local/share}/pjeoffice-relatorios"
+mkdir -p "$RELATORIOS"
+
 # O AWT do Java não fala Wayland: roda por XWayland. Sem isto, o KWin e outros
 # compositores reparentam a janela e o Swing desenha a decoração no lugar
 # errado.
@@ -42,6 +52,7 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 # diagnóstico achando que o driver pendurava.
 exec "$AQUI/jre/bin/java" \
     -XX:-CreateCoredumpOnCrash \
+    -XX:ErrorFile="$RELATORIOS/crash-%p.log" \
     -XX:+UseG1GC \
     -XX:MinHeapFreeRatio=3 \
     -XX:MaxHeapFreeRatio=3 \

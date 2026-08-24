@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 # Preparo que todo processo que vai carregar um driver precisa fazer antes.
 #
 # Não é um programa: é para ser incluído com ".", e por isso não tem shebang
@@ -30,11 +31,28 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 # inofensivo, porque a libgcc_s já é carregada por quase tudo.
 export LD_PRELOAD="libgcc_s.so.1${LD_PRELOAD:+:$LD_PRELOAD}"
 
-# O SerproID faz readdir neste diretório assim que é carregado e derruba com
-# SIGSEGV quem o carregou se ele não existir. Como quem carrega é o assinador
-# ou o navegador, um driver mal preparado impediria assinar com qualquer outro
-# token.
+# O SerproID faz readdir em ~/.config/serproid/certificados e derruba com
+# SIGSEGV quem o carregou se o diretório não existir. Como quem carrega é o
+# assinador, o navegador ou o PJeOffice, um driver mal preparado impediria
+# assinar com qualquer outro token.
+#
+# O caminho é $HOME/.config, literal, e NÃO $XDG_CONFIG_HOME: no Flatpak os
+# dois são diferentes ($HOME/config contra $HOME/.config), e a biblioteca monta
+# o dela com o HOME, sem conhecer XDG. Criar em XDG_CONFIG_HOME faz o
+# diretório nascer ao lado do que ela procura, e o SIGSEGV volta com cara de
+# driver que "às vezes" derruba o assinador.
+#
+# E não basta criar: $HOME/.config não está montado neste sandbox, é tmpfs, e
+# some ao fim da execução. É ali que o aplicativo do SerproID grava o
+# certificado que a pessoa associa, então um mkdir simples faria esse trabalho
+# ser perdido toda vez, sem erro nenhum. Daí o link para os dados do
+# aplicativo, que persistem.
 mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/serproid/certificados"
+if [ "${XDG_CONFIG_HOME:-$HOME/.config}" != "$HOME/.config" ]; then
+    mkdir -p "$HOME/.config"
+    [ -e "$HOME/.config/serproid" ] ||
+        ln -s "$XDG_CONFIG_HOME/serproid" "$HOME/.config/serproid"
+fi
 
 # A libeToken do SafeNet procura a configuração dela em /etc por caminho
 # absoluto, sem forma de redirecionar. No sandbox /etc é um tmpfs recriado a
