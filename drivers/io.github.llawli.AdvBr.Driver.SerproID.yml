@@ -60,11 +60,25 @@ modules:
       # ./host/publicar.sh, que substitui @EXEC@ e @ICONE@ pelos caminhos de
       # lá. Um .desktop dentro da extensão não é exportado pelo Flatpak: só o
       # do aplicativo é, e por isso a travessia é explícita.
+      # O nome do atalho tem de ser o nome da ferramenta: o publicador monta o
+      # Exec como "adv-br-ferramentas <nome do atalho>". Aqui os dois são
+      # "serproid" e coincidem, o que escondeu o problema até o PJeOffice
+      # aparecer com bin/pjeoffice-pro e atalhos/pjeoffice.desktop.
       - install -Dm644 serproid.desktop "${FLATPAK_DEST}/atalhos/serproid.desktop"
       - install -Dm644 deb/usr/share/serproid-desktop/SerproID.png
         "${FLATPAK_DEST}/atalhos/serproid.png"
       # O aplicativo é metade da solução; sem ele não há certificado nenhum
       # para a biblioteca ler, e a falta só apareceria na hora de assinar.
+      - |
+        set -eu
+        for atalho in "${FLATPAK_DEST}"/atalhos/*.desktop; do
+            [ -e "$atalho" ] || continue
+            nome=$(basename "$atalho" .desktop)
+            if [ ! -x "${FLATPAK_DEST}/bin/$nome" ]; then
+                echo "atalho $nome.desktop sem bin/$nome correspondente" >&2
+                exit 1
+            fi
+        done
       - test -x "${FLATPAK_DEST}/app/jre/bin/java"
       - test -s "${FLATPAK_DEST}/app/lib/NeoID.jar"
       # A libserproidp11.so usa símbolos da libgcc_s (_Unwind_Resume_or_Rethrow)

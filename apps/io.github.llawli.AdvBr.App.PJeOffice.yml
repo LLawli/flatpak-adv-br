@@ -65,10 +65,29 @@ modules:
       # extensão não é exportado pelo Flatpak, então quem o leva para o host é
       # o ./host/publicar.sh. É também o que faz o atalho aparecer só quando
       # esta extensão está instalada.
-      - install -Dm644 pjeoffice.desktop "${FLATPAK_DEST}/atalhos/pjeoffice.desktop"
+      # O nome do atalho é o nome da ferramenta, e não é detalhe: o publicador
+      # monta o Exec como "adv-br-ferramentas <nome do atalho>". Chamado de
+      # pjeoffice, o atalho apontaria para uma ferramenta que não existe (a
+      # daqui é bin/pjeoffice-pro) e não abriria nada. O SerproID não expôs
+      # isso porque lá os dois nomes coincidem.
+      - install -Dm644 pjeoffice-pro.desktop
+        "${FLATPAK_DEST}/atalhos/pjeoffice-pro.desktop"
       - install -Dm644 deb/usr/share/icons/hicolor/512x512/apps/pjeoffice.png
-        "${FLATPAK_DEST}/atalhos/pjeoffice.png"
+        "${FLATPAK_DEST}/atalhos/pjeoffice-pro.png"
       # Sem a JVM não há assinador, e a falta só apareceria ao abrir.
+      # Todo atalho precisa de uma ferramenta com o mesmo nome, ou ele abre
+      # coisa nenhuma. A conferência é aqui porque o sintoma aparece longe:
+      # no menu do usuário, semanas depois.
+      - |
+        set -eu
+        for atalho in "${FLATPAK_DEST}"/atalhos/*.desktop; do
+            [ -e "$atalho" ] || continue
+            nome=$(basename "$atalho" .desktop)
+            if [ ! -x "${FLATPAK_DEST}/bin/$nome" ]; then
+                echo "atalho $nome.desktop sem bin/$nome correspondente" >&2
+                exit 1
+            fi
+        done
       - test -x "${FLATPAK_DEST}/jre/bin/java"
       - test -s "${FLATPAK_DEST}/share/pjeoffice-pro/pjeoffice-pro.jar"
     sources:
@@ -79,4 +98,4 @@ modules:
       - type: file
         path: pjeoffice-pro.sh
       - type: file
-        path: pjeoffice.desktop
+        path: pjeoffice-pro.desktop

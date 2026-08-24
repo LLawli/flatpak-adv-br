@@ -173,6 +173,20 @@ if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
         rm -f "$ICONES/teste-orfao.png"
     fi
 
+    # Todo atalho tem de ter uma ferramenta com o mesmo nome: o publicador
+    # monta o Exec como "adv-br-ferramentas <nome do atalho>". Quando os nomes
+    # divergem, o atalho aparece no menu e não abre nada, e a divergência só é
+    # visível comparando as duas listas.
+    ferramentas=$(flatpak run --command=adv-br-ferramentas "$APP_ID" 2>/dev/null |
+        sed -n 's/^  \([^ ]*\) (de .*/\1/p' | sort)
+    atalhos=$(flatpak run --command=adv-br-atalhos "$APP_ID" 2>/dev/null | cut -f1 | sort)
+    orfaos=$(comm -23 <(printf '%s\n' "$atalhos") <(printf '%s\n' "$ferramentas") | tr '\n' ' ')
+    if [ -z "$(printf '%s' "$orfaos" | tr -d '[:space:]')" ]; then
+        ok "todo atalho tem a ferramenta correspondente"
+    else
+        falha "atalho sem ferramenta de mesmo nome:$orfaos"
+    fi
+
     # As ferramentas e os atalhos das extensões instaladas têm de aparecer: é
     # por eles que se abre o SerproID e o PJeOffice, que não são comandos do
     # pacote base.

@@ -32,7 +32,7 @@ O prefixo de build é `/app/lib/apps/<Nome>`, e dentro dele:
 | caminho | o que é |
 |---|---|
 | `bin/<nome>` | o lançador, alcançado por `adv-br-ferramentas <nome>`. |
-| `atalhos/<nome>.desktop` | vira atalho de menu no host, escrito pelo `./host/publicar.sh`. Use `@EXEC@` e `@ICONE@`, que ele substitui. |
+| `atalhos/<nome>.desktop` | vira atalho de menu no host, escrito pelo `./host/publicar.sh`. Use `@EXEC@` e `@ICONE@`, que ele substitui. **O `<nome>` tem de ser igual ao do `bin/<nome>`**: é dele que o publicador monta o `Exec`. |
 | `atalhos/<nome>.png` | o ícone do atalho. |
 | `lib/` | bibliotecas de apoio, se houver. |
 | `preparar.sh` | opcional, roda antes do aplicativo subir. |

@@ -84,7 +84,7 @@ O prefixo de build é `/app/lib/pkcs11/drivers/<Nome>`, e dentro dele:
 | `lib/` | bibliotecas de apoio de que o driver dependa. Entra no `LD_LIBRARY_PATH` antes de qualquer carga. |
 | `preparar.sh` | opcional, executável. Roda antes de o módulo ser carregado, para o que o driver exigir do ambiente. |
 | `bin/*` | opcional. Ferramentas da extensão, alcançadas por `flatpak run --command=adv-br-ferramentas io.github.llawli.AdvBr <nome>`. |
-| `atalhos/<nome>.desktop` | opcional. Vira atalho de menu no host, escrito pelo `./host/publicar.sh`. Use `@EXEC@` e `@ICONE@`, que ele substitui. |
+| `atalhos/<nome>.desktop` | opcional. Vira atalho de menu no host, escrito pelo `./host/publicar.sh`. Use `@EXEC@` e `@ICONE@`, que ele substitui. **O `<nome>` tem de ser igual ao do `bin/<nome>`**: é dele que o publicador monta o `Exec`. |
 | `atalhos/<nome>.png` | opcional, o ícone do atalho acima. |
 
 O `.desktop` sai da extensão e vai para `~/.local/share/applications` porque o
