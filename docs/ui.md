@@ -63,33 +63,55 @@ De cima para baixo, na ordem em que a pessoa faz as perguntas:
    permissão quando falta acesso à home.
 3. **Drivers de token**: OpenSC (já vem), SafeSign, SafeNet, SerproID.
 4. **Assinadores**: Lacuna Web PKI, Certisign WebSigner, Certisign Desktop.
+5. **Aplicativos**: PJeOffice Pro, que vem à parte por ser grande.
 
 Quem abre isto está com o token na mão e quer assinar, não configurar.
 
-## O catálogo, e o que fica de fora dele
+## O catálogo, e as duas formas de instalar
 
-Os seis componentes do `main` estão aqui: três drivers proprietários e três
-assinadores. Nenhum é redistribuído, todos são baixados do fabricante na hora,
-e o sha256 de cada um é conferido antes de qualquer coisa ser extraída.
+Sete componentes, em duas categorias que não se parecem por dentro:
 
-O **PJeOffice** não entra. Ele não é uma biblioteca que este aplicativo carrega,
-é um programa Java com servidor próprio, e já existe empacotado em separado no
-`PjeOffice-flatpak`, que consome as extensões de driver da versão de linha de
-comando. Trazê-lo para cá significaria embutir um runtime Java inteiro num
-aplicativo que hoje ocupa poucos megabytes, para duplicar um pacote que já
-funciona.
+**Baixados pela janela.** Três drivers proprietários e três assinadores. São
+bibliotecas e programas pequenos: o aplicativo baixa o pacote do site do
+fabricante, confere o sha256, extrai o que interessa para os dados dele e
+pronto. Um clique instala, outro remove. Nenhum é redistribuído por este
+repositório.
 
-Isso deixa uma ponta solta conhecida: no modelo desta branch os drivers vivem
-em `~/.var/app/dev.lukakuuhaku.AdvBr/data/componentes/`, e não como extensões
-Flatpak montadas dentro de outro aplicativo. O `PjeOffice-flatpak` continua
-consumindo as extensões do `main`, e quem usar os dois terá o driver baixado
-duas vezes. Resolver isso é decidir se o PJeOffice fala com este aplicativo
-pela mesma ponte que os navegadores usam, o que exigiria dele permissão para
-iniciar um Flatpak a partir de dentro do sandbox.
+**Extensão Flatpak.** Hoje só o PJeOffice. O critério é o que o pacote precisa
+para rodar: o .deb do CNJ não traz máquina virtual nenhuma, e uma JVM são
+280 MB que teriam de vir no aplicativo base, baixados inclusive por quem nunca
+abriu o PJe. Como extensão ele é construído contra este aplicativo, monta em
+`/app/lib/apps/PJeOffice`, usa os mesmos drivers e o mesmo p11-kit, e quem não
+usa o PJe não baixa nada.
+
+O preço da extensão é que instalar exige `flatpak install`, e um aplicativo em
+sandbox não executa isso sozinho. Poderia: bastaria pedir `--talk-name=
+org.freedesktop.Flatpak`, que é a permissão de rodar comandos fora da caixa.
+Seria trocar um comando eventual por acesso irrestrito à máquina, permanente, e
+não vale. Então a janela faz o que pode, que é mostrar o comando pronto para
+copiar, e reconhecer sozinha quando a extensão apareceu.
+
+### Permissão nenhuma entra por padrão
+
+O PJeOffice tem um assinador de arquivos avulsos que precisa ler documentos do
+disco. Isso NÃO é o caminho normal de uso: assinando pelo PJe, quem entrega o
+documento é o navegador, pelo servidor local em 127.0.0.1:8800, e nada é lido
+da pasta de ninguém.
+
+Por isso o manifesto não ganhou acesso a arquivos por causa dele. O que a
+janela faz é oferecer, no mesmo diálogo em que mostra o comando de instalar, um
+segundo comando marcado como opcional, com o que ele serve:
+
+    flatpak override --user --filesystem=xdg-documents dev.lukakuuhaku.AdvBr
+
+Só a pasta Documentos, e só se a pessoa quiser. Permissão que o aplicativo não
+usa é permissão que ele não deve ter, e uma que ele usa uma vez por ano não
+justifica estar ligada o ano inteiro.
 
 ## O que ainda não existe
 
 - desinstalar componentes que deixaram de existir no catálogo;
+- atalho do PJeOffice no menu do sistema (hoje ele abre pela janela);
 - VIDaaS, que é certificado em nuvem e não passa por PKCS#11 local.
 
 ## Armadilhas medidas aqui
@@ -124,3 +146,13 @@ iniciar um Flatpak a partir de dentro do sandbox.
 - **`ldd` avisa sobre permissão de execução em `.so` que veio de `.deb`.** O
   pacote traz as bibliotecas em 644 e nada as torna 755 na extração. É só o
   aviso do `ldd`: `dlopen` não pede bit de execução.
+- **Uma extensão não vê o que o aplicativo base ainda não instalou.** O
+  lançador do PJeOffice inclui `preparar-drivers.sh` e carrega o shim, os dois
+  do aplicativo base. Se qualquer um mudar de lugar, a extensão continua
+  construindo sem reclamar e falha só quando alguém a abre, semanas depois. Por
+  isso o manifesto dela termina com `test -f` nos dois caminhos: o build quebra
+  na hora certa.
+- **O PJeOffice escuta em `*:8800`, não em `127.0.0.1:8800`.** É o comportamento
+  dele, não do sandbox, e vale saber ao diagnosticar: com `--share=network` a
+  pilha de rede é a do host, então o servidor fica visível para qualquer
+  navegador da máquina, dentro ou fora de sandbox, e também para a rede local.
