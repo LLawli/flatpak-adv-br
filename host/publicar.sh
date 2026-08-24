@@ -331,8 +331,46 @@ titulo "3/4 · Assinadores (assinatura em navegador)"
 
 ASSINADORES=$(flatpak run --command=adv-br-assinadores "$APP_ID" 2>/dev/null) || true
 
+# O que sobreviver a esta publicação. O que não estiver aqui é rastro de um
+# assinador removido: um manifesto apontando para um atalho que já não existe
+# faz a extensão do navegador dizer que o assinador não está instalado, que é
+# o mesmo sintoma de nunca ter sido publicado.
+declare -A MANIFESTO_VIVO=()
+declare -A WRAPPER_VIVO=()
+while IFS=$'\t' read -r nome _ comando _; do
+    [ -n "$nome" ] || continue
+    MANIFESTO_VIVO["$nome.json"]=1
+    WRAPPER_VIVO["$PREFIXO_WRAPPER${comando#adv-br-}"]=1
+done <<<"$ASSINADORES"
+
+# Roda mesmo quando não há assinador nenhum instalado: é justamente aí que há
+# mais o que limpar.
+limpar_assinadores_removidos() {
+    local id=$1 familia=$2 perfis=$3 manifestos=$4
+    local dir arquivo
+    while read -r dir; do
+        [ -d "$dir" ] || continue
+        for arquivo in "$dir"/*.json; do
+            [ -e "$arquivo" ] || continue
+            grep -q "$PREFIXO_WRAPPER" "$arquivo" || continue
+            [ -n "${MANIFESTO_VIVO[$(basename "$arquivo")]:-}" ] && continue
+            rm -f "$arquivo" && log "$(basename "$arquivo") não existe mais no pacote; removido."
+        done
+    done <<<"$manifestos"
+    return 0
+}
+para_cada_navegador limpar_assinadores_removidos
+
+for arquivo in "$BIN_HOST/$PREFIXO_WRAPPER"* \
+               "$HOME"/.var/app/*/"$SUBDIR_ATALHO_FLATPAK"/"$PREFIXO_WRAPPER"*; do
+    [ -e "$arquivo" ] || continue
+    [ -n "${WRAPPER_VIVO[$(basename "$arquivo")]:-}" ] && continue
+    rm -f "$arquivo" && log "atalho $(basename "$arquivo") removido."
+done
+
 if [ -z "$ASSINADORES" ]; then
-    aviso "o pacote não descreveu assinador nenhum."
+    log "nenhum assinador instalado.
+      Para assinar em navegador:  ./instalar.sh --with-webpki"
 else
     mkdir -p "$BIN_HOST"
 
