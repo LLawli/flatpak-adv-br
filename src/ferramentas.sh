@@ -35,11 +35,19 @@ shift
 
 preparar_drivers
 
-for driver in "$DRIVERS"/*/bin/"$NOME" "$APPS"/*/bin/"$NOME"; do
-    [ -x "$driver" ] || continue
-    exec "$driver" "$@"
+# O laço escolhe, e o exec vem depois dele: um "exec" dentro do laço torna
+# inalcançável tudo o que vem em seguida, e o shellcheck reclama disso a partir
+# da 0.10 (SC2093). Separar as duas coisas também deixa a mensagem de erro num
+# lugar só.
+FERRAMENTA=""
+for candidato in "$DRIVERS"/*/bin/"$NOME" "$APPS"/*/bin/"$NOME"; do
+    [ -x "$candidato" ] && { FERRAMENTA=$candidato; break; }
 done
 
-printf 'adv-br: ferramenta "%s" não encontrada.\n' "$NOME" >&2
-listar >&2
-exit 1
+if [ -z "$FERRAMENTA" ]; then
+    printf 'adv-br: ferramenta "%s" não encontrada.\n' "$NOME" >&2
+    listar >&2
+    exit 1
+fi
+
+exec "$FERRAMENTA" "$@"
