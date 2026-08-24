@@ -245,5 +245,11 @@ diferente.
 
 ## Licença
 
-GPL-3.0-or-later. Os drivers e assinadores baixados durante a construção
-pertencem aos seus fabricantes e seguem as licenças deles.
+**GPL-3.0-only**, em [LICENSE](LICENSE) — a versão 3 da GPL, sem a cláusula de
+"ou qualquer versão posterior".
+
+Isso vale para o empacotamento, que é o que este repositório contém. **Não**
+vale para o que ele instala: os drivers de token e os assinadores pertencem aos
+seus fabricantes e seguem as licenças deles, e nenhum binário proprietário é
+redistribuído aqui — todos são baixados da fonte original no momento da
+construção.

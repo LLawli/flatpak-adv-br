@@ -38,6 +38,9 @@ Todo binário proprietário é baixado da URL do próprio fabricante, com `sha25
 fixo no manifesto. **Nada é redistribuído por este repositório**, e é por isso
 que não existe um `.flatpak` pronto para baixar.
 
+Ao contribuir, você concorda em licenciar sua contribuição sob a
+**GPL-3.0-only**, como o resto do projeto.
+
 ## Estilo
 
 - Português nos comentários, nas mensagens e na documentação. Quem usa isto é

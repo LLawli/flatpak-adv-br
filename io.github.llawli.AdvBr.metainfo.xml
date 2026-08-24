@@ -4,7 +4,7 @@
   <name>adv-br</name>
   <summary>Certificado digital da advocacia brasileira, para os navegadores que você já tem</summary>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-3.0-or-later</project_license>
+  <project_license>GPL-3.0-only</project_license>
   <developer id="io.github.llawli">
     <name>LLawli</name>
   </developer>
