@@ -72,8 +72,31 @@ Como se escreve uma extensão nova está em
 [drivers/README.md](drivers/README.md),
 [assinadores/README.md](assinadores/README.md) e [apps/README.md](apps/README.md).
 
-O **VIDaaS**, certificado em nuvem da Valid, não entra: não existe biblioteca
-para Linux.
+## VIDaaS: em desenvolvimento, e precisando de testadores
+
+O **VIDaaS**, certificado em nuvem da Valid, ainda não está aqui — mas não é
+caso perdido, e a razão é interessante.
+
+Não existe biblioteca PKCS#11 para Linux: o VIDaaS Connect, que é quem faz a
+ponte, só tem versão para Windows e macOS. Só que a chave privada do VIDaaS
+**não mora no seu computador** — ela fica num HSM na nuvem da Valid, e toda
+assinatura é uma chamada à API deles, aprovada no aplicativo do celular. Ou
+seja: não há nada de específico de Windows no que importa. Falando a mesma API,
+o Linux funciona.
+
+O trabalho está em andamento e a parte que dá para exercitar sem certificado já
+funciona (autorização e QR Code). **O que falta precisa de um certificado
+VIDaaS de verdade**: descobrir o certificado, assinar e conferir a assinatura
+resultante — três passos que ninguém consegue testar sem ter um em mãos.
+
+**É aqui que você pode ajudar.** Se você tem um certificado VIDaaS ativo e topa
+rodar um roteiro de teste (leva alguns minutos, e nenhuma chave sai do seu
+poder — a aprovação continua sendo no seu celular), escreva para:
+
+> **contato@lukakuuhaku.dev**
+
+Com testadores, o VIDaaS entra como mais uma extensão, do mesmo jeito que os
+outros.
 
 ## Requisitos
 
