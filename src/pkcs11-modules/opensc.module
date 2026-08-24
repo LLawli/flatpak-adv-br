@@ -1,0 +1,4 @@
+# O OpenSC que vem neste pacote. Copiado para /etc/pkcs11/modules no início de
+# cada execução; ver src/comum-pkcs11.sh.
+module: /app/lib/opensc-pkcs11.so
+critical: no

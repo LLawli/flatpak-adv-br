@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>io.github.llawli.AdvBr</id>
+  <name>adv-br</name>
+  <summary>Certificado digital da advocacia brasileira, para os navegadores que você já tem</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="io.github.llawli">
+    <name>LLawli</name>
+  </developer>
+  <description>
+    <p>
+      Reúne num sandbox os drivers de token e os assinadores usados pela
+      advocacia brasileira, e os publica para os navegadores que já existem na
+      máquina, dentro ou fora de Flatpak. Nenhum navegador é instalado aqui.
+    </p>
+    <p>
+      A autenticação por certificado (Projudi, eproc, login do PJe, gov.br)
+      atravessa pelo remoting do p11-kit; a assinatura em navegador (SAJ,
+      portal da OAB, Lacuna) atravessa pelos manifestos de native messaging.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/LLawli/flatpak-adv-br</url>
+  <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
+  <provides>
+    <binary>adv-br</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-08-22">
+      <description>
+        <p>Primeira versão.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -1,0 +1,309 @@
+# Manifesto Flatpak do adv-br: certificado digital da advocacia brasileira
+# dentro de um sandbox, publicado para os navegadores que já existem na máquina.
+#
+# O que este pacote é: os drivers do token e os assinadores, juntos, num lugar
+# onde eles funcionam. O que ele não é: um navegador. O Firefox, o Chrome, o
+# Brave ou o Vivaldi que você já usa continuam sendo os seus, dentro ou fora de
+# Flatpak, e passam a enxergar o token através daqui.
+#
+# São duas travessias, porque são dois problemas diferentes:
+#
+#   autenticação por certificado    o navegador carrega o módulo PKCS#11 dentro
+#   (Projudi, eproc, login do PJe,  do próprio processo. Um arquivo .module na
+#   gov.br)                         home do usuário manda o p11-kit do host
+#                                   iniciar 'flatpak run ... adv-br-pkcs11' e
+#                                   conversar com ele pelo pipe.
+#
+#   assinatura pelos assinadores    quem fala com o token é um programa à parte,
+#   (SAJ, portal da OAB, Lacuna)    que o navegador executa e com quem conversa
+#                                   por stdin/stdout. O manifesto de native
+#                                   messaging aponta para um atalho que entra
+#                                   neste Flatpak.
+id: io.github.llawli.AdvBr
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.openjdk11
+command: adv-br
+
+# Drivers de token proprietários entram como extensões opcionais, não como
+# módulos deste manifesto. As licenças de SafeSign, SafeNet e SerproID permitem
+# ao licenciado usar e guardar uma cópia de backup, não redistribuir: um pacote
+# pronto com o driver dentro seria redistribuição; um manifesto de extensão que
+# a pessoa constrói na própria máquina, a partir da URL do fabricante, não é.
+#
+# Cada extensão instala em lib/pkcs11/drivers/<Nome>/, com os módulos PKCS#11
+# em pkcs11/ e as bibliotecas de apoio em lib/. Ver drivers/README.md.
+add-extensions:
+  io.github.llawli.AdvBr.Driver:
+    directory: lib/pkcs11/drivers
+    subdirectories: true
+    no-autodownload: true
+    autodelete: true
+    version: master
+
+finish-args:
+  # Leitoras de smartcard e tokens A3 que passam pelo pcscd do host.
+  - --socket=pcsc
+  # Tokens USB que falam direto com o dispositivo, sem PC/SC.
+  - --device=all
+  # Os assinadores desenham diálogo de PIN e de escolha de certificado.
+  #
+  # x11 de verdade, e não fallback-x11: o Lacuna Web PKI e o Softplan WebSigner
+  # são Avalonia, que só tem backend X11 — sob Wayland eles morrem no início
+  # com "XOpenDisplay failed", antes de ler a primeira mensagem. Com
+  # fallback-x11 o socket X11 só aparece quando não há Wayland, que é
+  # exatamente o caso em que eles não precisariam dele. O wayland continua aqui
+  # porque o Certisign é GTK3 e o usa nativamente.
+  - --socket=wayland
+  - --socket=x11
+  - --share=ipc
+  # CRL, OCSP e carimbo do tempo — e o servidor local do PJeOffice, em
+  # 127.0.0.1:8800, que os sistemas do Judiciário procuram pelo navegador. Como
+  # o sandbox compartilha a pilha de rede do host, esse servidor fica visível
+  # para qualquer navegador, dentro ou fora de sandbox.
+  - --share=network
+  # Bandeja do sistema, que o PJeOffice usa quando o desktop oferece.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # Assinar arquivo escolhido pela pessoa, ler certificado A1 (.pfx/.p12) e
+  # gravar a configuração de cada assinador onde ele a gravaria instalado
+  # nativamente.
+  - --filesystem=home
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - /share/doc
+  - '*.la'
+  - '*.a'
+
+modules:
+  # Compatibilidade do p11-kit com o host, quando as séries divergem. O
+  # arquivo é gerado pelo ./instalar.sh e costuma não fazer nada; ver
+  # packaging/p11kit-series.txt.
+  - packaging/p11kit-compat.yml
+
+  # Cliente PC/SC. O daemon é o do host, alcançado pelo socket que --socket=pcsc
+  # monta em /run/pcscd; aqui só precisamos da biblioteca que todo driver de
+  # token carrega como libpcsclite.so.1.
+  - name: pcsc-lite
+    buildsystem: meson
+    config-opts:
+      - -Dlibsystemd=false
+      - -Dlibudev=false
+      - -Dlibusb=false
+      - -Dpolkit=false
+      - -Dserial=false
+      - -Dusb=false
+      - -Dipcdir=/run/pcscd
+    cleanup:
+      - /bin/pcsc-spy
+      - /sbin
+      - /share/pcsc
+    sources:
+      - type: archive
+        url: https://pcsclite.apdu.fr/files/pcsc-lite-2.5.1.tar.xz
+        sha256: bfcfe38a20afc49849c6bf55325e38f449fc4b26d3923fdc32b969ae41a8741b
+
+  # OpenSC cobre boa parte dos cartões e tokens ICP-Brasil sem driver
+  # proprietário, e é software livre, então pode vir embutido no pacote.
+  - name: opensc
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+      - --disable-doc
+      - --disable-man
+      - --enable-pcsc
+    # O autotools do OpenSC descobre o diretório de módulos do p11-kit pelo
+    # pkg-config e chega em /usr/share, que pertence ao runtime.
+    make-install-args:
+      - p11kitdir=/app/share/p11-kit/modules
+    sources:
+      - type: archive
+        url: https://github.com/OpenSC/OpenSC/releases/download/0.27.1/opensc-0.27.1.tar.gz
+        sha256: 976f4a23eaf3397a1a2c3a7aac80bf971a8c3d829c9a79f06145bfaeeae5eca7
+
+  # ------------------------------------------------------------------
+  # Assinadores. Cada um é um binário único que fala native messaging por
+  # stdin/stdout, mais o manifesto que descreve o host-name e as extensões de
+  # navegador autorizadas. Os manifestos originais são guardados em
+  # share/adv-br/native-messaging/: é deles que o publicador do host tira o
+  # nome e a lista de extensões, em vez de repetir essa tabela em outro lugar.
+  #
+  # Nenhum binário é redistribuído por este repositório: o .deb é baixado da
+  # URL do próprio fabricante, na máquina de quem constrói, e conferido pelo
+  # sha256 aqui declarado.
+  # ------------------------------------------------------------------
+  - name: lacuna-webpki
+    buildsystem: simple
+    build-commands:
+      - ar x webpki.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      - install -Dm755 deb/opt/lacuna-webpki/webpki /app/opt/lacuna-webpki/webpki
+      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/com.lacunasoftware.webpki.json
+        /app/share/adv-br/native-messaging/com.lacunasoftware.webpki.firefox.json
+      - install -Dm644 deb/opt/lacuna-webpki/manifest.json
+        /app/share/adv-br/native-messaging/com.lacunasoftware.webpki.chromium.json
+    sources:
+      - type: file
+        url: https://get.webpkiplugin.com/Downloads/2.16.0/setup-deb-64
+        sha256: d98752344e050b7fb040df3fb224998ec466bbffb96ac5e96e1ce455adee0a49
+        dest-filename: webpki.deb
+
+  # Único módulo que baixa durante o build, e não pela lista de fontes: o
+  # servidor da Softplan serve uma cadeia TLS incompleta (repete o certificado
+  # do servidor no lugar do intermediário), e o downloader do flatpak-builder
+  # não tem como receber o intermediário que falta — ele ignora SSL_CERT_FILE e
+  # CURL_CA_BUNDLE. A saída não é desligar a verificação com 'curl -k', que é o
+  # que outros projetos fazem: é COMPLETAR a cadeia. packaging/ca/ traz o
+  # intermediário, emitido por uma raiz que o sistema já confia, e o curl aqui
+  # valida contra ele. O sha256 é conferido logo em seguida, então o resultado
+  # é mais verificado que o de uma fonte comum, não menos.
+  - name: softplan-websigner
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
+    build-commands:
+      - cat /etc/ssl/certs/ca-certificates.crt ThawteTLSRSACAG1.pem > bundle.pem
+      - curl -fsSL --cacert bundle.pem -o websigner.deb
+        https://websigner.softplan.com.br/Downloads/2.15.0/webpki-chrome-64-deb
+      - echo "04fa41e962d91e4d7337f4707479437bf660f19057fac63829fb46784ee08289  websigner.deb"
+        | sha256sum -c -
+      - ar x websigner.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      - install -Dm755 deb/opt/softplan-websigner/websigner /app/opt/softplan-websigner/websigner
+      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/br.com.softplan.webpki.json
+        /app/share/adv-br/native-messaging/br.com.softplan.webpki.firefox.json
+      - install -Dm644 deb/opt/softplan-websigner/manifest.json
+        /app/share/adv-br/native-messaging/br.com.softplan.webpki.chromium.json
+    sources:
+      - type: file
+        path: packaging/ca/ThawteTLSRSACAG1.pem
+
+  - name: certisign-websigner
+    buildsystem: simple
+    build-commands:
+      - ar x certisign.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      - install -Dm755 deb/opt/certisign-websigner/cswebsigner
+        /app/opt/certisign-websigner/cswebsigner
+      - install -Dm644 -t /app/opt/certisign-websigner/res deb/opt/certisign-websigner/res/*
+      - install -Dm644 deb/usr/share/mozilla/native-messaging-hosts/br.com.certisign.websigner.json
+        /app/share/adv-br/native-messaging/br.com.certisign.websigner.firefox.json
+      - install -Dm644 deb/opt/certisign-websigner/manifest.json
+        /app/share/adv-br/native-messaging/br.com.certisign.websigner.chromium.json
+    sources:
+      - type: file
+        url: https://get.websignerplugin.com/Downloads/2.17.7/setup-deb-64
+        sha256: 04981f073f61ac7e8662ec12f3d69be1cb8090131836935a111ef9d5b012abfb
+        dest-filename: certisign.deb
+
+  # ------------------------------------------------------------------
+  # PJeOffice Pro, o assinador do CNJ. Java 11 é a versão que ele exige.
+  #
+  # O .deb é um reempacotamento dos binários oficiais do CNJ; como todo o
+  # resto aqui, ele é baixado na máquina de quem constrói, e nada é
+  # redistribuído por este repositório.
+  # ------------------------------------------------------------------
+  - name: openjdk
+    buildsystem: simple
+    build-commands:
+      - /usr/lib/sdk/openjdk11/install.sh
+
+  # A biblioteca única que o PJeOffice carrega. Ver src/pkcs11-shim.c: ele
+  # aceita um diretório em PKCS11_DRIVER e carrega dali um "pkcs11.so"; este
+  # repassa ao p11-kit-proxy do runtime, que responde por todos os módulos
+  # registrados em /etc/pkcs11/modules. Um caminho serve N drivers.
+  - name: pkcs11-shim
+    buildsystem: simple
+    build-commands:
+      - install -d /app/lib/pkcs11
+      - gcc -shared -fPIC -O2 -Wall -Wextra -Werror -o /app/lib/pkcs11/pkcs11.so
+        pkcs11-shim.c -ldl
+      # Um shim que não exporte o ponto de entrada do PKCS#11 é indistinguível
+      # de um driver ausente na hora de assinar, e só apareceria lá.
+      - nm -D --defined-only /app/lib/pkcs11/pkcs11.so | grep -q ' T C_GetFunctionList$'
+    sources:
+      - type: file
+        path: src/pkcs11-shim.c
+
+  - name: pjeoffice
+    buildsystem: simple
+    build-commands:
+      - ar x pje-office.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      - install -Dm644 deb/usr/share/pjeoffice-pro/pjeoffice-pro.jar
+        /app/share/pjeoffice-pro/pjeoffice-pro.jar
+      - install -Dm644 deb/usr/share/pjeoffice-pro/cutplayer4jfx.jar
+        /app/share/pjeoffice-pro/cutplayer4jfx.jar
+      - install -Dm755 deb/usr/share/pjeoffice-pro/ffmpeg.exe
+        /app/share/pjeoffice-pro/ffmpeg.exe
+      # O auto-update do CNJ escreveria dentro de /app, que é somente leitura
+      # no Flatpak. Quem atualiza este pacote é o próprio Flatpak.
+      - sed -e 's|^update.url=.*|update.url=disabled|'
+        deb/usr/share/pjeoffice-pro/pjeoffice-update.properties
+        > pjeoffice-update.properties
+      - install -Dm644 pjeoffice-update.properties
+        /app/share/pjeoffice-pro/pjeoffice-update.properties
+      - install -Dm755 pjeoffice-pro.sh /app/bin/pjeoffice-pro
+      - install -Dm644 deb/usr/share/icons/hicolor/512x512/apps/pjeoffice.png
+        /app/share/icons/hicolor/512x512/apps/io.github.llawli.AdvBr.PJeOffice.png
+      - install -Dm644 io.github.llawli.AdvBr.PJeOffice.desktop
+        /app/share/applications/io.github.llawli.AdvBr.PJeOffice.desktop
+    sources:
+      - type: file
+        url: https://github.com/pedrohqb/pje-office-debian/releases/download/2.5.16u-3/pje-office_2.5.16u-3_amd64.deb
+        sha256: d91510730355ebb82cfc7a810a37840392fb25947422ce29ddf6f63a56775cc7
+        dest-filename: pje-office.deb
+      - type: file
+        path: src/pjeoffice-pro.sh
+      - type: file
+        path: io.github.llawli.AdvBr.PJeOffice.desktop
+
+  - name: adv-br
+    buildsystem: simple
+    build-commands:
+      # Ponto de montagem das extensões de driver: o diretório precisa existir
+      # no app, ou o Flatpak não tem onde montar a extensão.
+      - install -d /app/lib/pkcs11/drivers
+      - install -Dm644 comum-pkcs11.sh /app/share/adv-br/comum-pkcs11.sh
+      - install -Dm644 opensc.module /app/share/adv-br/pkcs11-modules/opensc.module
+      - install -Dm755 adv-br.sh /app/bin/adv-br
+      - install -Dm755 adv-br-pkcs11.sh /app/bin/adv-br-pkcs11
+      - install -Dm755 adv-br-modulos.sh /app/bin/adv-br-modulos
+      - install -Dm755 adv-br-assinadores.sh /app/bin/adv-br-assinadores
+      - install -Dm755 ferramentas.sh /app/bin/adv-br-ferramentas
+      - install -Dm755 adv-br-atalhos.sh /app/bin/adv-br-atalhos
+      - install -Dm755 adv-br-serie.sh /app/bin/adv-br-serie
+      - install -Dm755 assinador.sh /app/bin/adv-br-assinador
+      - ln -sf adv-br-assinador /app/bin/adv-br-webpki
+      - ln -sf adv-br-assinador /app/bin/adv-br-websigner
+      - ln -sf adv-br-assinador /app/bin/adv-br-certisign
+      - install -Dm644 io.github.llawli.AdvBr.metainfo.xml
+        /app/share/metainfo/io.github.llawli.AdvBr.metainfo.xml
+    sources:
+      - type: file
+        path: src/comum-pkcs11.sh
+      - type: file
+        path: src/adv-br.sh
+      - type: file
+        path: src/adv-br-pkcs11.sh
+      - type: file
+        path: src/adv-br-modulos.sh
+      - type: file
+        path: src/adv-br-assinadores.sh
+      - type: file
+        path: src/ferramentas.sh
+      - type: file
+        path: src/adv-br-atalhos.sh
+      - type: file
+        path: src/adv-br-serie.sh
+      - type: file
+        path: src/assinador.sh
+      - type: file
+        path: src/pkcs11-modules/opensc.module
+      - type: file
+        path: io.github.llawli.AdvBr.metainfo.xml
