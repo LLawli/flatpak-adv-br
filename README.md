@@ -13,6 +13,17 @@ O Papers, para assinar e validar PDF fora do navegador, também.
 É o [sora-adv-br](https://github.com/LLawli/sora-adv-br) com Flatpak no lugar do
 distrobox. A ideia é a mesma; o que muda é o veículo.
 
+**Instalar**, **desinstalar** e o resto:
+
+[O que vem no pacote](#o-que-vem-e-o-que-você-escolhe) ·
+[Requisitos](#requisitos) ·
+[Instalação](#instalação) ·
+[Depois de instalar](#depois-de-instalar) ·
+[Assinar PDF no Papers](#assinar-e-validar-pdf-no-papers) ·
+[Conferindo](#conferindo) ·
+[Desinstalar](#desinstalar) ·
+[Armadilhas](#onde-estão-as-armadilhas)
+
 ## Créditos
 
 A parte difícil deste problema não é o Flatpak: é descobrir **qual** versão de
@@ -171,6 +182,8 @@ cd flatpak-adv-br
 | os Flatpaks | o pacote base e as extensões que você pediu |
 | sua home | os arquivos de configuração que o `publicar.sh` escreve |
 
+Para remover, também com um comando, veja [Desinstalar](#desinstalar).
+
 **Nenhum artefato de construção.** Eles são feitos em
 `~/.cache/flatpak-adv-br/construcao` e apagados no fim. O cache do
 `flatpak-builder` de uma instalação completa passa de 1 GB. Quem clona à mão e roda `./instalar.sh`
@@ -300,9 +313,11 @@ Só uma parte, mantendo o resto funcionando:
 ```bash
 # só o PJeOffice, que é o que mais ocupa espaço
 curl -fsSL https://raw.githubusercontent.com/LLawli/flatpak-adv-br/main/packaging/desinstalar.sh | sh -s -- pjeoffice
+```
 
+```bash
 # mais de um de uma vez
-... | sh -s -- webpki certisign
+curl -fsSL https://raw.githubusercontent.com/LLawli/flatpak-adv-br/main/packaging/desinstalar.sh | sh -s -- webpki certisign
 ```
 
 Os nomes são os mesmos do `--with-`: `safesign`, `safenet`, `serproid`,
@@ -334,7 +349,7 @@ concedeu ao mesmo navegador, como os caminhos que o KeePassXC pede.
 Se você usa o `p11-kit-server.socket` para outra coisa (o sora, por exemplo),
 a desinstalação completa o desliga e diz como religar.
 
-## Onde estão as armadilhas## Onde estão as armadilhas
+## Onde estão as armadilhas
 
 [docs/ARMADILHAS.md](docs/ARMADILHAS.md) reúne o que foi medido: por que
 `fallback-x11` não serve, por que o Fedora não tem `p11-kit-client.so`, por que
