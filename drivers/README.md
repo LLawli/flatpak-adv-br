@@ -1,5 +1,11 @@
 # Drivers de token como extensões
 
+> As versões, as URLs e os remendos de cada driver aqui vêm do
+> [distrobox-adv-br](https://github.com/pedrohqb/distrobox-adv-br), de Pedro
+> HQB, que fez o trabalho de descobrir o que funciona com o quê. O que este
+> repositório acrescenta é o empacotamento.
+
+
 O pacote base traz só o que pode ser redistribuído: o OpenSC, que é software
 livre e reconhece boa parte dos cartões e tokens ICP-Brasil. Os drivers
 proprietários (SafeSign, SafeNet, SerproID) têm licenças que permitem ao

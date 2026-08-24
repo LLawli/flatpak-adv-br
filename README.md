@@ -13,6 +13,20 @@ O Papers, para assinar e validar PDF fora do navegador, também.
 É o [sora-adv-br](https://github.com/LLawli/sora-adv-br) com Flatpak no lugar do
 distrobox. A ideia é a mesma; o que muda é o veículo.
 
+## Créditos
+
+A parte difícil deste problema não é o Flatpak: é descobrir **qual** versão de
+qual driver funciona com qual token, quais bibliotecas antigas cada um exige, e
+que remendo faz cada um deles rodar numa distribuição atual. Esse trabalho é do
+Pedro HQB, no
+[distrobox-adv-br](https://github.com/pedrohqb/distrobox-adv-br) — as URLs, as
+versões e os contornos que estão nos manifestos de extensão deste repositório
+vêm de lá, através do [sora-adv-br](https://github.com/LLawli/sora-adv-br), que
+é um fork dele.
+
+Sem esse levantamento, nada aqui existiria: empacotar é fácil quando alguém já
+respondeu o que empacotar.
+
 ## A ideia
 
 Um contêiner resolve o problema dos drivers e cria outro: o navegador que
@@ -246,7 +260,9 @@ diferente.
 ## Licença
 
 **GPL-3.0-only**, em [LICENSE](LICENSE) — a versão 3 da GPL, sem a cláusula de
-"ou qualquer versão posterior".
+"ou qualquer versão posterior". A mesma do
+[distrobox-adv-br](https://github.com/pedrohqb/distrobox-adv-br), de onde vem o
+trabalho de garimpo dos drivers.
 
 Isso vale para o empacotamento, que é o que este repositório contém. **Não**
 vale para o que ele instala: os drivers de token e os assinadores pertencem aos
