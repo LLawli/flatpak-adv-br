@@ -218,17 +218,18 @@ CATALOGO += [
         nome="PJeOffice Pro",
         resumo="Assinador do PJe, do CNJ",
         detalhe=(
-            "Necessário para assinar no PJe. Traz junto a máquina virtual "
-            "Java que ele exige, baixada do Eclipse Adoptium."
+            "Necessário para assinar no PJe. Traz junto o cortador de vídeo "
+            "de audiência e a máquina virtual Java que ele exige, baixada da "
+            "Azul."
         ),
         tipo="aplicativo",
         url="",
         sha256="",
         arquivos={},
         fontes=(
-            # O programa do CNJ. O pacote inteiro tem 65 MB porque carrega um
-            # ffmpeg para cortar vídeo de audiência; daqui sai o assinador, que
-            # é do que se trata.
+            # O programa do CNJ, inteiro: o assinador, o cortador de vídeo de
+            # audiência e o ffmpeg que ele usa, um ELF estático que roda em
+            # qualquer distribuição.
             Fonte(
                 url=("https://github.com/pedrohqb/pje-office-debian/releases/"
                      "download/2.5.16u-3/pje-office_2.5.16u-3_amd64.deb"),
@@ -236,18 +237,29 @@ CATALOGO += [
                 arquivos={
                     "./usr/share/pjeoffice-pro/pjeoffice-pro.jar":
                         "share/pjeoffice-pro/pjeoffice-pro.jar",
+                    "./usr/share/pjeoffice-pro/cutplayer4jfx.jar":
+                        "share/pjeoffice-pro/cutplayer4jfx.jar",
+                    "./usr/share/pjeoffice-pro/ffmpeg.exe":
+                        "share/pjeoffice-pro/ffmpeg.exe",
                     "./usr/share/pjeoffice-pro/pjeoffice-update.properties":
                         "share/pjeoffice-pro/pjeoffice-update.properties",
                 },
             ),
-            # A máquina virtual, do Eclipse Adoptium: GPLv2 com a exceção de
-            # classpath, baixada do próprio Adoptium. O diretório raiz do
-            # pacote tem a versão no nome, daí o cortar=1.
+            # A máquina virtual: Azul Zulu 11 com JavaFX embutido, GPLv2 com a
+            # exceção de classpath, baixada da própria Azul e conferida contra
+            # o sha256 que ela publica.
+            #
+            # Com JavaFX, e não o JRE mais magro, por causa do cortador de
+            # vídeo de audiência: ele é JavaFX, e num JRE sem os módulos
+            # javafx.* a função simplesmente não abre. São 90 MB baixados em
+            # vez de 42, e 260 MB em disco em vez de 126. É também a mesma
+            # linha de JVM que o lançador oficial do CNJ usa (zulu-11-amd64),
+            # o que faz deste o ambiente em que o programa é testado por quem
+            # o escreve.
             Fonte(
-                url=("https://github.com/adoptium/temurin11-binaries/releases/"
-                     "download/jdk-11.0.32.1%2B1/"
-                     "OpenJDK11U-jre_x64_linux_hotspot_11.0.32.1_1.tar.gz"),
-                sha256="5eb6cf7f45c623272c64b8e7b4934a8051abb7ae73bfd28488a9856da3f4848a",
+                url=("https://cdn.azul.com/zulu/bin/"
+                     "zulu11.90.19-ca-fx-jre11.0.32-linux_x64.tar.gz"),
+                sha256="a4ea92eab3d0a906d283303747b6144ae23962a3203541920b7bf601a3605e07",
                 arquivos={"/": "jre"},
                 formato="tar",
                 cortar=1,
@@ -299,7 +311,9 @@ exec "$COMPONENTE/jre/bin/java" \
     -Xms20m \
     -Xmx2048m \
     -Dpjeoffice_home="$PJE/" \
+    -Dffmpeg_home="$PJE/" \
     -Dpjeoffice_looksandfeels=Metal \
+    -Dcutplayer4j_looksandfeels=Nimbus \
     -jar "$PJE/pjeoffice-pro.jar" \
     "$@"
 """,
@@ -311,8 +325,8 @@ exec "$COMPONENTE/jre/bin/java" \
             "--filesystem=xdg-documents",
             "abrir arquivos da pasta Documentos para assinar avulsos",
         ),
-        # O que se baixa: 65 MB do CNJ mais 42 MB da máquina virtual.
-        tamanho=107 * 1024 * 1024,
+        # O que se baixa: 65 MB do CNJ mais 90 MB da máquina virtual.
+        tamanho=155 * 1024 * 1024,
     ),
 ]
 

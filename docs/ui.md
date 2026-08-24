@@ -92,20 +92,28 @@ um comando colado num terminal. Para um aplicativo cujo propósito é tirar o
 terminal do caminho, isso é o problema, não a solução.
 
 O que resolveu foi tratar a JVM como mais uma fonte do componente: o assinador
-vem do pacote do CNJ, a máquina virtual vem do Eclipse Adoptium (GPLv2 com a
-exceção de classpath), e o componente soma 107 MB baixados e 152 MB em disco.
+vem do pacote do CNJ, a máquina virtual vem da Azul (Zulu 11, GPLv2 com a
+exceção de classpath), e o componente soma 155 MB baixados e 382 MB em disco.
 Só para quem instala.
 
-Duas consequências dessa escolha ficam registradas aqui:
+A JVM é a versão **com JavaFX**, que é maior, e a razão é o cortador de vídeo
+de audiência: ele é JavaFX, e num JRE sem os módulos `javafx.*` a função
+simplesmente não abre. São 90 MB baixados em vez de 42, e 260 MB em disco em
+vez de 126. É também a mesma linha de JVM que o lançador oficial do CNJ usa
+(`zulu-11-amd64`), o que faz deste o ambiente em que o programa é testado por
+quem o escreve.
 
-- **O atualizador automático do CNJ é desligado na instalação.** Ele baixaria
-  uma versão nova por cima desta, sem conferir nada, dentro dos dados do
-  aplicativo. Quem atualiza o que está aqui é o catálogo, com sha256. A
-  instalação falha alto se a linha `update.url=` sumir do pacote: silêncio ali
-  significaria o programa voltando a se atualizar sozinho sem ninguém saber.
-- **A função de cortar vídeo de audiência não vem.** Ela depende de JavaFX, que
-  o JRE do Adoptium não traz, e dos 101 MB de `cutplayer4jfx.jar` e `ffmpeg`
-  que o pacote do CNJ carrega. Assinar, que é o que se usa, não depende disso.
+Que a cadeia de vídeo funciona dentro do sandbox foi medido, e não deduzido: o
+`ffmpeg` que vem no pacote do CNJ é um ELF estático e roda; o toolkit JavaFX
+inicia; e `javafx.media` abre um mp4 gerado por esse mesmo ffmpeg, informando
+duração e dimensões corretas.
+
+Uma consequência da escolha fica registrada aqui: **o atualizador automático do
+CNJ é desligado na instalação.** Ele baixaria uma versão nova por cima desta,
+sem conferir nada, dentro dos dados do aplicativo. Quem atualiza o que está
+aqui é o catálogo, com sha256. A instalação falha alto se a linha `update.url=`
+sumir do pacote: silêncio ali significaria o programa voltando a se atualizar
+sozinho sem ninguém saber.
 
 ### Permissão nenhuma entra por padrão
 
@@ -127,6 +135,19 @@ O mesmo vale ao contrário: este aplicativo não pede
 `--talk-name=org.freedesktop.Flatpak`, que seria poder rodar qualquer comando
 fora da caixa. É o que permitiria instalar coisas sozinho, e é caro demais
 para o que compra.
+
+### O que ainda pede terminal, e o que não pede mais
+
+Instalar qualquer componente, inclusive o PJeOffice, é um clique. O que sobra
+são as permissões de OUTROS programas, que este aplicativo não pode conceder:
+
+- `flatpak override` num navegador em Flatpak: dá para fazer sem terminal, pelo
+  Flatseal ou pela aba de permissões do gerenciador de aplicativos. O diálogo
+  diz isso.
+- `systemctl --user enable --now p11-kit-server.socket`: não tem equivalente
+  gráfico. É um serviço do sistema de quem usa, e o diálogo diz que essa linha
+  é a única que exige terminal, em vez de deixar a pessoa procurar num lugar
+  onde ela não está.
 
 ## O que ainda não existe
 

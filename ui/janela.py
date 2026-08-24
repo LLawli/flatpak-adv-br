@@ -249,8 +249,25 @@ class Janela(Adw.ApplicationWindow):
             corpo.append("   •  %s" % para_que)
         corpo += ["", "Cole isto num terminal:", ""]
         corpo += [comando for _, comando in pedidos]
-        corpo += ["", "Se você já rodou isto antes, pode fechar: as permissões "
-                  "continuam valendo. Depois, feche e reabra os navegadores."]
+
+        # Nem todo mundo abre terminal, e as permissões de um Flatpak têm
+        # editor gráfico: o Flatseal, e a aba de permissões do próprio
+        # gerenciador de aplicativos. Só a linha do systemctl não tem
+        # equivalente, e é honesto dizer qual é qual em vez de mandar a pessoa
+        # procurar tudo num lugar onde metade não está.
+        if any(c.startswith("flatpak override") for _, c in pedidos):
+            corpo += ["", "Sem terminal, dá para fazer as linhas de permissão "
+                      "pelo Flatseal, ou pela aba de permissões do seu "
+                      "gerenciador de aplicativos (Ajustes, no GNOME "
+                      "Aplicativos; Permissões, no Discover). Procure o "
+                      "navegador na lista e ligue o que está acima."]
+        if any(c.startswith("systemctl") for _, c in pedidos):
+            corpo += ["", "A linha do systemctl não tem como ser feita fora do "
+                      "terminal. Ela liga um serviço do seu sistema, que é o "
+                      "que leva o token para dentro do navegador."]
+
+        corpo += ["", "Se você já fez isto antes, pode fechar: continua "
+                  "valendo. Depois, feche e reabra os navegadores."]
 
         tudo = "\n".join(comando for _, comando in pedidos)
         dialogo = Adw.MessageDialog(
