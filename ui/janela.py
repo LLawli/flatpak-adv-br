@@ -235,8 +235,44 @@ class Janela(Adw.ApplicationWindow):
             self._avisar("Publiquei o que deu",
                          "\n".join(resultado["erros"]))
             return
+
+        pedidos = permissoes.comandos_de_navegador(
+            resultado["sandbox_client"], resultado["sandbox_assinador"])
+        if pedidos:
+            self._pedir_permissao_de_navegador(pedidos)
+            return
+
         self.toasts.add_toast(Adw.Toast(
             title="Publicado. Feche e reabra os navegadores."))
+
+    def _pedir_permissao_de_navegador(self, pedidos):
+        """O que falta do lado do navegador em Flatpak, que só ele pode dar.
+
+        Sem isto a publicação parece ter dado certo e nada funciona: o
+        navegador em sandbox não lê módulo PKCS#11 de usuário e não pode
+        executar o assinador. Era preciso ler o repositório do projeto para
+        descobrir quais permissões faltavam, o que é pedir demais de quem só
+        quer assinar uma petição.
+        """
+        corpo = ["Publiquei tudo. Os navegadores que rodam em Flatpak "
+                 "precisam de uma permissão a mais, que só você pode dar:", ""]
+        for para_que, _ in pedidos:
+            corpo.append("   •  %s" % para_que)
+        corpo += ["", "Cole isto num terminal:", ""]
+        corpo += [comando for _, comando in pedidos]
+        corpo += ["", "Se você já rodou isto antes, pode fechar: as permissões "
+                  "continuam valendo. Depois, feche e reabra os navegadores."]
+
+        tudo = "\n".join(comando for _, comando in pedidos)
+        dialogo = Adw.MessageDialog(
+            transient_for=self,
+            heading="Falta permissão nos navegadores",
+            body="\n".join(corpo))
+        dialogo.add_response("fechar", "Fechar")
+        dialogo.add_response("copiar", "Copiar comandos")
+        dialogo.set_response_appearance("copiar", Adw.ResponseAppearance.SUGGESTED)
+        dialogo.connect("response", self._respondeu_comando, tudo)
+        dialogo.present()
 
     def _pedir_permissao(self, pendencias):
         """O diálogo que aparece quando o sandbox não alcança o que precisa.

@@ -66,13 +66,24 @@ def _raizes_de_banco():
     return raizes
 
 
+def _id_do_flatpak(caminho):
+    """O id do aplicativo a partir de um caminho dentro de ~/.var/app."""
+    resto = caminho[len(os.path.join(os.path.expanduser("~"), ".var", "app")) + 1:]
+    return resto.split(os.sep)[0]
+
+
 def _e_de_flatpak(banco):
     return os.path.join(os.path.expanduser("~"), ".var", "app") in banco
 
 
 def publicar():
     """Escreve o que os navegadores precisam. Devolve o que foi feito."""
-    feito = {"modulos": [], "bancos": [], "erros": []}
+    # sandbox_*: ids dos navegadores em Flatpak alcançados, separados pelo que
+    # cada caso exige do lado deles. Ver permissoes.comandos_de_navegador: o
+    # aplicativo não pode conceder essas permissões, e sem elas o navegador em
+    # sandbox não enxerga nada do que foi publicado aqui.
+    feito = {"modulos": [], "bancos": [], "erros": [],
+             "sandbox_client": set(), "sandbox_assinador": set()}
 
     destino = modulos_do_host()
     try:
@@ -125,6 +136,10 @@ def publicar():
                 # dentro, e lá o caminho que existe é o do client.so do runtime.
                 mudou = nssdb.registrar(banco, nssdb.NOME_SANDBOX,
                                         nssdb.CLIENT_NO_SANDBOX)
+                # Entra na lista mesmo quando nada mudou: a permissão continua
+                # sendo necessária, e "já estava registrado" é justamente o
+                # caso de quem publicou antes e nunca soube que faltava algo.
+                feito["sandbox_client"].add(_id_do_flatpak(banco))
             else:
                 # Um banco no home real é lido dos dois lados: pelo programa do
                 # host, que carrega o proxy, e por um Flatpak com acesso ao
@@ -144,7 +159,12 @@ def publicar():
 
 
 def despublicar():
-    feito = {"modulos": [], "bancos": [], "erros": []}
+    # sandbox_*: ids dos navegadores em Flatpak alcançados, separados pelo que
+    # cada caso exige do lado deles. Ver permissoes.comandos_de_navegador: o
+    # aplicativo não pode conceder essas permissões, e sem elas o navegador em
+    # sandbox não enxerga nada do que foi publicado aqui.
+    feito = {"modulos": [], "bancos": [], "erros": [],
+             "sandbox_client": set(), "sandbox_assinador": set()}
     for arquivo in glob.glob(os.path.join(modulos_do_host(), PREFIXO + "*.module")):
         try:
             os.unlink(arquivo)
@@ -270,6 +290,8 @@ def _publicar_assinadores(feito):
                         continue
 
                     manifesto["path"] = _atalho(componente.chave, casa, id_flatpak)
+                    if id_flatpak:
+                        feito["sandbox_assinador"].add(id_flatpak)
                     os.makedirs(destino, exist_ok=True)
                     alvo = os.path.join(destino, nome + ".json")
                     with open(alvo, "w", encoding="utf-8") as f:

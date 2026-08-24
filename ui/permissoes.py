@@ -114,6 +114,40 @@ def comando_opcional(argumento):
     return "flatpak override --user %s %s" % (argumento, APP_ID)
 
 
+def comandos_de_navegador(com_client, com_assinador):
+    """Os comandos que o navegador em Flatpak precisa, e o que cada um resolve.
+
+    Este aplicativo não pode executá-los: são permissões DE OUTRO aplicativo, e
+    concedê-las exigiria falar com o Flatpak do host, que é acesso irrestrito à
+    máquina. Também não deveria decidi-las sozinho, porque cada uma afrouxa o
+    confinamento de um navegador, que é onde a pessoa faz tudo o mais.
+
+    São dois problemas distintos, e por isso dois comandos:
+
+      autenticação   um sandbox nunca lê módulo PKCS#11 de usuário: o Flatpak
+                     escreve "user-config: none" na configuração do p11-kit de
+                     todo aplicativo. A porta que sobra é o p11-kit-client.so
+                     do runtime, que fala com um socket do host, e o socket
+                     precisa estar ligado e visível de dentro.
+      assinatura     o atalho que o navegador executa entra neste aplicativo
+                     por flatpak-spawn, e falar com o portal do Flatpak é
+                     permissão que ele não tem por padrão.
+    """
+    linhas = []
+    if com_client:
+        linhas.append(("o socket do p11-kit, que leva o token para dentro do "
+                       "navegador", "systemctl --user enable --now p11-kit-server.socket"))
+        for app in sorted(com_client):
+            linhas.append((
+                "%s: enxergar esse socket" % app,
+                "flatpak override --user --filesystem=xdg-run/p11-kit/pkcs11 %s" % app))
+    for app in sorted(com_assinador):
+        linhas.append((
+            "%s: chamar o assinador" % app,
+            "flatpak override --user --talk-name=org.freedesktop.Flatpak %s" % app))
+    return linhas
+
+
 def comando(pendencias):
     """O comando que devolve as permissões que faltam, pronto para colar."""
     argumentos = " ".join(argumento for _, _, argumento in pendencias)
