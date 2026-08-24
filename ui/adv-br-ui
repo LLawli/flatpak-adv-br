@@ -1,38 +1,18 @@
-#!/usr/bin/env python3
-"""Ponto de entrada do aplicativo."""
-import os
-import sys
+#!/bin/sh
+# O comando do aplicativo: prepara o ambiente e abre a janela.
+#
+# Existe como shell, e não como o próprio Python, por causa da ordem. A janela
+# lista os tokens, e para isso carrega os mesmos drivers que a ponte PKCS#11
+# carrega, com as mesmas armadilhas: a libgcc_s que o SerproID não declara só
+# adianta no LD_PRELOAD de quem ainda não abriu biblioteca nenhuma, e o
+# diretório em que ele faz readdir precisa existir antes.
+#
+# Fazer isso de dentro do Python custava um os.execv para reexecutar o
+# interpretador com o ambiente novo, e ainda assim deixava de fora o resto do
+# preparo. Aqui é uma linha, é a mesma dos outros lançadores, e o que valer
+# para eles vale para a janela.
+set -eu
 
-sys.path.insert(0, "/app/share/adv-br-ui")
+. /app/share/adv-br-ui/preparar-drivers.sh
 
-# O driver do SerproID usa símbolos da libgcc_s e não a declara: quem o abre
-# com dlopen falha com "undefined symbol", e quem abre aqui é esta janela, ao
-# listar os tokens. Carregá-la antes de tudo resolve, e é inofensivo, porque
-# quase todo processo já a carrega. Precisa acontecer antes de o Python abrir
-# qualquer biblioteca, daí o reexec.
-if "libgcc_s.so.1" not in os.environ.get("LD_PRELOAD", ""):
-    preload = os.environ.get("LD_PRELOAD", "")
-    os.environ["LD_PRELOAD"] = "libgcc_s.so.1" + (":" + preload if preload else "")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
-
-import gi  # noqa: E402
-
-gi.require_version("Adw", "1")
-from gi.repository import Adw  # noqa: E402
-
-import janela  # noqa: E402
-
-
-class Aplicacao(Adw.Application):
-    def __init__(self):
-        super().__init__(application_id="dev.lukakuuhaku.AdvBr")
-
-    def do_activate(self):
-        ativa = self.get_active_window()
-        if not ativa:
-            ativa = janela.Janela(self)
-        ativa.present()
-
-
-if __name__ == "__main__":
-    sys.exit(Aplicacao().run(sys.argv))
+exec python3 /app/share/adv-br-ui/aplicativo.py "$@"
