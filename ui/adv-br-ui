@@ -13,6 +13,13 @@
 # para eles vale para a janela.
 set -eu
 
+# O stderr deste processo vai para o log do módulo. Precisa vir antes de tudo:
+# o que for escrito antes disto se perde onde sempre se perdeu, dentro do
+# processo que nos iniciou. Ver ui/registro.sh.
+ADV_BR_MODULO=janela
+# shellcheck source=ui/registro.sh
+. /app/share/adv-br-ui/registro.sh
+
 . /app/share/adv-br-ui/preparar-drivers.sh
 
 exec python3 /app/share/adv-br-ui/aplicativo.py "$@"

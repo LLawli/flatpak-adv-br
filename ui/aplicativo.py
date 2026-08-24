@@ -17,6 +17,10 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw  # noqa: E402
 
 import janela  # noqa: E402
+import registro  # noqa: E402
+
+
+registro.instalar_captura()
 
 
 class Aplicacao(Adw.Application):

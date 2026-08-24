@@ -12,6 +12,13 @@
 # protocolo, e o sintoma no navegador é "o assinador não respondeu".
 set -eu
 
+# O nome do módulo sai do primeiro argumento, antes de validá-lo: assim até
+# uma chamada errada fica registrada, que é o caso em que mais se precisa saber
+# o que houve. O registro.sh limpa o que vier daí.
+ADV_BR_MODULO="assinador-${1:-sem-chave}"
+# shellcheck source=ui/registro.sh
+. /app/share/adv-br-ui/registro.sh
+
 CHAVE=${1:-}
 if [ -z "$CHAVE" ]; then
     echo "uso: adv-br-assinador <chave> [argumentos do navegador]" >&2

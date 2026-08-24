@@ -130,7 +130,13 @@ def _escrever_lancador(componente, destino):
     os.makedirs(os.path.dirname(caminho), exist_ok=True)
     with open(caminho, "w", encoding="utf-8") as arquivo:
         arquivo.write("#!/bin/sh\nset -eu\n"
+                      # O aplicativo do componente é lançado pela janela e
+                      # herdaria o stderr dela, misturando o log do SerproID
+                      # com o do aplicativo. Um arquivo por componente.
+                      'ADV_BR_MODULO=app-%s\n'
+                      ". /app/share/adv-br-ui/registro.sh\n"
                       'COMPONENTE=$(cd -- "$(dirname -- "$0")/.." && pwd)\n'
+                      % componente.chave
                       + componente.lancador)
     os.chmod(caminho, 0o755)
 

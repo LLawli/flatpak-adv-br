@@ -174,13 +174,14 @@ modules:
     build-commands:
       - install -Dm644 -t /app/share/adv-br-ui ui/deb.py ui/catalogo.py
         ui/instalador.py ui/pkcs11.py ui/nssdb.py ui/permissoes.py
-        ui/publicador.py ui/janela.py ui/aplicativo.py ui/serie.py
+        ui/publicador.py ui/janela.py ui/aplicativo.py ui/serie.py ui/registro.py
       - install -Dm755 ui/adv-br-ui /app/bin/adv-br-ui
       - install -Dm755 ui/adv-br-pkcs11 /app/bin/adv-br-pkcs11
       - install -Dm755 ui/adv-br-assinador /app/bin/adv-br-assinador
       - install -Dm755 ui/adv-br-serie /app/bin/adv-br-serie
       - install -Dm644 ui/preparar-drivers.sh
         /app/share/adv-br-ui/preparar-drivers.sh
+      - install -Dm644 ui/registro.sh /app/share/adv-br-ui/registro.sh
       # O intermediário que a cadeia da Softplan não serve; ver o
       # catálogo. Um certificado público, que completa a verificação em
       # vez de desligá-la.
