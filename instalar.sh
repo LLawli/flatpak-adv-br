@@ -35,21 +35,12 @@ CONCEDER=0
 REFAZER=0
 LIMPAR=0
 
-# opção            → manifesto da extensão
-#
-# Tudo o que é opcional está aqui, e a lista é a única coisa que precisa mudar
-# quando entrar um assinador ou um aplicativo novo.
-declare -A EXTENSOES=(
-    [safesign]=drivers/io.github.llawli.AdvBr.Driver.SafeSign.yml
-    [safenet]=drivers/io.github.llawli.AdvBr.Driver.SafeNet.yml
-    [serproid]=drivers/io.github.llawli.AdvBr.Driver.SerproID.yml
-    [webpki]=assinadores/io.github.llawli.AdvBr.Assinador.WebPKI.yml
-    [websigner]=assinadores/io.github.llawli.AdvBr.Assinador.WebSigner.yml
-    [certisign]=assinadores/io.github.llawli.AdvBr.Assinador.Certisign.yml
-    [pjeoffice]=apps/io.github.llawli.AdvBr.App.PJeOffice.yml
-)
-DRIVERS_TODOS=(safesign safenet serproid)
-ASSINADORES_TODOS=(webpki websigner certisign)
+# A tabela do que é opcional mora em host/extensoes.sh, porque o
+# desinstalar.sh precisa da mesma lista.
+# Lido pelo host/extensoes.sh, que resolve os manifestos a partir daqui.
+# shellcheck disable=SC2034
+AQUI_RAIZ=$RAIZ
+. "$RAIZ/host/extensoes.sh"
 
 ajuda() {
     /usr/bin/cat <<'FIM'
@@ -353,7 +344,7 @@ if [ ${#PEDIDOS[@]} -gt 0 ]; then
 
         # O id sai do próprio manifesto: manter uma segunda tabela de "opção →
         # id" só criaria um lugar a mais para desencontrar.
-        extensao=$(sed -n 's/^id: *//p' "$manifesto" | head -1)
+        extensao=$(id_da_extensao "$alvo")
 
         if [ "$REFAZER" = 0 ] && flatpak info --user "$extensao" >/dev/null 2>&1; then
             ok "$alvo já instalado (--refazer reconstrói)"

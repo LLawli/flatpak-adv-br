@@ -15,7 +15,7 @@ ajuda:
 	@echo 'make tudo                instala o pacote e todas as extensões'
 	@echo 'make serproid            abre o aplicativo SerproID para associar o certificado'
 	@echo 'make pjeoffice           abre o PJeOffice Pro'
-	@echo 'make desinstalar         remove o Flatpak e desfaz a publicação'
+	@echo 'make desinstalar         remove tudo: pacote, extensões e publicação'
 
 instalar:
 	./instalar.sh
@@ -37,8 +37,8 @@ testar:
 
 lint:
 	shellcheck -S warning src/*.sh host/*.sh tests/*.sh drivers/*.sh \
-	    assinadores/*.sh apps/*.sh packaging/*.sh instalar.sh diagnostico.sh \
-	    bin/release
+	    assinadores/*.sh apps/*.sh packaging/*.sh instalar.sh desinstalar.sh \
+	    diagnostico.sh bin/release
 
 serproid:
 	flatpak run --command=adv-br-ferramentas $(APP_ID) serproid
@@ -46,11 +46,8 @@ serproid:
 pjeoffice:
 	flatpak run --command=adv-br-ferramentas $(APP_ID) pjeoffice-pro
 
-# Remove o pacote e, com ele, todas as extensões: elas são declaradas com
-# autodelete, então saem junto.
 desinstalar:
-	./host/publicar.sh --remover
-	-flatpak uninstall --user -y $(APP_ID)
+	./desinstalar.sh
 
 # Os artefatos vivem em ~/.cache/flatpak-adv-br desde a 0.1.0; os caminhos
 # antigos ficam aqui para limpar quem construiu antes disso.

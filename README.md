@@ -286,17 +286,55 @@ certificados do Papers na hora de assinar.
 ./tests/testar.sh             # testes do repositório (não precisam de token)
 ```
 
-## Desfazer
+## Desinstalar
+
+Tudo, incluindo o que foi publicado nos navegadores e as permissões que você
+concedeu a eles:
 
 ```bash
-./host/publicar.sh --remover   # tira os módulos, manifestos e atalhos
-make desinstalar               # e remove o Flatpak
+curl -fsSL https://raw.githubusercontent.com/LLawli/flatpak-adv-br/main/packaging/desinstalar.sh | sh
 ```
 
-As permissões de Flatpak não são revogadas junto: quem não as concedeu não as
-tira. O `--remover` imprime os comandos.
+Só uma parte, mantendo o resto funcionando:
 
-## Onde estão as armadilhas
+```bash
+# só o PJeOffice, que é o que mais ocupa espaço
+curl -fsSL https://raw.githubusercontent.com/LLawli/flatpak-adv-br/main/packaging/desinstalar.sh | sh -s -- pjeoffice
+
+# mais de um de uma vez
+... | sh -s -- webpki certisign
+```
+
+Os nomes são os mesmos do `--with-`: `safesign`, `safenet`, `serproid`,
+`webpki`, `websigner`, `certisign`, `pjeoffice`.
+
+Com o repositório clonado, o equivalente é:
+
+```bash
+./desinstalar.sh              # tudo
+./desinstalar.sh pjeoffice    # só essa extensão, e republica o que ficou
+./desinstalar.sh --ajuda
+```
+
+Remover uma extensão **republica o que sobrou**, o que apaga o `.module` do
+driver que saiu. Sem isso, o p11-kit tentaria abrir um caminho que já não
+existe a cada abertura de navegador.
+
+### O que a desinstalação não apaga
+
+`~/.pjeoffice-pro` e `~/.config/serproid` são seus: foram feitos por você
+usando os programas, e continuam lá para quando reinstalar. O código em
+`~/.local/share/flatpak-adv-br` sai na desinstalação completa por curl; com o
+repositório clonado, o script diz o comando e deixa a escolha com você.
+
+Só as permissões que este projeto concedeu são revogadas, uma chave de cada
+vez. Um `flatpak override --reset` zeraria também o que outro programa
+concedeu ao mesmo navegador, como os caminhos que o KeePassXC pede.
+
+Se você usa o `p11-kit-server.socket` para outra coisa (o sora, por exemplo),
+a desinstalação completa o desliga e diz como religar.
+
+## Onde estão as armadilhas## Onde estão as armadilhas
 
 [docs/ARMADILHAS.md](docs/ARMADILHAS.md) reúne o que foi medido: por que
 `fallback-x11` não serve, por que o Fedora não tem `p11-kit-client.so`, por que
