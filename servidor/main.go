@@ -246,6 +246,13 @@ func main() {
 	if cfg.Token == "" {
 		log.Println("aviso: sem token do GitHub; todo relato vai para a fila")
 	}
+	if err := (Fila{Diretorio: cfg.Fila}).Conferir(); err != nil {
+		// Não é motivo para não subir: servir o repositório continua
+		// funcionando, e é metade do serviço. Mas precisa ser dito alto.
+		log.Printf("AVISO: não consigo escrever em %s (%v). "+
+			"Relatos serão PERDIDOS se o GitHub recusar. "+
+			"Monte um volume gravável ali.", cfg.Fila, err)
+	}
 
 	s := &Servico{
 		cfg:       cfg,

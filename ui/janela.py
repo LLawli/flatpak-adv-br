@@ -17,7 +17,11 @@ import catalogo  # noqa: E402
 import instalador  # noqa: E402
 import permissoes  # noqa: E402
 import pkcs11  # noqa: E402
+import diagnostico  # noqa: E402
 import publicador  # noqa: E402
+import registro  # noqa: E402
+import relator  # noqa: E402
+import sanitizar  # noqa: E402
 import serie  # noqa: E402
 
 
@@ -125,6 +129,27 @@ class Janela(Adw.ApplicationWindow):
             self.linhas[componente.chave] = self._linha(componente)
             self.grupo_aplicativos.add(self.linhas[componente.chave]["linha"])
         pagina.add(self.grupo_aplicativos)
+
+        # Por último, porque é o que se procura quando o resto não resolveu.
+        self.grupo_relato = Adw.PreferencesGroup(
+            title="Algo não funcionou?",
+            description="Manda o que está acontecendo para quem cuida do "
+                        "aplicativo, junto de um resumo técnico deste "
+                        "computador. Você vê tudo antes de enviar.")
+        linha_relato = Adw.ActionRow(title="Relatar um problema")
+        botao_relato = Gtk.Button(label="Relatar", valign=Gtk.Align.CENTER)
+        botao_relato.connect("clicked", self._clicou_relatar)
+        linha_relato.add_suffix(botao_relato)
+        self.grupo_relato.add(linha_relato)
+        pagina.add(self.grupo_relato)
+
+        # Estado do diálogo de relato, quando houver um aberto.
+        self.relato_dialogo = None
+        self.relato_desafio = None
+        self.relato_nonce = None
+        self.relato_cancelado = False
+        self.relato_texto = None
+        self.relato_diagnostico = None
 
         rolagem = Gtk.ScrolledWindow(vexpand=True)
         rolagem.set_child(pagina)
@@ -446,6 +471,159 @@ class Janela(Adw.ApplicationWindow):
         dialogo = Adw.MessageDialog(transient_for=self, heading=titulo, body=corpo)
         dialogo.add_response("fechar", "Fechar")
         dialogo.present()
+
+    # ------------------------------------------------------------------
+    def _clicou_relatar(self, _botao):
+        """O diálogo de relatar um problema.
+
+        Três coisas acontecem ao abrir, e duas delas fora da thread da
+        interface: a prova de trabalho começa a ser resolvida (leva alguns
+        segundos e ninguém precisa saber disso) e o diagnóstico é coletado. A
+        terceira é a pessoa escrever o que aconteceu, que é o tempo que as
+        outras duas têm para terminar.
+        """
+        self.relato_desafio = None
+        self.relato_nonce = None
+        self.relato_cancelado = False
+
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        caixa.set_size_request(620, -1)
+
+        self.relato_texto = Gtk.TextView(
+            wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=8, bottom_margin=8,
+            left_margin=8, right_margin=8, accepts_tab=False)
+        self.relato_texto.get_buffer().set_text("")
+        rolagem = Gtk.ScrolledWindow(
+            hscrollbar_policy=Gtk.PolicyType.NEVER, min_content_height=110,
+            max_content_height=160, propagate_natural_height=True)
+        rolagem.set_child(self.relato_texto)
+        moldura = Gtk.Frame()
+        moldura.add_css_class("view")
+        moldura.set_child(rolagem)
+        caixa.append(moldura)
+
+        # A prévia mostra o texto EXATO que vai ser enviado, e é editável: quem
+        # quiser tirar mais alguma coisa, tira. Fica recolhida porque é longa,
+        # e aberta com um clique porque esconder o que se envia seria pedir
+        # confiança em vez de dá-la.
+        self.relato_diagnostico = Gtk.TextView(
+            monospace=True, wrap_mode=Gtk.WrapMode.NONE, top_margin=8,
+            bottom_margin=8, left_margin=8, right_margin=8)
+        self.relato_diagnostico.get_buffer().set_text("levantando o que enviar…")
+        dentro = Gtk.ScrolledWindow(min_content_height=180, max_content_height=260,
+                                    propagate_natural_height=True)
+        dentro.set_child(self.relato_diagnostico)
+        molde = Gtk.Frame()
+        molde.add_css_class("view")
+        molde.set_child(dentro)
+
+        expansor = Adw.ExpanderRow(
+            title="O que será enviado",
+            subtitle="Já sem o seu nome, CPF, e-mail e caminhos pessoais")
+        linha_previa = Adw.ActionRow(activatable=False)
+        linha_previa.set_child(molde)
+        expansor.add_row(linha_previa)
+        grupo = Adw.PreferencesGroup()
+        grupo.add(expansor)
+        caixa.append(grupo)
+
+        dialogo = Adw.MessageDialog(
+            transient_for=self,
+            heading="Relatar um problema",
+            body="Conte o que aconteceu, com as suas palavras. O que você "
+                 "escrever vai junto com um resumo do estado deste computador.")
+        dialogo.set_extra_child(caixa)
+        dialogo.add_response("fechar", "Cancelar")
+        dialogo.add_response("enviar", "Preparando…")
+        dialogo.set_response_enabled("enviar", False)
+        dialogo.set_response_appearance("enviar", Adw.ResponseAppearance.SUGGESTED)
+        dialogo.connect("response", self._respondeu_relato)
+        self.relato_dialogo = dialogo
+        dialogo.present()
+
+        threading.Thread(target=self._preparar_relato, daemon=True).start()
+
+    def _preparar_relato(self):
+        """Fora da thread da interface: o diagnóstico e a prova de trabalho."""
+        try:
+            texto = diagnostico.coletar()
+        except Exception as erro:  # noqa: BLE001
+            registro.falha("não consegui coletar o diagnóstico", erro)
+            texto = "(não consegui levantar o diagnóstico: %s)" % erro
+        GLib.idle_add(self._mostrar_diagnostico, texto)
+
+        try:
+            desafio = relator.pedir_desafio()
+        except Exception as erro:  # noqa: BLE001
+            registro.falha("não consegui pedir o desafio ao servidor", erro)
+            GLib.idle_add(self._relato_sem_servidor)
+            return
+
+        nonce = relator.resolver(desafio, parar=lambda: self.relato_cancelado)
+        if nonce is None:
+            return
+        GLib.idle_add(self._prova_pronta, desafio, nonce)
+
+    def _mostrar_diagnostico(self, texto):
+        self.relato_diagnostico.get_buffer().set_text(texto)
+        return False
+
+    def _prova_pronta(self, desafio, nonce):
+        self.relato_desafio = desafio
+        self.relato_nonce = nonce
+        if self.relato_dialogo is not None:
+            self.relato_dialogo.set_response_label("enviar", "Enviar")
+            self.relato_dialogo.set_response_enabled("enviar", True)
+        return False
+
+    def _relato_sem_servidor(self):
+        if self.relato_dialogo is not None:
+            self.relato_dialogo.set_response_label("enviar", "Servidor fora do ar")
+        return False
+
+    def _respondeu_relato(self, dialogo, resposta):
+        self.relato_dialogo = None
+        if resposta != "enviar":
+            # Interrompe a prova de trabalho: sem isso, fechar o diálogo
+            # deixaria um núcleo ocupado até ela terminar.
+            self.relato_cancelado = True
+            return
+
+        buffer_mensagem = self.relato_texto.get_buffer()
+        mensagem = buffer_mensagem.get_text(
+            buffer_mensagem.get_start_iter(), buffer_mensagem.get_end_iter(), False)
+        buffer_diagnostico = self.relato_diagnostico.get_buffer()
+        texto = buffer_diagnostico.get_text(
+            buffer_diagnostico.get_start_iter(),
+            buffer_diagnostico.get_end_iter(), False)
+
+        # O título sai da primeira linha do que a pessoa escreveu: pedir um
+        # título à parte é pedir que ela resuma antes de contar.
+        titulo = (mensagem.strip().splitlines() or ["Relato sem descrição"])[0]
+
+        threading.Thread(
+            target=self._enviar_relato,
+            args=(titulo, mensagem, sanitizar.sanitizar(texto)),
+            daemon=True).start()
+        self.toasts.add_toast(Adw.Toast(title="Enviando o relato…"))
+
+    def _enviar_relato(self, titulo, mensagem, texto):
+        situacao, detalhe = relator.enviar(
+            self.relato_desafio, self.relato_nonce,
+            sanitizar.sanitizar(titulo), sanitizar.sanitizar(mensagem), texto,
+            diagnostico.versao())
+        GLib.idle_add(self._relato_enviado, situacao, detalhe)
+
+    def _relato_enviado(self, situacao, detalhe):
+        if situacao == "publicado":
+            self.toasts.add_toast(Adw.Toast(title="Relato enviado. Obrigado."))
+        elif situacao == "guardado":
+            self.toasts.add_toast(Adw.Toast(
+                title="Relato recebido. Será registrado assim que der."))
+        else:
+            self._avisar("Não consegui enviar o relato", detalhe or
+                         "o servidor não aceitou o envio.")
+        return False
 
     # ------------------------------------------------------------------
     def _oferecer_permissao(self, componente):

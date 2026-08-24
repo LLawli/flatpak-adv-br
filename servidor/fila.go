@@ -21,6 +21,24 @@ type Fila struct {
 	Diretorio string
 }
 
+// Conferir diz se dá para escrever na fila. Serve para reclamar na subida, e
+// não no primeiro relato perdido: com --read-only e sem volume montado, a fila
+// não existe, e a única hora em que isso aparecia era quando alguém já tinha
+// escrito um relato e o GitHub estava fora do ar. Tarde demais.
+func (f Fila) Conferir() error {
+	if f.Diretorio == "" {
+		return nil
+	}
+	if err := os.MkdirAll(f.Diretorio, 0o700); err != nil {
+		return err
+	}
+	teste := filepath.Join(f.Diretorio, ".escrita")
+	if err := os.WriteFile(teste, []byte("ok"), 0o600); err != nil {
+		return err
+	}
+	return os.Remove(teste)
+}
+
 func (f Fila) Guardar(issue Issue) error {
 	if f.Diretorio == "" {
 		return nil

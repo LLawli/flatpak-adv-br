@@ -45,6 +45,7 @@ jobs:
           python3 tests/prova-atributos.py
           python3 tests/prova-serie.py
           python3 tests/prova-registro.py
+          python3 tests/prova-sanitizacao.py
 
       - name: Manifestos
         run: |

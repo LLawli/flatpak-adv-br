@@ -64,13 +64,22 @@ podman run -d --name adv-br --restart=always \
     -e ADVBR_REPOSITORIO=/repo \
     -e ADVBR_TOKEN_GITHUB_FILE=/run/secrets/github \
     -v /srv/adv-br/repo:/repo:ro,Z \
-    -v /srv/adv-br/fila:/var/lib/adv-br/fila:Z \
+    -v /srv/adv-br/fila:/var/lib/adv-br/fila:Z,U \
     -v /srv/adv-br/token:/run/secrets/github:ro,Z \
     adv-br-servico:producao
 ```
 
 `--read-only` e `--cap-drop=ALL` valem: a imagem não tem shell nem gerenciador
 de pacotes, e o processo não precisa escrever em lugar nenhum além da fila.
+
+O `,U` no volume da fila não é enfeite. Com podman sem privilégio, o usuário
+10001 de dentro do container mapeia para um subuid do host, que não é dono do
+diretório: sem ele a fila não é gravável e todo relato que o GitHub recusar se
+perde. O serviço avisa disso na subida, em vez de deixar a descoberta para o
+primeiro relato perdido:
+
+    AVISO: não consigo escrever em /var/lib/adv-br/fila (read-only file system).
+    Relatos serão PERDIDOS se o GitHub recusar. Monte um volume gravável ali.
 
 ## nginx na frente
 

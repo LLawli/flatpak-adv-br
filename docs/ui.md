@@ -228,6 +228,35 @@ dizem qual deles foi. "Nenhum certificado encontrado" é o relato mais comum que
 se recebe, e separar "não há token espetado" de "a pilha PKCS#11 quebrou" é
 metade do diagnóstico.
 
+## Relatar um problema
+
+O botão fica no fim da página, onde se procura quando o resto não resolveu. O
+diálogo tem uma caixa para a pessoa contar o que houve e, abaixo, **o texto
+exato que será enviado**, editável. Não é uma promessa de que o dado será
+limpo: é o resultado já limpo, para conferir.
+
+O que vai junto: versão, distribuição do host, as duas séries do p11-kit,
+componentes instalados, o que está publicado, navegadores encontrados, tokens
+vistos e o fim de cada log. É o que o `diagnostico.sh` levanta, num irmão em
+Python que a janela consegue chamar.
+
+**A sanitização é a mesma nos dois lados**, e os casos vivem num arquivo só,
+`tests/casos-sanitizacao.json`, lido pelo teste do aplicativo e pelo teste do
+serviço em Go. Se divergirem, ou vaza dado pessoal ou o relato chega inútil, e
+nos dois casos ninguém percebe até ser tarde. O que some: rótulo de token
+ICP-Brasil (que é `NOME:CPF`), CPF, CNPJ, e-mail, caminho da pasta pessoal,
+serial e impressão digital de certificado. O que não pode sumir junto está no
+mesmo arquivo: código de erro, versão, nome de função.
+
+**A prova de trabalho é invisível.** O aplicativo pede o desafio ao abrir o
+diálogo e resolve numa thread enquanto a pessoa escreve; o botão de enviar
+nasce desabilitado, dizendo "Preparando…", e vira "Enviar" quando a conta
+termina. Fechar o diálogo interrompe o trabalho, senão um núcleo ficaria
+ocupado até o fim.
+
+O título da issue sai da primeira linha do que a pessoa escreveu. Pedir um
+título à parte é pedir que ela resuma antes de contar.
+
 ## O que ainda não existe
 
 - desinstalar componentes que deixaram de existir no catálogo;

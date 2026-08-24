@@ -235,6 +235,14 @@ if [ -f ui/publicador.py ]; then
     fi
 fi
 
+if [ -f ui/sanitizar.py ]; then
+    if python3 tests/prova-sanitizacao.py; then
+        ok "a sanitização de dado pessoal"
+    else
+        falha "a sanitização de dado pessoal"
+    fi
+fi
+
 if [ -f ui/registro.sh ]; then
     if python3 tests/prova-registro.py; then
         ok "os lançadores registram e não escrevem em stdout"
