@@ -14,7 +14,9 @@ from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 import catalogo  # noqa: E402
 import instalador  # noqa: E402
+import permissoes  # noqa: E402
 import pkcs11  # noqa: E402
+import publicador  # noqa: E402
 
 
 class Janela(Adw.ApplicationWindow):
@@ -38,7 +40,20 @@ class Janela(Adw.ApplicationWindow):
         pagina.add(self.grupo_tokens)
         self.linhas_token = []
 
-        # 2. O que ela pode fazer a respeito.
+        # 2. O que falta para o token chegar aos programas dela.
+        self.grupo_navegadores = Adw.PreferencesGroup(
+            title="Navegadores e aplicativos",
+            description=(
+                "Publicar faz o seu certificado aparecer no Firefox, no Chrome, "
+                "no Brave e no Papers que você já usa."))
+        self.linha_publicar = Adw.ActionRow(title="Publicar para os navegadores")
+        self.botao_publicar = Gtk.Button(valign=Gtk.Align.CENTER)
+        self.botao_publicar.connect("clicked", self._clicou_publicar)
+        self.linha_publicar.add_suffix(self.botao_publicar)
+        self.grupo_navegadores.add(self.linha_publicar)
+        pagina.add(self.grupo_navegadores)
+
+        # 3. O que ela pode instalar.
         self.grupo_componentes = Adw.PreferencesGroup(
             title="Drivers e assinadores",
             description=(
@@ -60,6 +75,7 @@ class Janela(Adw.ApplicationWindow):
         self.set_content(self.toasts)
 
         self.atualizar_componentes()
+        self.atualizar_publicacao()
         self.atualizar_tokens()
 
     # ------------------------------------------------------------------
@@ -114,10 +130,85 @@ class Janela(Adw.ApplicationWindow):
             self.linhas_token.append(linha)
 
     # ------------------------------------------------------------------
+    def atualizar_publicacao(self):
+        posto = publicador.publicado()
+        self.botao_publicar.set_label("Despublicar" if posto else "Publicar")
+        self.botao_publicar.set_css_classes(["destructive-action"] if posto
+                                            else ["suggested-action"])
+        self.linha_publicar.set_subtitle(
+            "Publicado. Feche e reabra os navegadores." if posto
+            else "Os navegadores ainda não enxergam o seu certificado.")
+
+    def _clicou_publicar(self, botao):
+        if publicador.publicado():
+            resultado = publicador.despublicar()
+            self.atualizar_publicacao()
+            self.toasts.add_toast(Adw.Toast(
+                title="Removido de %d lugar(es)" % len(resultado["modulos"])))
+            return
+
+        # A permissão é conferida na hora de usar, e não na abertura: ela pode
+        # mudar entre uma coisa e outra, e um aviso mostrado cedo demais vira
+        # ruído para quem nem ia publicar.
+        pendencias = permissoes.faltando()
+        if pendencias:
+            self._pedir_permissao(pendencias)
+            return
+
+        resultado = publicador.publicar()
+        self.atualizar_publicacao()
+
+        if resultado["erros"]:
+            self._avisar("Publiquei o que deu",
+                         "\n".join(resultado["erros"]))
+            return
+        self.toasts.add_toast(Adw.Toast(
+            title="Publicado. Feche e reabra os navegadores."))
+
+    def _pedir_permissao(self, pendencias):
+        """O diálogo que aparece quando o sandbox não alcança o que precisa.
+
+        Ele não tenta consertar sozinho: um aplicativo não amplia as próprias
+        permissões, e fingir que sim seria pior. O que ele faz é dizer o que
+        falta, para que serve, e entregar o comando pronto para colar.
+        """
+        corpo = ["Este aplicativo roda numa caixa fechada e, para levar o seu "
+                 "certificado aos navegadores, precisa escrever em alguns "
+                 "lugares da sua pasta pessoal. Faltam:", ""]
+        for _, para_que, _ in pendencias:
+            corpo.append("   •  %s" % para_que)
+        corpo += ["", "Cole isto num terminal e tente de novo:", "",
+                  permissoes.comando(pendencias)]
+
+        dialogo = Adw.MessageDialog(
+            transient_for=self,
+            heading="Falta permissão",
+            body="\n".join(corpo))
+        dialogo.add_response("fechar", "Fechar")
+        dialogo.add_response("copiar", "Copiar comando")
+        dialogo.set_response_appearance("copiar", Adw.ResponseAppearance.SUGGESTED)
+        dialogo.connect("response", self._respondeu_permissao, pendencias)
+        dialogo.present()
+
+    def _respondeu_permissao(self, dialogo, resposta, pendencias):
+        if resposta != "copiar":
+            return
+        self.get_clipboard().set(permissoes.comando(pendencias))
+        self.toasts.add_toast(Adw.Toast(title="Comando copiado"))
+
+    def _avisar(self, titulo, corpo):
+        dialogo = Adw.MessageDialog(transient_for=self, heading=titulo, body=corpo)
+        dialogo.add_response("fechar", "Fechar")
+        dialogo.present()
+
+    # ------------------------------------------------------------------
     def _clicou(self, botao, componente):
         if instalador.instalado(componente):
             instalador.desinstalar(componente)
             self.atualizar_componentes()
+            if publicador.publicado():
+                publicador.publicar()
+            self.atualizar_publicacao()
             self.atualizar_tokens()
             self.toasts.add_toast(Adw.Toast(title="%s removido" % componente.nome))
             return
@@ -152,6 +243,7 @@ class Janela(Adw.ApplicationWindow):
     def _terminou(self, componente):
         self.linhas[componente.chave]["progresso"].set_visible(False)
         self.atualizar_componentes()
+        self.atualizar_publicacao()
         self.atualizar_tokens()
         self.toasts.add_toast(Adw.Toast(title="%s instalado" % componente.nome))
 

@@ -107,8 +107,35 @@ def registrar():
 
 
 def _proxy():
+    """O p11-kit-proxy do runtime, para uso dentro do sandbox."""
     for candidato in glob.glob("/usr/lib/*/p11-kit-proxy.so") + ["/usr/lib/p11-kit-proxy.so"]:
         if os.path.exists(candidato):
+            return candidato
+    return None
+
+
+# Onde procurar o p11-kit-proxy do host, em /run/host/usr, que é onde o
+# --filesystem=host-os monta o /usr de lá.
+#
+# O que se grava no banco NSS é o caminho como o host o vê, sem o /run/host: é
+# o programa de lá que vai abrir o arquivo.
+PREFIXO_HOST = "/run/host"
+CANDIDATOS_PROXY = [
+    "/usr/lib64/p11-kit-proxy.so",                    # Fedora, openSUSE
+    "/usr/lib/x86_64-linux-gnu/p11-kit-proxy.so",     # Debian, Ubuntu
+    "/usr/lib/p11-kit-proxy.so",                      # Arch
+]
+
+
+def proxy_do_host():
+    """O p11-kit-proxy do host, ou None se não der para encontrar.
+
+    Um só, e não todos os que existirem: em distribuição onde /usr/lib64 é link
+    para /usr/lib, dois candidatos apontam para o mesmo arquivo, e registrar os
+    dois faz cada token aparecer duas vezes na lista do navegador.
+    """
+    for candidato in CANDIDATOS_PROXY:
+        if os.path.exists(PREFIXO_HOST + candidato):
             return candidato
     return None
 

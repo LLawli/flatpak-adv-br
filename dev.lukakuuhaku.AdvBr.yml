@@ -36,6 +36,44 @@ finish-args:
   - --socket=pcsc
   - --device=all
 
+  # Publicar o token para os programas que já existem na máquina significa
+  # escrever arquivo de configuração na home de quem usa. A lista abaixo é o
+  # mínimo para isso, caminho por caminho, em vez de --filesystem=home: o que
+  # o aplicativo não precisa ler, ele não lê.
+  #
+  # Se alguma delas for revogada, o aplicativo detecta e mostra o comando para
+  # devolvê-la, em vez de falhar sem explicação.
+  #
+  # Onde o p11-kit do host procura módulos do usuário (autenticação por
+  # certificado em qualquer programa que use p11-kit).
+  - --filesystem=xdg-config/pkcs11:create
+  # Bancos NSS e manifestos de native messaging dos navegadores do host.
+  - --filesystem=~/.mozilla:create
+  - --filesystem=xdg-config/mozilla:create
+  - --filesystem=~/.pki:create
+  - --filesystem=xdg-config/google-chrome:create
+  - --filesystem=xdg-config/chromium:create
+  - --filesystem=xdg-config/BraveSoftware:create
+  - --filesystem=xdg-config/vivaldi:create
+  - --filesystem=xdg-config/microsoft-edge:create
+  - --filesystem=xdg-config/opera:create
+  # Os mesmos navegadores, quando são Flatpak. É um caminho amplo, e é o preço
+  # de alcançar o sandbox de outro aplicativo: não há portal para isso.
+  - --filesystem=~/.var/app
+  # Os atalhos no menu de aplicativos.
+  - --filesystem=xdg-data/applications:create
+  # Atalhos dos assinadores, que o navegador executa.
+  - --filesystem=~/.local/bin:create
+  # Somente leitura do /usr do host, para descobrir onde está o p11-kit-proxy
+  # dele: o caminho muda por distribuição (/usr/lib64 no Fedora,
+  # /usr/lib/<triplet> no Debian, /usr/lib no Arch) e é esse caminho que vai
+  # gravado no banco NSS.
+  #
+  # A alternativa seria registrar os três e deixar o NSS descartar os que não
+  # existem. Não serve: no Arch /usr/lib64 é link para /usr/lib, os dois
+  # existem, e cada token apareceria duas vezes na lista do navegador.
+  - --filesystem=host-os:ro
+
 cleanup:
   - /include
   - /lib/pkgconfig
@@ -108,8 +146,10 @@ modules:
     buildsystem: simple
     build-commands:
       - install -Dm644 -t /app/share/adv-br-ui ui/deb.py ui/catalogo.py
-        ui/instalador.py ui/pkcs11.py ui/janela.py
+        ui/instalador.py ui/pkcs11.py ui/nssdb.py ui/permissoes.py
+        ui/publicador.py ui/janela.py
       - install -Dm755 ui/adv-br-ui /app/bin/adv-br-ui
+      - install -Dm755 ui/adv-br-pkcs11 /app/bin/adv-br-pkcs11
       - install -Dm644 ui/dev.lukakuuhaku.AdvBr.svg
         /app/share/icons/hicolor/scalable/apps/dev.lukakuuhaku.AdvBr.svg
       - install -Dm644 dev.lukakuuhaku.AdvBr.desktop

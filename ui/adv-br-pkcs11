@@ -1,0 +1,40 @@
+#!/bin/sh
+# A ponte PKCS#11 para fora: exporta um módulo deste aplicativo pelo
+# stdin/stdout.
+#
+# Quem executa isto é o p11-kit do HOST, a partir do .module que o aplicativo
+# escreveu na home de quem usa:
+#
+#   remote: |flatpak run --command=adv-br-pkcs11 dev.lukakuuhaku.AdvBr <módulo>
+#
+# O p11-kit-proxy do host inicia este comando sob demanda e conversa com ele
+# pelo pipe. É assim que um navegador que roda fora do sandbox enxerga um
+# driver que só existe dentro dele.
+#
+# NÃO ESCREVA NADA EM STDOUT AQUI. O stdout é o protocolo RPC do p11-kit;
+# qualquer byte a mais o corrompe. Mensagens vão para stderr.
+set -eu
+
+MODULO=${1:-}
+if [ -z "$MODULO" ]; then
+    echo "uso: adv-br-pkcs11 <caminho-do-modulo.so>" >&2
+    exit 2
+fi
+
+if [ ! -e "$MODULO" ]; then
+    echo "adv-br: o driver $MODULO não está instalado neste aplicativo." >&2
+    echo "     Abra o Certificado Digital e instale-o, ou publique de novo." >&2
+    exit 1
+fi
+
+# Bibliotecas de apoio que um componente tenha trazido junto. As do próprio
+# aplicativo (o gdbm antigo que o SafeSign quer, por exemplo) já estão no
+# caminho que o Flatpak monta.
+COMPONENTES="${XDG_DATA_HOME:-$HOME/.local/share}/componentes"
+for lib in "$COMPONENTES"/*/lib; do
+    [ -d "$lib" ] || continue
+    LD_LIBRARY_PATH="$lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+done
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+
+exec p11-kit remote "$MODULO"
