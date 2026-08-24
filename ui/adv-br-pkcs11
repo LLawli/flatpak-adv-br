@@ -32,4 +32,35 @@ fi
 # COMPONENTES.
 . /app/share/adv-br-ui/preparar-drivers.sh
 
+# Quando o p11-kit do host está numa série diferente da do runtime, a pessoa
+# instala pela janela um p11-kit da série dele, e é ELE que a ponte usa. As
+# duas pontas precisam concordar sobre a tabela de funções que trafega no pipe;
+# quando não concordam, nada recusa a conexão, os slots enumeram, o PIN é
+# aceito e toda assinatura falha. Ver docs/ARMADILHAS.md.
+#
+# Só este processo o usa. Os assinadores e o PJeOffice continuam com o p11-kit
+# do runtime, e não precisam concordar com ninguém porque não atravessam pipe
+# nenhum: por isso o LD_LIBRARY_PATH abaixo é exportado aqui, e não no preparo
+# comum.
+#
+# O binário chamado é o p11-kit-remote, e não "p11-kit remote": o "p11-kit"
+# procura o auxiliar por um caminho absoluto gravado nele em tempo de
+# compilação, que não existe quando o pacote é instalado nos dados do
+# aplicativo. Chamar o auxiliar direto faz o mesmo trabalho e não depende
+# de onde o componente foi parar.
+# O laço escolhe e o exec vem depois, fora dele. Um exec dentro do laço é
+# apontado pelo SC2093 e, pior que o aviso, esconde de quem lê que o script
+# termina ali.
+COMPAT=""
+for candidato in "$COMPONENTES"/p11kit-*/; do
+    [ -x "$candidato/libexec/p11-kit/p11-kit-remote" ] || continue
+    COMPAT=$candidato
+    break
+done
+
+if [ -n "$COMPAT" ]; then
+    export LD_LIBRARY_PATH="$COMPAT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    exec "$COMPAT/libexec/p11-kit/p11-kit-remote" "$MODULO"
+fi
+
 exec p11-kit remote "$MODULO"

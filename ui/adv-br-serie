@@ -1,0 +1,79 @@
+#!/bin/sh
+# A série do p11-kit de cada lado da ponte PKCS#11.
+#
+#   adv-br-serie host     a do sistema onde o aplicativo está instalado
+#   adv-br-serie pacote   a que a ponte deste aplicativo vai usar
+#
+# Por que isso existe, em uma frase: quando as duas divergem, nada recusa a
+# conexão, os slots enumeram, o PIN é aceito e TODA assinatura falha com
+# CKR_DEVICE_ERROR. Como autenticar por certificado também assina (no
+# CertificateVerify do handshake TLS), o login no Projudi e no eproc para de
+# funcionar com o certificado aparecendo normalmente na lista. É o modo de
+# falha mais caro do projeto, e o único jeito de pegá-lo antes é comparar as
+# séries. Ver docs/ARMADILHAS.md.
+#
+# A série sai do próprio p11-kit, pelo campo library-version do módulo de
+# confiança, e NÃO do soname: nesta máquina o host tem libp11-kit.so.0.4.10 e o
+# runtime 0.4.11, sonames diferentes na mesma série 0.26. O soname distingue as
+# séries por acaso e ordena errado como texto.
+set -eu
+
+QUAL=${1:-host}
+COMPAT="${XDG_DATA_HOME:-$HOME/.local/share}/componentes"
+
+# O campo library-version é reportado pelo MÓDULO carregado, e não pela
+# libp11-kit do processo que pergunta. É isso que torna a leitura possível de
+# dentro do sandbox: carregamos o módulo de confiança DO HOST, que o
+# --filesystem=host-os:ro monta em /run/host, e ele reporta a versão dele.
+# Perguntar ao módulo do runtime devolveria 0.26 sempre, que é o engano que
+# este comando existe para evitar.
+trust_do_host() {
+    # Escapatória para teste: numa máquina cuja série é igual à do runtime não
+    # há como exercitar o caminho divergente, que é justamente o que precisa
+    # funcionar. Apontando isto para o trust de um p11-kit de outra série, o
+    # aplicativo se comporta como se o host fosse daquela série.
+    if [ -n "${ADV_BR_TRUST_HOST:-}" ] && [ -e "${ADV_BR_TRUST_HOST}" ]; then
+        echo "$ADV_BR_TRUST_HOST"
+        return 0
+    fi
+    for caminho in /run/host/usr/lib64/pkcs11/p11-kit-trust.so \
+                   /run/host/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-trust.so \
+                   /run/host/usr/lib/pkcs11/p11-kit-trust.so; do
+        [ -e "$caminho" ] || continue
+        echo "$caminho"
+        return 0
+    done
+    return 1
+}
+
+trust_do_pacote() {
+    # Se houver um p11-kit de compatibilidade instalado, é o dele que a ponte
+    # usa, e é a versão dele que interessa. Ver ui/preparar-drivers.sh.
+    for caminho in "$COMPAT"/p11kit-*/lib/pkcs11/p11-kit-trust.so \
+                   /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-trust.so \
+                   /usr/lib/pkcs11/p11-kit-trust.so; do
+        [ -e "$caminho" ] || continue
+        echo "$caminho"
+        return 0
+    done
+    return 1
+}
+
+case $QUAL in
+    host)   TRUST=$(trust_do_host) || exit 1 ;;
+    pacote) TRUST=$(trust_do_pacote) || exit 1 ;;
+    *)      echo "uso: adv-br-serie host|pacote" >&2; exit 2 ;;
+esac
+
+# O Flatpak substitui o p11-kit-trust.module de todo sandbox pelo client dele,
+# que reporta a versão do protocolo (1.1) e não a da biblioteca. Registrar o
+# módulo que interessa sob outro nome é o que faz o p11-kit reportar a dele.
+ARQUIVO=/etc/pkcs11/modules/zz-adv-br-serie.module
+printf 'module: %s\ncritical: no\n' "$TRUST" > "$ARQUIVO" 2>/dev/null || exit 1
+# Sai daqui mesmo em caso de erro: um módulo de confiança de outro sistema
+# registrado no sandbox não pode sobreviver a esta pergunta.
+trap 'rm -f "$ARQUIVO"' EXIT INT TERM
+
+p11-kit list-modules 2>/dev/null |
+    sed -n '/^module: zz-adv-br-serie/,/^module:/p' |
+    sed -n 's/^ *library-version: *//p' | head -1

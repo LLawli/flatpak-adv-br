@@ -178,6 +178,7 @@ modules:
       - install -Dm755 ui/adv-br-ui /app/bin/adv-br-ui
       - install -Dm755 ui/adv-br-pkcs11 /app/bin/adv-br-pkcs11
       - install -Dm755 ui/adv-br-assinador /app/bin/adv-br-assinador
+      - install -Dm755 ui/adv-br-serie /app/bin/adv-br-serie
       - install -Dm644 ui/preparar-drivers.sh
         /app/share/adv-br-ui/preparar-drivers.sh
       # O intermediário que a cadeia da Softplan não serve; ver o
