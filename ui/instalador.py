@@ -9,9 +9,13 @@ aplicativo. Instalar é escrever ali; desinstalar é apagar.
 import hashlib
 import os
 import shutil
+import ssl
 import urllib.request
 
 import deb
+
+# Onde ficam os certificados extras que alguns downloads exigem.
+CA_DIR = "/app/share/adv-br-ui/ca"
 
 AGENTE = "adv-br"
 
@@ -36,6 +40,21 @@ def instalado(componente):
                for alvo in componente.arquivos.values())
 
 
+def _contexto(componente):
+    """O contexto TLS do download.
+
+    Quando o componente nomeia um certificado, ele é ACRESCENTADO às âncoras
+    do sistema, não as substitui: o servidor da Softplan serve uma cadeia
+    incompleta, e o que falta é o intermediário. Com ele, a verificação
+    continua indo até uma raiz confiável. Desligar a verificação seria trocar
+    um problema de configuração alheia por um buraco no nosso lado.
+    """
+    contexto = ssl.create_default_context()
+    if componente.ca:
+        contexto.load_verify_locations(cafile=os.path.join(CA_DIR, componente.ca))
+    return contexto
+
+
 def baixar(componente, progresso=None):
     """Baixa o pacote e devolve os bytes, conferindo o sha256.
 
@@ -45,7 +64,8 @@ def baixar(componente, progresso=None):
     pedido = urllib.request.Request(componente.url, headers={"User-Agent": AGENTE})
     partes = []
     recebido = 0
-    with urllib.request.urlopen(pedido, timeout=60) as resposta:
+    with urllib.request.urlopen(pedido, timeout=60,
+                                context=_contexto(componente)) as resposta:
         total = int(resposta.headers.get("Content-Length") or 0)
         while True:
             pedaco = resposta.read(64 * 1024)

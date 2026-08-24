@@ -8,16 +8,21 @@ São dois problemas diferentes, e por isso duas coisas escritas:
                                  conversar com ele por um pipe, e registramos o
                                  módulo no banco NSS de cada perfil.
 
-  assinatura                     quem fala com o token é um programa à parte.
-  (SAJ, portal da OAB)           Ainda não implementado aqui: entra junto com
-                                 os assinadores no catálogo.
+  assinatura                     quem fala com o token é um programa à parte,
+  (SAJ, portal da OAB)           que o navegador executa e com quem conversa
+                                 por stdin/stdout. Escrevemos o manifesto de
+                                 native messaging apontando para um atalho que
+                                 entra neste aplicativo.
 
 Nada é instalado no sistema: o que se escreve são arquivos de configuração
 dentro da própria home de quem usa, e a remoção apaga exatamente esses.
 """
 import glob
+import json
 import os
 
+import catalogo
+import instalador
 import nssdb
 import pkcs11
 
@@ -108,6 +113,11 @@ def publicar():
             "não encontrei o p11-kit do sistema; os navegadores que rodam fora "
             "de sandbox podem não enxergar o token.")
 
+    try:
+        _publicar_assinadores(feito)
+    except OSError as erro:
+        feito["erros"].append("assinadores: %s" % erro)
+
     for banco in nssdb.bancos(_raizes_de_banco()):
         try:
             if _e_de_flatpak(banco):
@@ -142,6 +152,32 @@ def despublicar():
         except OSError as erro:
             feito["erros"].append(str(erro))
 
+    # Manifestos e atalhos dos assinadores: o mesmo laço da publicação, com a
+    # lista de vivos vazia.
+    for casa, id_flatpak in _casas():
+        for relativo, _ in NAVEGADORES:
+            for arquivo in glob.glob(os.path.join(casa, relativo, "*.json")):
+                try:
+                    with open(arquivo, encoding="utf-8") as f:
+                        if PREFIXO not in f.read():
+                            continue
+                    os.unlink(arquivo)
+                    feito.setdefault("assinadores", []).append(
+                        os.path.basename(arquivo))
+                except OSError as erro:
+                    feito["erros"].append(str(erro))
+
+        pasta = (os.path.join(casa, SUBDIR_FLATPAK) if id_flatpak
+                 else os.path.join(casa, ".local", "bin"))
+        for arquivo in glob.glob(os.path.join(pasta, PREFIXO + "*")):
+            try:
+                os.unlink(arquivo)
+            except OSError as erro:
+                feito["erros"].append(str(erro))
+        # O diretório que os continha é nosso; vazio, ele não deveria ficar.
+        if id_flatpak and os.path.isdir(pasta) and not os.listdir(pasta):
+            os.rmdir(pasta)
+
     for banco in nssdb.bancos(_raizes_de_banco()):
         for nome in (nssdb.NOME_HOST, nssdb.NOME_SANDBOX):
             try:
@@ -150,6 +186,119 @@ def despublicar():
             except OSError as erro:
                 feito["erros"].append("banco %s: %s" % (banco, erro))
     return feito
+
+
+# Onde cada família de navegador procura manifesto de native messaging, e qual
+# campo cada uma exige. Trocar os campos é um erro mudo: o navegador ignora o
+# arquivo sem dizer nada, e a extensão informa que o assinador não está
+# instalado, que é o mesmo sintoma de nunca ter sido publicado.
+#
+#   diretório relativo à casa indicada  |  família
+NAVEGADORES = [
+    (".mozilla/native-messaging-hosts", "firefox"),
+    (".config/google-chrome/NativeMessagingHosts", "chromium"),
+    (".config/chromium/NativeMessagingHosts", "chromium"),
+    (".config/BraveSoftware/Brave-Browser/NativeMessagingHosts", "chromium"),
+    (".config/vivaldi/NativeMessagingHosts", "chromium"),
+    (".config/microsoft-edge/NativeMessagingHosts", "chromium"),
+    (".config/opera/NativeMessagingHosts", "chromium"),
+]
+
+# Onde o atalho de um navegador em Flatpak precisa morar.
+#
+# Não é .local/bin: um sandbox não enxerga isso. O Flatpak monta de
+# ~/.var/app/<id> apenas os diretórios XDG e o que o aplicativo declarar como
+# persistente, e o Firefox declara só o .mozilla. "data" tem a propriedade que
+# resolve o resto: o caminho absoluto é o mesmo dentro e fora do sandbox, então
+# o que se grava no manifesto vale dos dois lados.
+SUBDIR_FLATPAK = "data/adv-br"
+
+
+def _casas():
+    """(casa, é_flatpak) de cada lugar onde procurar navegador."""
+    casa = os.path.expanduser("~")
+    lugares = [(casa, None)]
+    for app in sorted(glob.glob(os.path.join(casa, ".var", "app", "*"))):
+        lugares.append((app, os.path.basename(app)))
+    return lugares
+
+
+def _atalho(chave, casa, id_flatpak):
+    """Escreve o atalho que o navegador executa, e devolve o caminho dele."""
+    if id_flatpak:
+        destino = os.path.join(casa, SUBDIR_FLATPAK)
+        # De dentro de um sandbox não existe "flatpak", só o portal.
+        comando = ("exec flatpak-spawn --host flatpak run "
+                   "--command=adv-br-assinador %s %s \"$@\"\n" % (APP_ID, chave))
+    else:
+        destino = os.path.join(casa, ".local", "bin")
+        comando = ("exec flatpak run --command=adv-br-assinador %s %s \"$@\"\n"
+                   % (APP_ID, chave))
+
+    os.makedirs(destino, exist_ok=True)
+    caminho = os.path.join(destino, PREFIXO + chave)
+    with open(caminho, "w", encoding="utf-8") as arquivo:
+        arquivo.write("#!/bin/sh\n# Escrito pelo %s.\n%s" % (APP_ID, comando))
+    os.chmod(caminho, 0o755)
+    return caminho
+
+
+def _publicar_assinadores(feito):
+    instalados = [c for c in catalogo.por_tipo("assinador")
+                  if instalador.instalado(c)]
+
+    vivos = set()
+    for casa, id_flatpak in _casas():
+        for relativo, familia in NAVEGADORES:
+            destino = os.path.join(casa, relativo)
+            # O diretório-pai é o que diz se este navegador existe aqui: criar
+            # ~/.config/vivaldi numa máquina sem Vivaldi seria inventar
+            # navegador.
+            if not os.path.isdir(os.path.dirname(destino)):
+                continue
+
+            for componente in instalados:
+                origem = os.path.join(instalador.diretorio(componente),
+                                      "native-messaging")
+                for arquivo in sorted(glob.glob(os.path.join(origem, "*.%s.json" % familia))):
+                    nome = os.path.basename(arquivo).rsplit(".", 2)[0]
+                    try:
+                        with open(arquivo, encoding="utf-8") as f:
+                            manifesto = json.load(f)
+                    except (OSError, ValueError) as erro:
+                        feito["erros"].append("%s: %s" % (arquivo, erro))
+                        continue
+
+                    manifesto["path"] = _atalho(componente.chave, casa, id_flatpak)
+                    os.makedirs(destino, exist_ok=True)
+                    alvo = os.path.join(destino, nome + ".json")
+                    with open(alvo, "w", encoding="utf-8") as f:
+                        json.dump(manifesto, f, ensure_ascii=False, indent=2)
+                        f.write("\n")
+                    feito.setdefault("assinadores", []).append(nome)
+                    vivos.add(alvo)
+
+            # O manifesto de um assinador que saiu aponta para um atalho que já
+            # não existe, e o navegador diz que ele não está instalado.
+            for arquivo in glob.glob(os.path.join(destino, "*.json")):
+                if arquivo in vivos:
+                    continue
+                try:
+                    with open(arquivo, encoding="utf-8") as f:
+                        if PREFIXO not in f.read():
+                            continue
+                except OSError:
+                    continue
+                os.unlink(arquivo)
+
+    # Atalhos órfãos, pelo mesmo motivo.
+    chaves_vivas = {PREFIXO + c.chave for c in instalados}
+    for casa, id_flatpak in _casas():
+        pasta = (os.path.join(casa, SUBDIR_FLATPAK) if id_flatpak
+                 else os.path.join(casa, ".local", "bin"))
+        for arquivo in glob.glob(os.path.join(pasta, PREFIXO + "*")):
+            if os.path.basename(arquivo) not in chaves_vivas:
+                os.unlink(arquivo)
 
 
 def publicado():

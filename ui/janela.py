@@ -55,16 +55,28 @@ class Janela(Adw.ApplicationWindow):
 
         # 3. O que ela pode instalar.
         self.grupo_componentes = Adw.PreferencesGroup(
-            title="Drivers e assinadores",
+            title="Drivers de token",
             description=(
-                "Baixados do site do fabricante, na sua máquina. "
-                "Instale só o que você usa."))
+                "Instale o do seu token, se ele não aparecer acima. Baixados "
+                "do site do fabricante, na sua máquina."))
         pagina.add(self.grupo_componentes)
 
         self.linhas = {}
-        for componente in catalogo.CATALOGO:
+        for componente in catalogo.por_tipo("driver"):
             self.linhas[componente.chave] = self._linha(componente)
             self.grupo_componentes.add(self.linhas[componente.chave]["linha"])
+
+        # Assinadores em grupo próprio: são outra pergunta. Driver é "o meu
+        # token aparece"; assinador é "este site consegue assinar".
+        self.grupo_assinadores = Adw.PreferencesGroup(
+            title="Assinadores",
+            description=(
+                "Para assinar dentro do navegador. Cada um precisa também da "
+                "extensão correspondente, instalada no navegador."))
+        for componente in catalogo.por_tipo("assinador"):
+            self.linhas[componente.chave] = self._linha(componente)
+            self.grupo_assinadores.add(self.linhas[componente.chave]["linha"])
+        pagina.add(self.grupo_assinadores)
 
         rolagem = Gtk.ScrolledWindow(vexpand=True)
         rolagem.set_child(pagina)
@@ -94,6 +106,8 @@ class Janela(Adw.ApplicationWindow):
 
     def atualizar_componentes(self):
         for componente in catalogo.CATALOGO:
+            if componente.chave not in self.linhas:
+                continue
             partes = self.linhas[componente.chave]
             posto = instalador.instalado(componente)
             partes["botao"].set_label("Remover" if posto else "Instalar")

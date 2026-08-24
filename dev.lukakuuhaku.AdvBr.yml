@@ -28,7 +28,15 @@ command: adv-br-ui
 
 finish-args:
   - --socket=wayland
-  - --socket=fallback-x11
+  # x11 de verdade, e não fallback-x11: o Lacuna Web PKI e o Softplan
+  # WebSigner são Avalonia, que só tem backend X11. Sob Wayland eles morrem
+  # com "XOpenDisplay failed" antes de ler a primeira mensagem, e o
+  # fallback-x11 só entrega o socket quando NÃO há Wayland, que é exatamente
+  # o caso em que eles não precisariam dele.
+  #
+  # A janela deste aplicativo é GTK4 e continua nativa no Wayland; o X11 é
+  # para os assinadores que ele lança.
+  - --socket=x11
   - --share=ipc
   # Baixar os componentes dos sites dos fabricantes.
   - --share=network
@@ -150,6 +158,12 @@ modules:
         ui/publicador.py ui/janela.py
       - install -Dm755 ui/adv-br-ui /app/bin/adv-br-ui
       - install -Dm755 ui/adv-br-pkcs11 /app/bin/adv-br-pkcs11
+      - install -Dm755 ui/adv-br-assinador /app/bin/adv-br-assinador
+      # O intermediário que a cadeia da Softplan não serve; ver o
+      # catálogo. Um certificado público, que completa a verificação em
+      # vez de desligá-la.
+      - install -Dm644 packaging/ca/ThawteTLSRSACAG1.pem
+        /app/share/adv-br-ui/ca/ThawteTLSRSACAG1.pem
       - install -Dm644 ui/dev.lukakuuhaku.AdvBr.svg
         /app/share/icons/hicolor/scalable/apps/dev.lukakuuhaku.AdvBr.svg
       - install -Dm644 dev.lukakuuhaku.AdvBr.desktop

@@ -84,27 +84,75 @@ def abrir_data(dados):
 def extrair(dados, destino, mapa):
     """Extrai de um .deb os caminhos de `mapa` ({de: para}), sob `destino`.
 
-    Devolve a lista do que foi escrito. Um caminho pedido e ausente é erro:
+    Uma origem terminada em "/" e' um diretorio: tudo o que estiver sob ela e'
+    copiado, preservando a estrutura. E' o que o SerproID exige, que traz um
+    aplicativo inteiro com o JRE dele, e o que seria insano listar arquivo a
+    arquivo.
+
+    Devolve a lista do que foi escrito. Um caminho pedido e ausente e' erro:
     significa que o pacote do fabricante mudou de forma, e seguir em frente
-    produziria uma instalação que só falha na hora de assinar.
+    produziria uma instalacao que so' falha na hora de assinar.
     """
     escritos = []
     with abrir_data(dados) as tar:
-        disponiveis = {m.name.lstrip("./"): m for m in tar.getmembers()}
-        for origem, relativo in mapa.items():
-            membro = disponiveis.get(origem.lstrip("./"))
-            if membro is None or not membro.isfile():
-                raise DebInvalido("o pacote não traz %s" % origem)
+        membros_por_nome = {m.name.lstrip("./"): m for m in tar.getmembers()}
 
-            caminho = os.path.join(destino, relativo)
-            os.makedirs(os.path.dirname(caminho), exist_ok=True)
-            extraido = tar.extractfile(membro)
-            if extraido is None:
-                raise DebInvalido("não consegui ler %s" % origem)
-            with extraido, open(caminho, "wb") as saida:
-                saida.write(extraido.read())
-            # O modo do .deb vale: um driver sem bit de execução não carrega, e
-            # um .so sem leitura para o usuário não abre.
-            os.chmod(caminho, membro.mode | 0o600)
-            escritos.append(caminho)
+        for origem, relativo in mapa.items():
+            limpa = origem.lstrip("./")
+            if origem.endswith("/"):
+                escritos += _extrair_arvore(tar, membros_por_nome, limpa,
+                                            os.path.join(destino, relativo))
+                continue
+
+            membro = membros_por_nome.get(limpa)
+            if membro is None or not membro.isfile():
+                raise DebInvalido("o pacote nao traz %s" % origem)
+            escritos.append(_extrair_arquivo(tar, membro,
+                                             os.path.join(destino, relativo)))
+    return escritos
+
+
+def _extrair_arquivo(tar, membro, caminho):
+    os.makedirs(os.path.dirname(caminho), exist_ok=True)
+    extraido = tar.extractfile(membro)
+    if extraido is None:
+        raise DebInvalido("nao consegui ler %s" % membro.name)
+    with extraido, open(caminho, "wb") as saida:
+        saida.write(extraido.read())
+    # O modo do .deb vale: um driver sem bit de execucao nao carrega, e um .so
+    # sem leitura para o usuario nao abre.
+    os.chmod(caminho, membro.mode | 0o600)
+    return caminho
+
+
+def _extrair_arvore(tar, membros_por_nome, prefixo, destino):
+    """Copia tudo o que estiver sob `prefixo`, preservando a estrutura."""
+    escritos = []
+    for nome, membro in membros_por_nome.items():
+        if not nome.startswith(prefixo):
+            continue
+        relativo = nome[len(prefixo):].lstrip("/")
+        if not relativo:
+            continue
+
+        alvo = os.path.join(destino, relativo)
+        if membro.isdir():
+            os.makedirs(alvo, exist_ok=True)
+        elif membro.isfile():
+            escritos.append(_extrair_arquivo(tar, membro, alvo))
+        elif membro.issym():
+            # O JRE que o SerproID traz vem cheio de links. Um que aponte para
+            # fora da arvore seria um caminho de escape, e nao entra.
+            os.makedirs(os.path.dirname(alvo), exist_ok=True)
+            aponta = os.path.normpath(
+                os.path.join(os.path.dirname(alvo), membro.linkname))
+            if not aponta.startswith(os.path.normpath(destino)):
+                continue
+            if os.path.lexists(alvo):
+                os.unlink(alvo)
+            os.symlink(membro.linkname, alvo)
+            escritos.append(alvo)
+
+    if not escritos:
+        raise DebInvalido("o pacote nao traz nada sob %s" % prefixo)
     return escritos

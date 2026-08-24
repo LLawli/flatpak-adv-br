@@ -1,0 +1,47 @@
+#!/bin/sh
+# Lançador dos assinadores, chamado pelo navegador por native messaging.
+#
+# O navegador executa um atalho na home de quem usa, o atalho chama
+#
+#   flatpak run --command=adv-br-assinador dev.lukakuuhaku.AdvBr <chave> [origem]
+#
+# e conversa com o assinador por stdin/stdout, no protocolo de native
+# messaging: 4 bytes de tamanho, little-endian, mais um JSON.
+#
+# NADA em stdout que não venha do assinador. Uma linha de log ali corrompe o
+# protocolo, e o sintoma no navegador é "o assinador não respondeu".
+set -eu
+
+CHAVE=${1:-}
+if [ -z "$CHAVE" ]; then
+    echo "uso: adv-br-assinador <chave> [argumentos do navegador]" >&2
+    exit 2
+fi
+shift
+
+COMPONENTES="${XDG_DATA_HOME:-$HOME/.local/share}/componentes"
+ASSINADOR="$COMPONENTES/$CHAVE/bin/$CHAVE"
+
+if [ ! -x "$ASSINADOR" ]; then
+    echo "adv-br: o assinador '$CHAVE' não está instalado." >&2
+    echo "     Abra o Certificado Digital e instale-o." >&2
+    exit 1
+fi
+
+# Bibliotecas de apoio que o componente tenha trazido.
+for lib in "$COMPONENTES"/*/lib; do
+    [ -d "$lib" ] || continue
+    LD_LIBRARY_PATH="$lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+done
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+
+# O Certisign abre os .glade da interface por caminho absoluto em
+# /opt/certisign-websigner/res, e não há como redirecioná-lo. A raiz do sandbox
+# é um tmpfs gravável, então o caminho que ele espera é criado aqui e some com
+# a execução, o que é mais honesto que remendar a string dentro do binário.
+if [ "$CHAVE" = certisign ] && [ -d "$COMPONENTES/certisign/res" ]; then
+    mkdir -p /opt/certisign-websigner
+    ln -sfn "$COMPONENTES/certisign/res" /opt/certisign-websigner/res
+fi
+
+exec "$ASSINADOR" "$@"
