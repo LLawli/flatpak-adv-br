@@ -46,23 +46,17 @@ def modulos_do_host():
 
 
 def _raizes_de_banco():
-    """Onde procurar banco NSS: os do host e os dos navegadores em Flatpak.
+    """Onde procurar banco NSS, nas casas do host e dos Flatpaks.
 
-    O Firefox 147 moveu o perfil para XDG_CONFIG_HOME e deixou o resto onde
-    estava, então os dois caminhos entram.
+    O ~/.pki/nssdb é o banco compartilhado por toda a família Chromium; os
+    demais são os diretórios de perfil dos navegadores baseados em Firefox,
+    descobertos e não listados (ver navegadores()).
     """
-    casa = os.path.expanduser("~")
-    raizes = [
-        os.path.join(casa, ".pki", "nssdb"),
-        os.path.join(casa, ".mozilla", "firefox"),
-        os.path.join(_config(), "mozilla", "firefox"),
-    ]
-    for app in sorted(glob.glob(os.path.join(casa, ".var", "app", "*"))):
-        raizes += [
-            os.path.join(app, ".pki", "nssdb"),
-            os.path.join(app, ".mozilla", "firefox"),
-            os.path.join(app, "config", "mozilla", "firefox"),
-        ]
+    raizes = []
+    for casa, _ in _casas():
+        raizes.append(os.path.join(casa, ".pki", "nssdb"))
+        raizes += [caminho for caminho, familia in navegadores(casa)
+                   if familia == "firefox"]
     return raizes
 
 
@@ -175,8 +169,9 @@ def despublicar():
     # Manifestos e atalhos dos assinadores: o mesmo laço da publicação, com a
     # lista de vivos vazia.
     for casa, id_flatpak in _casas():
-        for relativo, _ in NAVEGADORES:
-            for arquivo in glob.glob(os.path.join(casa, relativo, "*.json")):
+        for caminho, familia in navegadores(casa):
+            destino = native_messaging(caminho, familia)
+            for arquivo in glob.glob(os.path.join(destino, "*.json")):
                 try:
                     with open(arquivo, encoding="utf-8") as f:
                         if PREFIXO not in f.read():
@@ -208,21 +203,86 @@ def despublicar():
     return feito
 
 
-# Onde cada família de navegador procura manifesto de native messaging, e qual
-# campo cada uma exige. Trocar os campos é um erro mudo: o navegador ignora o
-# arquivo sem dizer nada, e a extensão informa que o assinador não está
-# instalado, que é o mesmo sintoma de nunca ter sido publicado.
+# Onde procurar navegador dentro de uma casa. Dois níveis abaixo de cada base,
+# que é o que basta para ~/.mozilla/firefox e para
+# ~/.config/BraveSoftware/Brave-Browser.
 #
-#   diretório relativo à casa indicada  |  família
-NAVEGADORES = [
-    (".mozilla/native-messaging-hosts", "firefox"),
-    (".config/google-chrome/NativeMessagingHosts", "chromium"),
-    (".config/chromium/NativeMessagingHosts", "chromium"),
-    (".config/BraveSoftware/Brave-Browser/NativeMessagingHosts", "chromium"),
-    (".config/vivaldi/NativeMessagingHosts", "chromium"),
-    (".config/microsoft-edge/NativeMessagingHosts", "chromium"),
-    (".config/opera/NativeMessagingHosts", "chromium"),
-]
+# No home só entram diretórios ocultos: é onde navegador guarda perfil, e
+# varrer Documentos e Downloads atrás de navegador seria lento e inútil.
+BASES = [("", True), (".config", False), ("config", False)]
+
+
+def _candidatos(casa):
+    for relativo, so_ocultos in BASES:
+        base = os.path.join(casa, relativo) if relativo else casa
+        if not os.path.isdir(base):
+            continue
+        try:
+            nomes = sorted(os.listdir(base))
+        except OSError:
+            continue
+        for nome in nomes:
+            if so_ocultos and not nome.startswith("."):
+                continue
+            if nome in (".var", ".cache", ".local"):
+                continue
+            primeiro = os.path.join(base, nome)
+            if not os.path.isdir(primeiro):
+                continue
+            yield primeiro
+            try:
+                for dentro in sorted(os.listdir(primeiro)):
+                    segundo = os.path.join(primeiro, dentro)
+                    if os.path.isdir(segundo):
+                        yield segundo
+            except OSError:
+                continue
+
+
+def navegadores(casa):
+    """Os navegadores de uma casa: (diretório de perfis, família).
+
+    Descoberta por marcador, e não por lista de nomes. Uma lista fixa atende
+    quem usa Firefox, Chrome, Chromium e Brave, e ignora em silêncio quem usa
+    LibreWolf, Zen, Floorp, Waterfox, Mullvad, Ungoogled ou qualquer fork que
+    apareça depois. O sintoma para essa pessoa é o pior possível: publicar diz
+    que deu certo e o navegador dela continua sem ver o certificado.
+
+    Os marcadores são os que cada família cria sozinha ao rodar pela primeira
+    vez:
+
+      profiles.ini    Firefox e derivados, ao criar o primeiro perfil.
+      Local State     Chromium e derivados, junto do diretório Default.
+
+    Exigir os dois campos do Chromium (o arquivo e o diretório) é o que evita
+    confundir com aplicativo Electron, que também é Chromium por dentro mas não
+    tem perfil de navegador.
+    """
+    achados = []
+    for caminho in _candidatos(casa):
+        if os.path.isfile(os.path.join(caminho, "profiles.ini")):
+            achados.append((caminho, "firefox"))
+        elif (os.path.isfile(os.path.join(caminho, "Local State"))
+              and os.path.isdir(os.path.join(caminho, "Default"))):
+            achados.append((caminho, "chromium"))
+    return achados
+
+
+def native_messaging(caminho, familia):
+    """Onde este navegador procura manifesto de native messaging.
+
+    O Chromium procura ao lado do perfil. O Firefox procura no diretório do
+    aplicativo, que é o PAI do diretório de perfis (~/.mozilla, com os perfis
+    em ~/.mozilla/firefox) — mas só ele: os forks usam um diretório só, com o
+    profiles.ini e os manifestos lado a lado. Daí a regra ser sobre o nome
+    "firefox", e não sobre a estrutura.
+    """
+    if familia == "chromium":
+        return os.path.join(caminho, "NativeMessagingHosts")
+    if os.path.basename(caminho) == "firefox":
+        return os.path.join(os.path.dirname(caminho), "native-messaging-hosts")
+    return os.path.join(caminho, "native-messaging-hosts")
+
 
 # Onde o atalho de um navegador em Flatpak precisa morar.
 #
@@ -269,13 +329,8 @@ def _publicar_assinadores(feito):
 
     vivos = set()
     for casa, id_flatpak in _casas():
-        for relativo, familia in NAVEGADORES:
-            destino = os.path.join(casa, relativo)
-            # O diretório-pai é o que diz se este navegador existe aqui: criar
-            # ~/.config/vivaldi numa máquina sem Vivaldi seria inventar
-            # navegador.
-            if not os.path.isdir(os.path.dirname(destino)):
-                continue
+        for caminho, familia in navegadores(casa):
+            destino = native_messaging(caminho, familia)
 
             for componente in instalados:
                 origem = os.path.join(instalador.diretorio(componente),

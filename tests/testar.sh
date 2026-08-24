@@ -227,6 +227,14 @@ if [ -f ui/janela.py ]; then
     fi
 fi
 
+if [ -f ui/publicador.py ]; then
+    if python3 tests/prova-navegadores.py; then
+        ok "a descoberta de navegadores"
+    else
+        falha "a descoberta de navegadores"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 printf '\n%d passaram, %d falharam\n\n' "$passou" "$falhou"
 [ "$falhou" = 0 ]

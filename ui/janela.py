@@ -216,6 +216,7 @@ class Janela(Adw.ApplicationWindow):
     # ------------------------------------------------------------------
     def atualizar_publicacao(self):
         posto = publicador.publicado()
+        self.publicacao_desenhada = posto
         self.botao_publicar.set_label("Despublicar" if posto else "Publicar")
         self.botao_publicar.set_css_classes(["destructive-action"] if posto
                                             else ["suggested-action"])
@@ -224,7 +225,21 @@ class Janela(Adw.ApplicationWindow):
             else "Os navegadores ainda não enxergam o seu certificado.")
 
     def _clicou_publicar(self, botao):
-        if publicador.publicado():
+        # Ver decidir(): o botão de publicar sofre da mesma divergência que o
+        # dos componentes. Com a janela aberta desde antes de a publicação
+        # mudar por fora, "Publicar" despublicava, e o pior é que isso parecia
+        # ter funcionado: o toast some, o popup das permissões não aparece
+        # porque não houve publicação, e fica tudo com cara de silêncio.
+        acao = decidir(getattr(self, "publicacao_desenhada", None),
+                       publicador.publicado())
+        if acao == "sincronizar":
+            self.atualizar_publicacao()
+            self.toasts.add_toast(Adw.Toast(
+                title="A publicação mudou por fora desta janela. Confira e "
+                      "clique de novo."))
+            return
+
+        if acao == "remover":
             resultado = publicador.despublicar()
             self.atualizar_publicacao()
             self.toasts.add_toast(Adw.Toast(

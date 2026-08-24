@@ -197,3 +197,18 @@ são as permissões de OUTROS programas, que este aplicativo não pode conceder:
   dele, não do sandbox, e vale saber ao diagnosticar: com `--share=network` a
   pilha de rede é a do host, então o servidor fica visível para qualquer
   navegador da máquina, dentro ou fora de sandbox, e também para a rede local.
+- **Lista de navegadores é lista de gente atendida.** A primeira versão daqui
+  publicava para Firefox, Chrome, Chromium, Brave, Vivaldi, Edge e Opera, por
+  uma tabela de caminhos. Quem usa LibreWolf, Zen, Floorp, Waterfox, Mullvad ou
+  qualquer fork que apareça depois recebia o pior desfecho possível: publicar
+  dizia que deu certo e o navegador continuava sem ver o certificado. Agora os
+  navegadores são descobertos pelos marcadores que eles mesmos criam,
+  `profiles.ini` para a família Firefox e `Local State` mais o diretório
+  `Default` para a família Chromium. Exigir os dois marcadores do Chromium é o
+  que separa navegador de aplicativo Electron, que também tem `Local State`.
+- **Botão que decide pelo disco e rotula pela memória faz o oposto do que
+  diz.** Aconteceu duas vezes, com o botão dos componentes e com o de publicar:
+  a janela fica aberta enquanto algo muda por fora, e o clique executa o
+  contrário do rótulo. No de publicar era pior, porque o resultado se parecia
+  com nada ter acontecido: "Publicar" despublicava, e o aviso das permissões
+  não aparecia porque publicação nenhuma tinha ocorrido. Ver `decidir()`.
