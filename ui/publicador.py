@@ -295,10 +295,26 @@ SUBDIR_FLATPAK = "data/adv-br"
 
 
 def _casas():
-    """(casa, é_flatpak) de cada lugar onde procurar navegador."""
+    """(casa, é_flatpak) de cada lugar onde procurar navegador.
+
+    A casa DESTE aplicativo fica de fora, e não é detalhe: ele tem
+    --filesystem para os diretórios de configuração dos navegadores, e o
+    Flatpak monta cada um deles duas vezes, no caminho do host e dentro do
+    config do aplicativo. Sem esta exclusão, o Brave do host aparece de novo
+    como se fosse um navegador em Flatpak chamado dev.lukakuuhaku.AdvBr, e a
+    segunda passagem sobrescreve o manifesto que a primeira escreveu.
+
+    O estrago não é cosmético: o manifesto de um navegador em Flatpak aponta
+    para um atalho que entra aqui por flatpak-spawn, que só existe dentro de um
+    sandbox. O Brave do host passava a ler um manifesto que manda executar algo
+    que ele não consegue executar, e o sintoma é a extensão dizendo que o
+    assinador não está instalado.
+    """
     casa = os.path.expanduser("~")
     lugares = [(casa, None)]
     for app in sorted(glob.glob(os.path.join(casa, ".var", "app", "*"))):
+        if os.path.basename(app) == APP_ID:
+            continue
         lugares.append((app, os.path.basename(app)))
     return lugares
 

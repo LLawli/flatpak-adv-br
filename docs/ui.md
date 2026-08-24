@@ -212,3 +212,14 @@ são as permissões de OUTROS programas, que este aplicativo não pode conceder:
   contrário do rótulo. No de publicar era pior, porque o resultado se parecia
   com nada ter acontecido: "Publicar" despublicava, e o aviso das permissões
   não aparecia porque publicação nenhuma tinha ocorrido. Ver `decidir()`.
+- **O aplicativo se enxergava como um navegador.** Ele tem `--filesystem` para
+  os diretórios de configuração dos navegadores, e o Flatpak monta cada um
+  deles DUAS vezes: no caminho do host e dentro do config do próprio
+  aplicativo. A descoberta então achava o Brave do host outra vez, agora dentro
+  de `~/.var/app/dev.lukakuuhaku.AdvBr/config/`, e o tratava como navegador em
+  sandbox. Como é o mesmo arquivo montado, a segunda passagem sobrescrevia o
+  manifesto da primeira, e o Brave do host passava a apontar para um atalho que
+  chama `flatpak-spawn`, que só existe DENTRO de um sandbox. O sintoma é a
+  extensão dizendo que o assinador não está instalado, num navegador que estava
+  publicado corretamente segundos antes. A casa do próprio aplicativo fica de
+  fora da varredura.

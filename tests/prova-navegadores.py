@@ -46,6 +46,13 @@ def main():
         # Ruído que NÃO é navegador e não pode ser tratado como um. O Electron
         # deixa "Local State" igualzinho ao Chromium; o que o separa é não ter
         # perfil de navegador.
+        #
+        # A casa deste aplicativo entra no mesmo saco, e é o caso que mais
+        # enganou: ele tem --filesystem para o config dos navegadores, e o
+        # Flatpak monta cada um deles também dentro do config dele. Sem excluir
+        # a própria casa, o navegador do host aparece uma segunda vez como se
+        # fosse um Flatpak, e a segunda passagem estraga o que a primeira
+        # escreveu.
         os.makedirs(os.path.join(casa, ".config/algum-electron"), exist_ok=True)
         open(os.path.join(casa, ".config/algum-electron/Local State"), "w").close()
         os.makedirs(os.path.join(casa, "Documentos/projeto"), exist_ok=True)
@@ -76,6 +83,17 @@ def main():
                 falhas += 1
             else:
                 print("  ok  ignorou %s" % intruso)
+
+        proprio = os.path.join(casa, ".var", "app", publicador.APP_ID)
+        montar(proprio, "config/BraveSoftware/Brave-Browser", "chromium")
+        casas = [c for c, _ in publicador._casas()]
+        # _casas() olha o home de verdade, então o que se confere aqui é a
+        # regra, não o resultado: nenhuma casa pode ser a deste aplicativo.
+        if any(os.path.basename(c) == publicador.APP_ID for c in casas):
+            print("  ERRO _casas() inclui a casa do próprio aplicativo")
+            falhas += 1
+        else:
+            print("  ok  ignorou a casa do próprio aplicativo")
 
         return 1 if falhas else 0
     finally:
