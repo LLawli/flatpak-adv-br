@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.lukakuuhaku.AdvBr</id>
+  <name>Certificado Digital</name>
+  <summary>Seu token da advocacia brasileira nos navegadores que você já usa</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="dev.lukakuuhaku">
+    <name>Luka Kuuhaku</name>
+  </developer>
+  <description>
+    <p>
+      Faz o certificado digital da advocacia brasileira funcionar no Linux, sem
+      terminal. Instale o driver do seu token com um clique e ele passa a
+      aparecer nos navegadores que você já usa, no Papers e nos assinadores.
+    </p>
+    <p>
+      Os drivers e assinadores não vêm dentro do aplicativo: as licenças dos
+      fabricantes permitem usar e guardar uma cópia, não redistribuir. Cada um é
+      baixado do site do próprio fabricante, na sua máquina, com a soma de
+      verificação conferida.
+    </p>
+  </description>
+  <launchable type="desktop-id">dev.lukakuuhaku.AdvBr.desktop</launchable>
+  <url type="homepage">https://github.com/LLawli/flatpak-adv-br</url>
+  <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-08-24">
+      <description>
+        <p>Primeira versão com interface.</p>
+      </description>
+    </release>
+  </releases>
+</component>

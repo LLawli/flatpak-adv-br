@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Certificado Digital
+GenericName=Certificado digital da advocacia brasileira
+Comment=Use seu token e certificado nos navegadores e nos assinadores
+Exec=adv-br-ui
+Icon=dev.lukakuuhaku.AdvBr
+Terminal=false
+Categories=Utility;Security;
+Keywords=certificado;token;ICP-Brasil;assinatura;OAB;PJe;advocacia;
+StartupNotify=true

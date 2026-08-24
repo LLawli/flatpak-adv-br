@@ -1,0 +1,121 @@
+# Manifesto do adv-br com interface gráfica.
+#
+# A diferença para o pacote de linha de comando não é a janela: é o modelo de
+# instalação. Aqui os drivers e assinadores NÃO são extensões Flatpak; eles são
+# baixados pelo próprio aplicativo, em tempo de execução, para os dados dele em
+# ~/.var/app/dev.lukakuuhaku.AdvBr/data/componentes.
+#
+# O que isso compra:
+#
+#   - nada de flatpak-builder na máquina de quem instala;
+#   - nada da permissão org.freedesktop.Flatpak, que é a que faz o Flathub
+#     marcar um aplicativo como inseguro e que impediria a publicação;
+#   - instalar um driver vira um clique, e remover é apagar um diretório.
+#
+# O que isso exige: as bibliotecas de apoio que as extensões compilavam
+# precisam vir aqui dentro (o gdbm antigo que o SafeSign quer, por exemplo), e
+# um .so baixado precisa carregar de dentro dos dados do app, o que foi
+# verificado antes de escrever qualquer linha disto.
+#
+# A licença dos binários continua sendo a razão de nada vir embutido: cada um é
+# baixado da URL do próprio fabricante, na máquina de quem usa, com sha256
+# conferido.
+id: dev.lukakuuhaku.AdvBr
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: adv-br-ui
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # Baixar os componentes dos sites dos fabricantes.
+  - --share=network
+  # Leitoras de smartcard pelo pcscd do host, e tokens USB que falam direto.
+  - --socket=pcsc
+  - --device=all
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - /share/doc
+  - '*.la'
+  - '*.a'
+
+modules:
+  # Cliente PC/SC. O daemon é o do host, alcançado pelo socket que --socket=pcsc
+  # monta em /run/pcscd.
+  - name: pcsc-lite
+    buildsystem: meson
+    config-opts:
+      - -Dlibsystemd=false
+      - -Dlibudev=false
+      - -Dlibusb=false
+      - -Dpolkit=false
+      - -Dserial=false
+      - -Dusb=false
+      - -Dipcdir=/run/pcscd
+    cleanup:
+      - /bin/pcsc-spy
+      - /sbin
+      - /share/pcsc
+    sources:
+      - type: archive
+        url: https://pcsclite.apdu.fr/files/pcsc-lite-2.5.1.tar.xz
+        sha256: bfcfe38a20afc49849c6bf55325e38f449fc4b26d3923fdc32b969ae41a8741b
+
+  # OpenSC cobre boa parte dos cartões ICP-Brasil sem driver proprietário, e é
+  # software livre: é o que faz o aplicativo ser útil assim que instala.
+  - name: opensc
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+      - --disable-doc
+      - --disable-man
+      - --enable-pcsc
+    make-install-args:
+      - p11kitdir=/app/share/p11-kit/modules
+      # O autotools do OpenSC descobre esses diretórios pelo pkg-config e
+      # chega em /usr, que pertence ao runtime e é somente leitura. No
+      # freedesktop o segundo não aparecia; no GNOME, sim.
+      - completiondir=/app/share/bash-completion/completions
+    sources:
+      - type: archive
+        url: https://github.com/OpenSC/OpenSC/releases/download/0.27.1/opensc-0.27.1.tar.gz
+        sha256: 976f4a23eaf3397a1a2c3a7aac80bf971a8c3d829c9a79f06145bfaeeae5eca7
+
+  # A libaetpkss.so do SafeSign precisa de libgdbm_compat.so.4, que o runtime
+  # não traz: é a interface antiga do gdbm, só existe com --enable-libgdbm-compat.
+  # No modelo de extensões isto era compilado junto do driver; aqui, como o
+  # driver chega pronto pela rede, a dependência tem de estar no aplicativo.
+  - name: gdbm
+    buildsystem: autotools
+    config-opts:
+      - --enable-libgdbm-compat
+      - --disable-static
+      - --without-readline
+    cleanup:
+      - /bin
+      - /share
+    sources:
+      - type: archive
+        url: https://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz
+        sha256: 6a24504a14de4a744103dcb936be976df6fbe88ccff26065e54c1c47946f4a5e
+
+  - name: adv-br-ui
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 -t /app/share/adv-br-ui ui/deb.py ui/catalogo.py
+        ui/instalador.py ui/pkcs11.py ui/janela.py
+      - install -Dm755 ui/adv-br-ui /app/bin/adv-br-ui
+      - install -Dm644 ui/dev.lukakuuhaku.AdvBr.svg
+        /app/share/icons/hicolor/scalable/apps/dev.lukakuuhaku.AdvBr.svg
+      - install -Dm644 dev.lukakuuhaku.AdvBr.desktop
+        /app/share/applications/dev.lukakuuhaku.AdvBr.desktop
+      - install -Dm644 dev.lukakuuhaku.AdvBr.metainfo.xml
+        /app/share/metainfo/dev.lukakuuhaku.AdvBr.metainfo.xml
+    sources:
+      - type: dir
+        path: .

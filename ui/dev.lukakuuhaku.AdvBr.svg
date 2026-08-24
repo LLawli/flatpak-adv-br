@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Um cartão com chip, que é a forma que a pessoa reconhece como "certificado",
+    com um selo de conferido no canto. Sem texto: ícone com letra vira ilegível
+    em 32 pixels, que é o tamanho em que ele mais aparece.
+  -->
+  <defs>
+    <linearGradient id="cartao" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3584e4"/>
+      <stop offset="1" stop-color="#1a5fb4"/>
+    </linearGradient>
+    <linearGradient id="chip" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f9f06b"/>
+      <stop offset="1" stop-color="#e5a50a"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="10" y="26" width="108" height="76" rx="12" fill="url(#cartao)"/>
+  <rect x="10" y="26" width="108" height="76" rx="12" fill="none"
+        stroke="#0d3b78" stroke-width="2" stroke-opacity=".5"/>
+
+  <!-- chip -->
+  <rect x="24" y="44" width="30" height="24" rx="4" fill="url(#chip)"/>
+  <g stroke="#a06d00" stroke-width="1.6" stroke-linecap="round" opacity=".75">
+    <path d="M24 52h9M45 52h9M24 60h9M45 60h9"/>
+    <path d="M39 44v24"/>
+  </g>
+
+  <!-- as linhas do "titular", sem texto -->
+  <g fill="#ffffff" opacity=".85">
+    <rect x="66" y="46" width="38" height="6" rx="3"/>
+    <rect x="66" y="58" width="28" height="6" rx="3"/>
+  </g>
+  <g fill="#ffffff" opacity=".55">
+    <rect x="24" y="80" width="52" height="6" rx="3"/>
+  </g>
+
+  <!-- selo de conferido -->
+  <circle cx="98" cy="86" r="20" fill="#2ec27e" stroke="#ffffff" stroke-width="4"/>
+  <path d="M89 86l6.5 6.5L108 80" fill="none" stroke="#ffffff" stroke-width="6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
