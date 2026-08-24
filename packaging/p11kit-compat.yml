@@ -1,0 +1,8 @@
+# GERADO por ./instalar.sh — não edite à mão.
+#
+# O p11-kit do host está na mesma série do runtime, então não há nada a
+# compilar. Ver packaging/p11kit-series.txt.
+name: p11kit-compat
+buildsystem: simple
+build-commands:
+  - 'true  # host e runtime na mesma série do p11-kit; nada a fazer'

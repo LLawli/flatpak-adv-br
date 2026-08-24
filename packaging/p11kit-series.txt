@@ -1,0 +1,20 @@
+# Versões do p11-kit por série, para o caso de o host estar numa série
+# diferente da do runtime deste pacote.
+#
+# A ponte PKCS#11 é o remoting do p11-kit, e as duas pontas precisam concordar
+# sobre a tabela de funções que trafega no pipe. O runtime é fixo (série 0.26);
+# quem varia é o host. Quando divergem, o ./instalar.sh compila daqui um
+# p11-kit da série do host, isolado, e a ponte passa a usá-lo.
+#
+# Onde cada série aparece:
+#
+#   0.23  Debian bullseye, Ubuntu 20.04
+#   0.24  Debian bookworm, Ubuntu 22.04
+#   0.25  Debian trixie, Ubuntu 24.04
+#   0.26  Fedora 41+, Arch, openSUSE Tumbleweed, e o runtime deste pacote
+#
+# série  versão   sha256 do tarball em
+#                 https://github.com/p11-glue/p11-kit/releases/download/<versão>/p11-kit-<versão>.tar.xz
+0.23  0.23.22  8a8f40153dd5a3f8e7c03e641f8db400133fb2a6a9ab2aee1b6d0cb0495ec6b6
+0.24  0.24.1   d8be783efd5cd4ae534cee4132338e3f40f182c3205d23b200094ec85faaaef8
+0.25  0.25.5   04d0a86450cdb1be018f26af6699857171a188ac6d5b8c90786a60854e1198e5
