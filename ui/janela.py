@@ -20,6 +20,25 @@ import pkcs11  # noqa: E402
 import publicador  # noqa: E402
 
 
+def decidir(desenhado, real):
+    """O que fazer ao clicar, dado o que o botão mostrava e o que o disco diz.
+
+    Os dois podem divergir, e divergir é o caso interessante: a janela pode
+    estar aberta desde antes de algo mudar por fora (outra janela do mesmo
+    aplicativo, um `rm` no diretório de dados, uma instalação que terminou em
+    outro lugar). Quando isso acontece, agir pelo disco faz o botão executar o
+    OPOSTO do que ele diz, que foi como um clique em "Remover" acabou
+    reinstalando o PJeOffice.
+
+    Fazer o que o rótulo diz também não serve: seria remover o que não existe,
+    ou baixar de novo o que já está lá. A saída é não agir e sincronizar, que é
+    o único desfecho que não surpreende quem clicou.
+    """
+    if desenhado is not None and desenhado != real:
+        return "sincronizar"
+    return "remover" if real else "instalar"
+
+
 class Janela(Adw.ApplicationWindow):
     def __init__(self, aplicacao):
         super().__init__(application=aplicacao, title="Certificado Digital")
@@ -125,8 +144,10 @@ class Janela(Adw.ApplicationWindow):
 
         linha.add_suffix(progresso)
         linha.add_suffix(botao)
+        # "posto" guarda o que o botão mostra, para o clique poder comparar
+        # com o que o disco diz na hora. Ver decidir().
         return {"linha": linha, "botao": botao, "progresso": progresso,
-                "abrir": abrir}
+                "abrir": abrir, "posto": None}
 
     def atualizar_componentes(self):
         for componente in catalogo.CATALOGO:
@@ -134,6 +155,7 @@ class Janela(Adw.ApplicationWindow):
                 continue
             partes = self.linhas[componente.chave]
             posto = instalador.instalado(componente)
+            partes["posto"] = posto
             partes["botao"].set_label("Remover" if posto else "Instalar")
             partes["botao"].set_sensitive(True)
             partes["botao"].set_css_classes(["destructive-action"] if posto
@@ -343,7 +365,19 @@ class Janela(Adw.ApplicationWindow):
         dialogo.present()
 
     def _clicou(self, botao, componente):
-        if instalador.instalado(componente):
+        partes = self.linhas[componente.chave]
+        acao = decidir(partes["posto"], instalador.instalado(componente))
+
+        if acao == "sincronizar":
+            self.atualizar_componentes()
+            self.atualizar_publicacao()
+            self.atualizar_tokens()
+            self.toasts.add_toast(Adw.Toast(
+                title="O %s mudou por fora desta janela. Confira e clique de "
+                      "novo." % componente.nome))
+            return
+
+        if acao == "remover":
             instalador.desinstalar(componente)
             self.atualizar_componentes()
             self._republicar()
@@ -352,7 +386,6 @@ class Janela(Adw.ApplicationWindow):
             self.toasts.add_toast(Adw.Toast(title="%s removido" % componente.nome))
             return
 
-        partes = self.linhas[componente.chave]
         botao.set_sensitive(False)
         botao.set_label("Instalando…")
         partes["progresso"].set_visible(True)

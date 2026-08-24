@@ -216,5 +216,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+titulo "A interface"
+
+# Só o que dá para exercitar sem sessão gráfica. Ver tests/prova-janela.py.
+if [ -f ui/janela.py ]; then
+    if python3 tests/prova-janela.py; then
+        ok "as decisões de clique da janela"
+    else
+        falha "as decisões de clique da janela"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n%d passaram, %d falharam\n\n' "$passou" "$falhou"
 [ "$falhou" = 0 ]
