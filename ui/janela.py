@@ -28,7 +28,9 @@ class Janela(Adw.ApplicationWindow):
         cabecalho = Adw.HeaderBar()
         self.botao_atualizar = Gtk.Button(icon_name="view-refresh-symbolic",
                                           tooltip_text="Procurar o token de novo")
-        self.botao_atualizar.connect("clicked", lambda _: self.atualizar_tokens())
+        # Reavalia também os componentes: a extensão instalada por comando,
+        # fora da janela, só aparece aqui quando alguém pergunta de novo.
+        self.botao_atualizar.connect("clicked", lambda _: self.atualizar_tudo())
         cabecalho.pack_end(self.botao_atualizar)
 
         self.toasts = Adw.ToastOverlay()
@@ -79,6 +81,20 @@ class Janela(Adw.ApplicationWindow):
             self.grupo_assinadores.add(self.linhas[componente.chave]["linha"])
         pagina.add(self.grupo_assinadores)
 
+        # Aplicativos que chegam como extensão Flatpak. Grupo próprio porque a
+        # instalação é diferente do resto da tela: não é um clique, é um
+        # comando que a pessoa roda uma vez, e a janela precisa dizer isso sem
+        # parecer que o botão quebrou.
+        self.grupo_aplicativos = Adw.PreferencesGroup(
+            title="Aplicativos",
+            description=(
+                "Programas que usam o mesmo token. Vêm à parte porque são "
+                "grandes, e só quem precisa deles baixa."))
+        for componente in catalogo.por_tipo("aplicativo"):
+            self.linhas[componente.chave] = self._linha(componente)
+            self.grupo_aplicativos.add(self.linhas[componente.chave]["linha"])
+        pagina.add(self.grupo_aplicativos)
+
         rolagem = Gtk.ScrolledWindow(vexpand=True)
         rolagem.set_child(pagina)
         caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -118,7 +134,12 @@ class Janela(Adw.ApplicationWindow):
                 continue
             partes = self.linhas[componente.chave]
             posto = instalador.instalado(componente)
-            partes["botao"].set_label("Remover" if posto else "Instalar")
+            if componente.extensao:
+                # As reticências são a convenção de que o botão abre um
+                # diálogo em vez de fazer a coisa.
+                partes["botao"].set_label("Remover…" if posto else "Instalar…")
+            else:
+                partes["botao"].set_label("Remover" if posto else "Instalar")
             partes["botao"].set_sensitive(True)
             partes["botao"].set_css_classes(["destructive-action"] if posto
                                             else ["suggested-action"])
@@ -127,6 +148,12 @@ class Janela(Adw.ApplicationWindow):
             # precisa saber do primeiro número antes de tocar no botão.
             if posto:
                 sufixo = " · instalado"
+            elif componente.extensao:
+                # Aqui o tamanho é o da extensão inteira, com a JVM dentro, e
+                # não há barra de progresso para acompanhar: quem baixa é o
+                # Flatpak, no terminal.
+                sufixo = " · %d MB, instala por comando" % (
+                    componente.tamanho // (1024 * 1024))
             elif componente.tamanho:
                 sufixo = " · %d MB para baixar" % (
                     componente.tamanho // (1024 * 1024))
@@ -135,6 +162,11 @@ class Janela(Adw.ApplicationWindow):
             partes["linha"].set_subtitle(componente.resumo + sufixo)
             partes["abrir"].set_visible(
                 bool(posto and instalador.lancador(componente)))
+
+    def atualizar_tudo(self):
+        self.atualizar_componentes()
+        self.atualizar_publicacao()
+        self.atualizar_tokens()
 
     def _abrir(self, _botao, componente):
         caminho = instalador.lancador(componente)
@@ -243,7 +275,54 @@ class Janela(Adw.ApplicationWindow):
         dialogo.present()
 
     # ------------------------------------------------------------------
+    def _mostrar_comando(self, componente, posto):
+        """O diálogo do que a janela não pode fazer sozinha.
+
+        Um aplicativo em sandbox não instala nem remove um Flatpak: fazer isso
+        exigiria a permissão org.freedesktop.Flatpak, que é acesso irrestrito à
+        máquina, e pedi-la para instalar uma extensão seria trocar um comando
+        eventual por um risco permanente. Então a janela faz o que pode: diz
+        exatamente qual é o comando.
+        """
+        if posto:
+            comando = instalador.comando_de_desinstalar(componente)
+            corpo = ["Para remover o %s, cole isto num terminal:" % componente.nome,
+                     "", comando]
+        else:
+            comando = instalador.comando_de_instalar(componente)
+            corpo = [componente.detalhe, "",
+                     "Cole isto num terminal e volte aqui:", "", comando]
+            # A permissão opcional aparece aqui, junto do resto, e não como um
+            # segundo diálogo depois: quem está lendo comandos já está no
+            # terminal. E aparece como opcional de verdade, com o que se perde
+            # ao não dar: nada do fluxo pelo navegador depende dela.
+            if componente.permissao and not permissoes.tem_documentos():
+                argumento, para_que = componente.permissao
+                corpo += ["", "Opcional, só se você for %s:" % para_que, "",
+                          permissoes.comando_opcional(argumento)]
+
+        dialogo = Adw.MessageDialog(
+            transient_for=self,
+            heading=("Remover o %s" if posto else "Instalar o %s") % componente.nome,
+            body="\n".join(corpo))
+        dialogo.add_response("fechar", "Fechar")
+        dialogo.add_response("copiar", "Copiar comando")
+        dialogo.set_response_appearance("copiar", Adw.ResponseAppearance.SUGGESTED)
+        dialogo.connect("response", self._respondeu_comando, comando)
+        dialogo.present()
+
+    def _respondeu_comando(self, dialogo, resposta, comando):
+        if resposta != "copiar":
+            return
+        self.get_clipboard().set(comando)
+        self.toasts.add_toast(Adw.Toast(
+            title="Comando copiado. Depois de rodá-lo, toque em atualizar."))
+
     def _clicou(self, botao, componente):
+        if componente.extensao:
+            self._mostrar_comando(componente, instalador.instalado(componente))
+            return
+
         if instalador.instalado(componente):
             instalador.desinstalar(componente)
             self.atualizar_componentes()

@@ -94,6 +94,26 @@ def faltando():
             if not _alcanca(caminhos, pontos)]
 
 
+def tem_documentos():
+    """A pasta Documentos está montada neste sandbox?
+
+    É a única permissão OPCIONAL do aplicativo: nada do que ele faz por conta
+    própria precisa dela. Quem pede é o assinador de arquivos avulsos do
+    PJeOffice, e por isso ela é oferecida depois de instalar, com o motivo, em
+    vez de vir no manifesto. Permissão que o aplicativo não usa é permissão que
+    ele não deve ter.
+    """
+    documentos = [os.path.join(_casa(), "Documentos"),
+                  os.path.join(_casa(), "Documents"),
+                  os.environ.get("XDG_DOCUMENTS_DIR", "")]
+    return _alcanca([d for d in documentos if d], _pontos_de_montagem())
+
+
+def comando_opcional(argumento):
+    """O comando que concede UMA permissão opcional, pronto para colar."""
+    return "flatpak override --user %s %s" % (argumento, APP_ID)
+
+
 def comando(pendencias):
     """O comando que devolve as permissões que faltam, pronto para colar."""
     argumentos = " ".join(argumento for _, _, argumento in pendencias)
