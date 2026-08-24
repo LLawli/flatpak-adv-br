@@ -1,0 +1,84 @@
+# Extensão opcional: driver SafeSign IC Standard (AET Europe).
+#
+# O SafeSign é o driver do token GD Burti, o mais comum na advocacia. Sua
+# licença permite ao licenciado usar e guardar uma cópia de backup, não
+# redistribuir. Por isso ele não vem no pacote base: este manifesto baixa o
+# instalador da URL do próprio fabricante, na máquina de quem o construiu.
+#
+#   flatpak-builder --user --force-clean --install build-driver-safesign \
+#       drivers/io.github.llawli.AdvBr.Driver.SafeSign.yml
+#
+# Depois de instalada, a extensão é descoberta sozinha: o lançador do app varre
+# lib/pkcs11/drivers/*/pkcs11/*.so e registra cada um no p11-kit do sandbox.
+id: io.github.llawli.AdvBr.Driver.SafeSign
+branch: master
+runtime: io.github.llawli.AdvBr
+runtime-version: master
+sdk: org.freedesktop.Sdk//24.08
+build-extension: true
+appstream-compose: false
+separate-locales: false
+
+build-options:
+  prefix: /app/lib/pkcs11/drivers/SafeSign
+  prepend-ld-library-path: /app/lib/pkcs11/drivers/SafeSign/lib
+  prepend-pkg-config-path: /app/lib/pkcs11/drivers/SafeSign/lib/pkgconfig
+
+cleanup:
+  - /bin
+  - /include
+  - /lib/pkgconfig
+  - /share
+  - '*.la'
+  - '*.a'
+
+modules:
+  # libaetpkss.so precisa de libgdbm_compat.so.4, que o runtime não traz. É a
+  # interface antiga do gdbm e só existe com --enable-libgdbm-compat.
+  - name: gdbm
+    buildsystem: autotools
+    config-opts:
+      - --enable-libgdbm-compat
+      - --disable-static
+      - --without-readline
+    sources:
+      - type: archive
+        url: https://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz
+        sha256: 6a24504a14de4a744103dcb936be976df6fbe88ccff26065e54c1c47946f4a5e
+
+  - name: safesign
+    buildsystem: simple
+    build-commands:
+      - ar x safesign.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      # Só a biblioteca PKCS#11. As outras do pacote servem ao tokenadmin, que
+      # depende de wxWidgets e não cabe aqui; para trocar o PIN do token, use o
+      # tokenadmin do sistema.
+      - install -Dm755 deb/usr/lib/libaetpkss.so.3.9.33.1
+        "${FLATPAK_DEST}/pkcs11/libaetpkss.so"
+      # Uma extensão que instale a biblioteca sem conseguir resolvê-la só
+      # falharia na hora de assinar, com o token na mão.
+      - |
+        set -eu
+        # /app/lib é onde o app base guarda o libpcsclite; ele está no
+        # caminho do carregador em tempo de execução, mas não no do build
+        # da extensão, cujo prefixo é o diretório da própria extensão.
+        faltando=$(LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" \
+            ldd "${FLATPAK_DEST}/pkcs11/libaetpkss.so" \
+            | grep 'not found' || true)
+        if [ -n "$faltando" ]; then
+            echo "dependencias nao resolvidas em libaetpkss.so:" >&2
+            echo "$faltando" >&2
+            exit 1
+        fi
+      # 'ldd' não vê símbolo indefinido: ele lista o que falta em DT_NEEDED. Foi
+      # assim que o driver do SerproID passou no build e falhou só na hora de
+      # ser carregado. Abrir a biblioteca de verdade é o que pega isso.
+      - LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" python3 -c
+        "import ctypes, sys; ctypes.CDLL(sys.argv[1])"
+        "${FLATPAK_DEST}/pkcs11/libaetpkss.so"
+    sources:
+      - type: file
+        url: https://assets.ctfassets.net/zuadwp3l2xby/6vGICRnQgQ8TkcHTgcouIr/5acf96dcbc0364aa9228606d3969ef97/SafeSignICStandardLinux4.5.0.0-AET.000ub2404x86_64.deb
+        sha256: 7742e21e3141e51e307d7613b4046886bc7c4aa203835dcf5c43cd348f2a1b91
+        dest-filename: safesign.deb

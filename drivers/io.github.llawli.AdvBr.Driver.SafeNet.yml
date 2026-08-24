@@ -1,0 +1,69 @@
+# Extensão opcional: driver SafeNet Authentication Client (Thales).
+#
+# Driver dos tokens SafeNet (eToken 5100, 5110, IDPrime). Como o SafeSign, é
+# proprietário e não redistribuível, então este manifesto baixa o instalador do
+# próprio fabricante na máquina de quem o constrói:
+#
+#   flatpak-builder --user --force-clean --install build-driver-safenet \
+#       drivers/io.github.llawli.AdvBr.Driver.SafeNet.yml
+#
+# É usada a variante "withoutUI" do pacote: a interface gráfica do SAC depende
+# de componentes que não cabem aqui, e o que interessa é a biblioteca PKCS#11.
+id: io.github.llawli.AdvBr.Driver.SafeNet
+branch: master
+runtime: io.github.llawli.AdvBr
+runtime-version: master
+sdk: org.freedesktop.Sdk//24.08
+build-extension: true
+appstream-compose: false
+separate-locales: false
+
+build-options:
+  prefix: /app/lib/pkcs11/drivers/SafeNet
+  prepend-ld-library-path: /app/lib/pkcs11/drivers/SafeNet/lib
+
+modules:
+  - name: safenet
+    buildsystem: simple
+    build-commands:
+      - ar x "Installation/withoutUI/Ubuntu-2204/safenetauthenticationclient-core_10.9.4723_amd64.deb"
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      # A libeToken abre as demais por dlopen, então todas precisam estar no
+      # LD_LIBRARY_PATH que o lançador monta a partir de lib/.
+      - install -d "${FLATPAK_DEST}/lib" "${FLATPAK_DEST}/pkcs11" "${FLATPAK_DEST}/etc"
+      - cp -a deb/usr/lib/*.so* "${FLATPAK_DEST}/lib/"
+      - install -Dm755 deb/usr/lib/libeToken.so.10.9.4723
+        "${FLATPAK_DEST}/pkcs11/libeToken.so"
+      # Configuração que a biblioteca procura em /etc por caminho absoluto;
+      # quem a põe lá em cada execução é o preparar.sh.
+      - install -Dm644 deb/etc/eToken.conf "${FLATPAK_DEST}/etc/eToken.conf"
+      - install -Dm644 deb/etc/eToken.common.conf
+        "${FLATPAK_DEST}/etc/eToken.common.conf"
+      - install -Dm755 safenet-preparar.sh "${FLATPAK_DEST}/preparar.sh"
+      # Uma biblioteca instalada que o carregador não resolva é indistinguível
+      # de driver ausente até a hora de assinar.
+      - |
+        set -eu
+        faltando=$(LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" \
+            ldd "${FLATPAK_DEST}/pkcs11/libeToken.so" \
+            | grep 'not found' || true)
+        if [ -n "$faltando" ]; then
+            echo "dependencias nao resolvidas em libeToken.so:" >&2
+            echo "$faltando" >&2
+            exit 1
+        fi
+      # 'ldd' não vê símbolo indefinido: ele lista o que falta em DT_NEEDED. Foi
+      # assim que o driver do SerproID passou no build e falhou só na hora de
+      # ser carregado. Abrir a biblioteca de verdade é o que pega isso.
+      - LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" python3 -c
+        "import ctypes, sys; ctypes.CDLL(sys.argv[1])"
+        "${FLATPAK_DEST}/pkcs11/libeToken.so"
+    sources:
+      - type: archive
+        url: https://www.digicert.com/StaticFiles/Linux_SAC_10.9_GA.zip
+        sha256: 46759cfe91d736af18a49d10e4749f264022db44e04ed4caf94e1ca77d6a013e
+        # O zip tem um diretório "SAC_10.9 GA" no topo, que o strip-components
+        # padrão do flatpak-builder já remove; daí o caminho começar em
+        # Installation/.
+      - type: file
+        path: safenet-preparar.sh

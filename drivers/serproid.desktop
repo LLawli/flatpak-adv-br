@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SerproID
+GenericName=Certificado digital em nuvem
+Comment=Associa e usa os certificados do SerproID
+Categories=Utility;Security;System;
+Keywords=certificado;assinatura;serpro;icp-brasil;
+Exec=@EXEC@
+Icon=@ICONE@
+Terminal=false
+StartupNotify=true

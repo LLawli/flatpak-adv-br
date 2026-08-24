@@ -1,0 +1,115 @@
+# Extensão opcional: SerproID (certificado em nuvem do Serpro).
+#
+# O SerproID não é um driver de token: é um aplicativo mais uma biblioteca. Os
+# certificados ficam na nuvem do Serpro, o aplicativo autentica e grava cada um
+# como um .cer em ~/.config/serproid/certificados, e a biblioteca PKCS#11 lê
+# esse diretório e fala direto com a nuvem na hora de usar a chave privada.
+#
+# A interface entre as duas metades é esse diretório de arquivos — não um
+# socket, não um serviço — e é por isso que dá para trazer as duas para dentro
+# do Flatpak. Esta extensão traz o aplicativo inteiro, com o JRE Zulu 8 e o
+# JavaFX que ele embarca, e não depende de nada instalado no host.
+#
+#   make driver-serproid   # instala
+#   make serproid          # abre o aplicativo, para associar o certificado
+#
+# Custa cerca de 280 MB, quase tudo o JRE embarcado: o aplicativo usa a API do
+# JavaFX 8, que o openjdk11 do SDK não tem.
+id: io.github.llawli.AdvBr.Driver.SerproID
+branch: master
+runtime: io.github.llawli.AdvBr
+runtime-version: master
+sdk: org.freedesktop.Sdk//24.08
+build-extension: true
+appstream-compose: false
+separate-locales: false
+
+build-options:
+  prefix: /app/lib/pkcs11/drivers/SerproID
+  prepend-ld-library-path: /app/lib/pkcs11/drivers/SerproID/lib
+
+modules:
+  # Existe por um motivo só, e some no fim: ver o --add-needed no módulo
+  # seguinte. Nenhum arquivo dele fica na extensão.
+  - name: patchelf
+    buildsystem: autotools
+    cleanup:
+      - /bin/patchelf
+      - /share/doc
+      - /share/man
+    sources:
+      - type: archive
+        url: https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0.tar.gz
+        sha256: 64de10e4c6b8b8379db7e87f58030f336ea747c0515f381132e810dbf84a86e7
+
+  - name: serproid
+    buildsystem: simple
+    build-commands:
+      - ar x serproid.deb
+      - mkdir -p deb && tar -xf data.tar.* -C deb
+      - install -Dm755 deb/usr/lib/libserproidp11.so
+        "${FLATPAK_DEST}/pkcs11/libserproidp11.so"
+      - install -Dm755 serproid-preparar.sh "${FLATPAK_DEST}/preparar.sh"
+      # O aplicativo, com o JRE e os certificados de AC que ele instala. O
+      # lançador entra em app/ antes de subir a JVM porque o aplicativo resolve
+      # tools/ e lib/ relativos ao diretório de trabalho.
+      - cp -a deb/usr/share/serproid-desktop "${FLATPAK_DEST}/app"
+      - install -Dm755 serproid-lancador.sh "${FLATPAK_DEST}/bin/serproid"
+      # Atalho de menu. A convenção está em drivers/README.md: o que estiver em
+      # atalhos/<nome>.{desktop,png} é oferecido ao host pelo
+      # ./host/publicar.sh, que substitui @EXEC@ e @ICONE@ pelos caminhos de
+      # lá. Um .desktop dentro da extensão não é exportado pelo Flatpak — só o
+      # do aplicativo é — e por isso a travessia é explícita.
+      - install -Dm644 serproid.desktop "${FLATPAK_DEST}/atalhos/serproid.desktop"
+      - install -Dm644 deb/usr/share/serproid-desktop/SerproID.png
+        "${FLATPAK_DEST}/atalhos/serproid.png"
+      # O aplicativo é metade da solução; sem ele não há certificado nenhum
+      # para a biblioteca ler, e a falta só apareceria na hora de assinar.
+      - test -x "${FLATPAK_DEST}/app/jre/bin/java"
+      - test -s "${FLATPAK_DEST}/app/lib/NeoID.jar"
+      # A libserproidp11.so usa símbolos da libgcc_s (_Unwind_Resume_or_Rethrow)
+      # e NÃO a declara em DT_NEEDED. Quem a abre com dlopen — o p11-kit, o
+      # assinador, o PJeOffice — falha com "undefined symbol", a não ser que
+      # alguma outra coisa já tenha trazido a libgcc_s para aquele processo.
+      # Declarar a dependência que falta faz a biblioteca se bastar em qualquer
+      # processo, em vez de depender de sorte ou de LD_PRELOAD no chamador.
+      # Pelo caminho: o prefixo desta extensão não está no PATH do build. As
+      # aspas simples são do YAML — um escalar não pode começar com aspas
+      # duplas e continuar depois delas.
+      - '"${FLATPAK_DEST}/bin/patchelf" --add-needed libgcc_s.so.1 "${FLATPAK_DEST}/pkcs11/libserproidp11.so"'
+      - '"${FLATPAK_DEST}/bin/patchelf" --print-needed "${FLATPAK_DEST}/pkcs11/libserproidp11.so" | grep -qx libgcc_s.so.1'
+      - |
+        set -eu
+        faltando=$(LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" \
+            ldd "${FLATPAK_DEST}/pkcs11/libserproidp11.so" \
+            | grep 'not found' || true)
+        if [ -n "$faltando" ]; then
+            echo "dependencias nao resolvidas em libserproidp11.so:" >&2
+            echo "$faltando" >&2
+            exit 1
+        fi
+      # 'ldd' não vê símbolo indefinido: ele lista o que falta em DT_NEEDED, e
+      # foi exatamente por isso que este driver passou no build e falhou ao ser
+      # carregado. A prova é abrir a biblioteca de verdade.
+      #
+      # O HOME próprio não é zelo: a libserproidp11 faz readdir em
+      # ~/.config/serproid/certificados assim que é carregada e derruba com
+      # SIGSEGV quem a carregou se o diretório não existir.
+      - |
+        set -eu
+        casa=$(pwd)/casa-de-teste
+        mkdir -p "$casa/.config/serproid/certificados"
+        HOME="$casa" LD_LIBRARY_PATH="${FLATPAK_DEST}/lib:/app/lib" \
+            python3 -c "import ctypes, sys; ctypes.CDLL(sys.argv[1])" \
+            "${FLATPAK_DEST}/pkcs11/libserproidp11.so"
+    sources:
+      - type: file
+        url: https://storagegw.estaleiro.serpro.gov.br/instalador-desktop/SerproID-2.1.6-amd64.deb
+        sha256: 0ffa9ffe5bc343cc758a12f28bd7f08aec4b6e843d1c043baf0b81572461e588
+        dest-filename: serproid.deb
+      - type: file
+        path: serproid-preparar.sh
+      - type: file
+        path: serproid-lancador.sh
+      - type: file
+        path: serproid.desktop
