@@ -29,54 +29,34 @@ diferentes, porque são dois problemas diferentes:
 Nos dois casos, o que se escreve no host é um arquivo de configuração dentro da
 sua própria home. Nada é instalado no sistema, nada precisa de `sudo`.
 
-## O que vem no pacote
+## O que vem, e o que você escolhe
 
-| | |
-|---|---|
-| **OpenSC** | cobre boa parte dos cartões e tokens ICP-Brasil, e é software livre |
-| **Lacuna Web PKI** | assinar em sistemas que usam o componente da Lacuna |
-| **Softplan WebSigner** | assinar nos sistemas SAJ |
-| **Certisign WebSigner** | portal de assinatura eletrônica da OAB |
-| **PJeOffice Pro** | assinar no PJe (CNJ). Tem atalho próprio no menu |
+O **pacote base** tem poucos megabytes e traz o que todo mundo usa: o OpenSC,
+que já reconhece parte dos cartões e tokens ICP-Brasil, e a ponte que leva o
+token aos navegadores, ao Papers e aos aplicativos.
 
-Os drivers proprietários entram como **extensões**, que você constrói com uma
-opção do instalador:
+Todo o resto é extensão, instalada quando você for usar — e pode ser depois:
 
-| Opção | Para que serve |
-|---|---|
-| `--with-safesign` | token GD Burti, o mais usado na advocacia |
-| `--with-safenet` | eToken 5100, 5110, IDPrime |
-| `--with-serproid` | certificado em nuvem do Serpro (traz também o aplicativo) |
-| `--with-drivers` | os três |
+| opção | o que traz | tamanho |
+|---|---|---|
+| `--with-safesign` | driver do token GD Burti, o mais usado na advocacia | ~2 MB |
+| `--with-safenet` | driver dos eToken 5100, 5110 e IDPrime | ~30 MB |
+| `--with-serproid` | certificado em nuvem do Serpro, com o aplicativo dele | ~288 MB |
+| `--with-webpki` | Lacuna Web PKI, para assinar em navegador | ~142 MB |
+| `--with-websigner` | Softplan WebSigner, dos sistemas SAJ | ~140 MB |
+| `--with-certisign` | Certisign WebSigner, do portal da OAB | ~2 MB |
+| `--with-pjeoffice` | PJeOffice Pro, para assinar no PJe (CNJ) | ~296 MB |
+| `--with-drivers`, `--with-assinadores`, `--with-tudo` | os grupos | |
 
-**Instale só o driver do token que você usa.** Cada driver instalado é um
-módulo a mais que o navegador enumera ao abrir, e um deles cobra caro por isso:
-o SafeNet, sem token SafeNet espetado, leva mais de um minuto. A seção 6 do
-`./diagnostico.sh` cronometra cada um e avisa.
+Nada disso vem embutido por dois motivos que se somam. **Licença**: SafeSign,
+SafeNet, SerproID e os assinadores permitem ao licenciado usar e guardar uma
+cópia de backup, não redistribuir — cada extensão baixa da URL do próprio
+fabricante, na sua máquina. E **tamanho**: quem não usa o PJe não deveria
+baixar 300 MB de Java para descobrir isso.
 
-Eles não vêm no pacote porque as licenças de SafeSign, SafeNet e SerproID
-permitem ao licenciado usar e guardar uma cópia de backup, **não redistribuir**.
-Um manifesto que você constrói na sua máquina, baixando da URL do fabricante,
-não é redistribuição. Ver [drivers/README.md](drivers/README.md).
-
-Instalado o SerproID, o aplicativo dele **aparece no menu** — é por ele que se
-associa o certificado da nuvem antes de assinar. Pela linha de comando:
-
-```bash
-flatpak run --command=adv-br-ferramentas io.github.llawli.AdvBr serproid
-```
-
-O **PJeOffice Pro** vem junto e aparece no menu com atalho próprio. Ele também
-existe como pacote separado, em
-[PjeOffice-flatpak](https://github.com/LLawli/PjeOffice-flatpak), para quem quer
-só o assinador do PJe — aquele pacote **usa estas mesmas extensões de driver**.
-Ter os dois instalados funciona, mas é redundante: são o mesmo assinador, a
-mesma configuração em `~/.pjeoffice-pro` e a mesma porta 127.0.0.1:8800, e o
-menu mostra duas entradas iguais. Escolha um.
-
-Instale o driver uma vez e os navegadores, o Papers e o PJeOffice enxergam o
-mesmo token, com uma cópia só no disco. Como outro pacote consome estas
-extensões está em [drivers/README.md](drivers/README.md).
+Como se escreve uma extensão nova está em
+[drivers/README.md](drivers/README.md),
+[assinadores/README.md](assinadores/README.md) e [apps/README.md](apps/README.md).
 
 O **VIDaaS**, certificado em nuvem da Valid, não entra: não existe biblioteca
 para Linux.
@@ -130,25 +110,28 @@ cd flatpak-adv-br
 ./instalar.sh
 ```
 
-Com o driver do seu token, que é o caso comum:
+Isso instala o pacote base e o publica para os navegadores. Com o driver do seu
+token e o assinador que o seu tribunal usa, que é o caso comum:
 
 ```bash
-./instalar.sh --with-safesign          # GD Burti
-./instalar.sh --with-safenet           # eToken
+./instalar.sh --with-safesign --with-webpki
 ```
 
-Opções:
+**Rodar de novo acrescenta.** Instalou o driver hoje e amanhã descobriu que
+precisa do PJeOffice? `./instalar.sh --with-pjeoffice` — o que já está pronto
+não é refeito, e nada do que você tinha é perdido. O comando é idempotente:
+pode ser repetido à vontade.
 
 ```bash
-./instalar.sh --sem-publicar   # só constrói e instala; não toca em nada fora
-./instalar.sh --conceder       # já concede as permissões dos navegadores Flatpak
-./instalar.sh --refazer        # reconstrói extensões já instaladas
+./instalar.sh --with-tudo         # tudo, se você prefere não escolher
+./instalar.sh --refazer           # reconstrói o que já está instalado
+./instalar.sh --sem-publicar      # só constrói; não toca em nada fora
+./instalar.sh --conceder          # já concede as permissões dos navegadores Flatpak
 ./instalar.sh --ajuda
 ```
 
-A construção baixa dos sites dos fabricantes: são cerca de 95 MB de assinadores,
-mais o que cada driver pedido pesar. O instalador é **idempotente**: se algo
-falhar no meio, corrija a causa e rode de novo.
+Se algo falhar no meio, corrija a causa e rode de novo: o instalador continua
+de onde parou, e uma extensão que falhe não impede as outras.
 
 Ao final, confira com:
 
