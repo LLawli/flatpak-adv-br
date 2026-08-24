@@ -141,18 +141,41 @@ exige um pacote a mais num sistema atômico.
 
 ## Instalação
 
+Um comando, sem clonar nada:
+
 ```bash
-git clone https://github.com/LLawli/flatpak-adv-br
-cd flatpak-adv-br
-./instalar.sh
+curl -fsSL https://raw.githubusercontent.com/LLawli/flatpak-adv-br/main/packaging/install.sh | sh
 ```
 
 Isso instala o pacote base e o publica para os navegadores. Com o driver do seu
 token e o assinador que o seu tribunal usa, que é o caso comum:
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/LLawli/flatpak-adv-br/main/packaging/install.sh | sh -s -- --with-safesign --with-webpki
+```
+
+Se preferir olhar o código antes — e você deveria, é um script que constrói
+pacotes na sua máquina:
+
+```bash
+git clone https://github.com/LLawli/flatpak-adv-br
+cd flatpak-adv-br
 ./instalar.sh --with-safesign --with-webpki
 ```
+
+### O que fica no seu sistema
+
+| onde | o quê |
+|---|---|
+| `~/.local/share/flatpak-adv-br` | o código, que você usa depois para publicar e diagnosticar (centenas de KB) |
+| os Flatpaks | o pacote base e as extensões que você pediu |
+| sua home | os arquivos de configuração que o `publicar.sh` escreve |
+
+**Nenhum artefato de construção.** Eles são feitos em
+`~/.cache/flatpak-adv-br/construcao` e apagados no fim — o cache do `flatpak-builder` de
+uma instalação completa passa de 1 GB. Quem clona à mão e roda `./instalar.sh`
+mantém esse cache (que é o que torna a próxima construção rápida); para apagá-lo,
+`./instalar.sh --limpar` ou `make limpar`.
 
 **Rodar de novo acrescenta.** Instalou o driver hoje e amanhã descobriu que
 precisa do PJeOffice? `./instalar.sh --with-pjeoffice` — o que já está pronto

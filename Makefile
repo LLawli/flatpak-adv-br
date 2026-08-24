@@ -52,5 +52,8 @@ desinstalar:
 	./host/publicar.sh --remover
 	-flatpak uninstall --user -y $(APP_ID)
 
+# Os artefatos vivem em ~/.cache/flatpak-adv-br desde a 0.1.0; os caminhos
+# antigos ficam aqui para limpar quem construiu antes disso.
 limpar:
+	rm -rf "$${XDG_CACHE_HOME:-$$HOME/.cache}/flatpak-adv-br/construcao"
 	rm -rf build-dir build-* repo .flatpak-builder

@@ -16,10 +16,24 @@ cd "$RAIZ"
 
 MANIFESTO="$RAIZ/$APP_ID.yml"
 REMOTO_LOCAL=adv-br-local
+
+# Onde os artefatos de construção moram.
+#
+# NÃO no diretório do projeto: o flatpak-builder cria ali um .flatpak-builder
+# que passa de 1 GB e um build-dir por extensão, e quem instalou por curl não
+# tem por que descobrir isso depois. Em ~/.cache eles ficam onde se espera que
+# fique cache — apagável a qualquer momento, e é o que --limpar faz.
+#
+# Também não em /tmp: numa máquina com /tmp em tmpfs, os 288 MB do SerproID
+# seriam RAM.
+# O subdiretório importa: --limpar apaga este caminho inteiro, e ele não pode
+# ser um diretório que alguém possa estar usando para outra coisa.
+TRABALHO=${ADV_BR_TRABALHO:-${XDG_CACHE_HOME:-$HOME/.cache}/flatpak-adv-br/construcao}
 PEDIDOS=()
 PUBLICAR=1
 CONCEDER=0
 REFAZER=0
+LIMPAR=0
 
 # opção            → manifesto da extensão
 #
@@ -65,6 +79,7 @@ outra opção acrescenta sem refazer o que já está pronto:
 
   --with-tudo        tudo o que está acima
   --refazer          reconstrói o que já está instalado
+  --limpar           apaga os artefatos de construção ao terminar
   --sem-publicar     só constrói e instala; não toca em nada fora do Flatpak
   --conceder         concede as permissões dos navegadores em Flatpak
   --ajuda            esta mensagem
@@ -89,6 +104,7 @@ while [ $# -gt 0 ]; do
             PEDIDOS+=("$alvo")
             ;;
         --refazer)       REFAZER=1 ;;
+        --limpar)        LIMPAR=1 ;;
         --sem-publicar)  PUBLICAR=0 ;;
         --conceder)      CONCEDER=1 ;;
         --ajuda|-h)      ajuda; exit 0 ;;
@@ -284,8 +300,9 @@ titulo "Construindo o $APP_ID"
 # --disable-rofiles-fuse: em sistema de arquivos sem suporte a rofiles-fuse
 # (btrfs com composefs, e o overlay de contêiner) o build falha lá pelo meio,
 # com um erro que não diz o que fazer.
-if "${construtor[@]}" --user --force-clean --disable-rofiles-fuse --install \
-    "$RAIZ/build-dir" "$MANIFESTO"; then
+mkdir -p "$TRABALHO"
+if "${construtor[@]}" --user --force-clean --disable-rofiles-fuse \
+    --state-dir "$TRABALHO/estado" --install "$TRABALHO/base" "$MANIFESTO"; then
     ok "$APP_ID instalado"
 else
     # A construção pode ter terminado e só a instalação ter falhado: o
@@ -297,15 +314,15 @@ else
     # O que já está construído não precisa de remoto nenhum para ser
     # instalado. Exportar para um repositório local e instalar de lá é o mesmo
     # resultado, sem rede.
-    [ -d "$RAIZ/build-dir/files" ] ||
-        erro "a construção falhou (não há build-dir/files); veja o erro acima."
+    [ -d "$TRABALHO/base/files" ] ||
+        erro "a construção falhou (não há $TRABALHO/base/files); veja o erro acima."
 
     aviso "a construção terminou, mas a instalação falhou — normalmente é o
       remoto lento no último passo. Instalando a partir do que já foi
       construído, sem consultar remoto."
 
-    REPO_LOCAL="$RAIZ/repo"
-    flatpak build-export "$REPO_LOCAL" "$RAIZ/build-dir" master >/dev/null ||
+    REPO_LOCAL="$TRABALHO/repo"
+    flatpak build-export "$REPO_LOCAL" "$TRABALHO/base" master >/dev/null ||
         erro "não consegui exportar o build para $REPO_LOCAL."
     flatpak remote-add --user --if-not-exists --no-gpg-verify \
         "$REMOTO_LOCAL" "$REPO_LOCAL" >/dev/null 2>&1 || true
@@ -346,14 +363,21 @@ if [ ${#PEDIDOS[@]} -gt 0 ]; then
         log "construindo $alvo ..."
         # Um diretório de build por extensão: um compartilhado misturaria as
         # árvores de duas delas.
-        if "${construtor[@]}" --user --force-clean --disable-rofiles-fuse --install \
-            "$RAIZ/build-$alvo" "$manifesto"; then
+        if "${construtor[@]}" --user --force-clean --disable-rofiles-fuse \
+            --state-dir "$TRABALHO/estado" --install "$TRABALHO/$alvo" "$manifesto"; then
             ok "$alvo instalado"
         else
             aviso "$alvo falhou. As outras extensões seguem; para tentar de novo:
       ./instalar.sh --with-$alvo --refazer"
         fi
     done
+fi
+
+# ---------------------------------------------------------------------------
+if [ "$LIMPAR" = 1 ]; then
+    titulo "Limpeza"
+    rm -rf "$TRABALHO"
+    ok "artefatos de construção removidos de $TRABALHO"
 fi
 
 # ---------------------------------------------------------------------------
