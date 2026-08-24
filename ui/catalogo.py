@@ -13,7 +13,7 @@ import collections
 Componente = collections.namedtuple(
     "Componente",
     "chave nome resumo detalhe tipo url sha256 arquivos tamanho ca lancador "
-    "dentro_de_zip fontes trocas permissao",
+    "dentro_de_zip fontes trocas permissao serie",
 )
 
 # Um componente que precisa de mais de um pacote: o PJeOffice é o programa do
@@ -35,9 +35,11 @@ Fonte.__new__.__defaults__ = ("deb", 0)
 #                  não tem url nem sha256: cada fonte traz os seus.
 #   trocas         edições em arquivo de texto instalado, no formato
 #                  {destino: (prefixo da linha, linha nova)}.
+#   serie          série do p11-kit que o componente atende, só para os de
+#                  tipo "compatibilidade". Ver ui/serie.py.
 #   permissao      permissão OPCIONAL, com o motivo, oferecida depois de
 #                  instalar. Nunca aplicada sozinha nem exigida.
-Componente.__new__.__defaults__ = ("", "", "", (), {}, None)
+Componente.__new__.__defaults__ = ("", "", "", (), {}, None, "")
 
 # tipo:
 #   driver     apresenta o token ao sistema (vira módulo PKCS#11)
@@ -327,6 +329,96 @@ exec "$COMPONENTE/jre/bin/java" \
         ),
         # O que se baixa: 65 MB do CNJ mais 90 MB da máquina virtual.
         tamanho=155 * 1024 * 1024,
+    ),
+]
+
+# Compatibilidade da ponte com o p11-kit do sistema.
+#
+# Não aparecem na lista de drivers nem na de aplicativos: a janela só mostra o
+# da série do host, e só quando ela difere da do runtime. Instalar o errado não
+# resolve nada e ainda troca uma biblioteca por outra sem motivo.
+#
+# São compilados por bin/compilar-p11kit, do tarball oficial, dentro do mesmo
+# SDK do aplicativo. O p11-kit é BSD-3-Clause, então redistribuí-lo é
+# permitido, ao contrário dos drivers proprietários deste catálogo.
+CATALOGO += [
+    Componente(
+        chave="p11kit-025",
+        nome="Compatibilidade de assinatura",
+        resumo="O seu sistema precisa disto para assinar",
+        detalhe=(
+            "O seu sistema usa uma versão do p11-kit diferente da que vem no "
+            "aplicativo. Sem este ajuste, o certificado aparece e o PIN é "
+            "aceito, mas nenhuma assinatura funciona, nem para entrar no "
+            "Projudi ou no eproc."
+        ),
+        tipo="compatibilidade",
+        serie="0.25",
+        url="",
+        sha256="",
+        arquivos={},
+        fontes=(
+            Fonte(
+                url="https://flatpak.lukakuuhaku.dev/componentes/p11kit-0.25.tar.gz",
+                sha256="592fe87efbb07b8606c5399e9a69001007b2cadf510d1e821c4fb3025209ac3a",
+                arquivos={"lib/": "lib", "libexec/": "libexec"},
+                formato="tar",
+                cortar=1,
+            ),
+        ),
+        tamanho=1 * 1024 * 1024,
+    ),
+    Componente(
+        chave="p11kit-023",
+        nome="Compatibilidade de assinatura",
+        resumo="O seu sistema precisa disto para assinar",
+        detalhe=(
+            "O seu sistema usa uma versão do p11-kit diferente da que vem no "
+            "aplicativo. Sem este ajuste, o certificado aparece e o PIN é "
+            "aceito, mas nenhuma assinatura funciona, nem para entrar no "
+            "Projudi ou no eproc."
+        ),
+        tipo="compatibilidade",
+        serie="0.23",
+        url="",
+        sha256="",
+        arquivos={},
+        fontes=(
+            Fonte(
+                url="https://flatpak.lukakuuhaku.dev/componentes/p11kit-0.23.tar.gz",
+                sha256="f5c7c4a5d60f0d56fe72b79ddf2d6ae7c028872b71cb848984ae00052f5ab5aa",
+                arquivos={"lib/": "lib", "libexec/": "libexec"},
+                formato="tar",
+                cortar=1,
+            ),
+        ),
+        tamanho=1 * 1024 * 1024,
+    ),
+    Componente(
+        chave="p11kit-024",
+        nome="Compatibilidade de assinatura",
+        resumo="O seu sistema precisa disto para assinar",
+        detalhe=(
+            "O seu sistema usa uma versão do p11-kit diferente da que vem no "
+            "aplicativo. Sem este ajuste, o certificado aparece e o PIN é "
+            "aceito, mas nenhuma assinatura funciona, nem para entrar no "
+            "Projudi ou no eproc."
+        ),
+        tipo="compatibilidade",
+        serie="0.24",
+        url="",
+        sha256="",
+        arquivos={},
+        fontes=(
+            Fonte(
+                url="https://flatpak.lukakuuhaku.dev/componentes/p11kit-0.24.tar.gz",
+                sha256="420690474a29c6a2d305082e7489613f58e6aa82e2d6ac5ce131e8c74ce0541b",
+                arquivos={"lib/": "lib", "libexec/": "libexec"},
+                formato="tar",
+                cortar=1,
+            ),
+        ),
+        tamanho=1 * 1024 * 1024,
     ),
 ]
 

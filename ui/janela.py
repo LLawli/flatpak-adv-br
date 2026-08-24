@@ -18,6 +18,7 @@ import instalador  # noqa: E402
 import permissoes  # noqa: E402
 import pkcs11  # noqa: E402
 import publicador  # noqa: E402
+import serie  # noqa: E402
 
 
 def decidir(desenhado, real):
@@ -54,6 +55,18 @@ class Janela(Adw.ApplicationWindow):
 
         self.toasts = Adw.ToastOverlay()
         pagina = Adw.PreferencesPage()
+        self.linhas = {}
+
+        # 0. O aviso que precede tudo, quando existe: sem a ponte falando a
+        # mesma língua do sistema, o certificado aparece e nada assina. Fica
+        # acima de tudo porque é a única coisa aqui que faz o resto ser mentira.
+        self.grupo_serie = Adw.PreferencesGroup(
+            title="Antes de mais nada",
+            visible=False)
+        for componente in catalogo.por_tipo("compatibilidade"):
+            self.linhas[componente.chave] = self._linha(componente)
+            self.grupo_serie.add(self.linhas[componente.chave]["linha"])
+        pagina.add(self.grupo_serie)
 
         # 1. O que a pessoa veio saber.
         self.grupo_tokens = Adw.PreferencesGroup(
@@ -83,7 +96,6 @@ class Janela(Adw.ApplicationWindow):
                 "do site do fabricante, na sua máquina."))
         pagina.add(self.grupo_componentes)
 
-        self.linhas = {}
         for componente in catalogo.por_tipo("driver"):
             self.linhas[componente.chave] = self._linha(componente)
             self.grupo_componentes.add(self.linhas[componente.chave]["linha"])
@@ -125,6 +137,36 @@ class Janela(Adw.ApplicationWindow):
         self.atualizar_componentes()
         self.atualizar_publicacao()
         self.atualizar_tokens()
+        self.atualizar_serie()
+
+    def atualizar_serie(self):
+        """Mostra o aviso de compatibilidade, quando ele for verdade.
+
+        Só aparece quando as duas séries foram lidas e divergem. Não conseguir
+        ler é diferente de estar errado: nesse caso a janela fica como estava,
+        porque um aviso baseado em leitura falha custaria mais confiança do que
+        a ausência dele.
+        """
+        pendencia = serie.pendencia()
+        for componente in catalogo.por_tipo("compatibilidade"):
+            self.linhas[componente.chave]["linha"].set_visible(False)
+
+        if pendencia is None:
+            self.grupo_serie.set_visible(False)
+            return
+
+        serie_host, componente = pendencia
+        if componente is None:
+            # Divergência sem componente que resolva: dizer o que se sabe é
+            # melhor que deixar a pessoa descobrir na hora de assinar.
+            self.grupo_serie.set_visible(False)
+            self.toasts.add_toast(Adw.Toast(
+                title="O seu sistema usa o p11-kit %s, que este aplicativo "
+                      "ainda não acompanha." % serie_host))
+            return
+
+        self.linhas[componente.chave]["linha"].set_visible(True)
+        self.grupo_serie.set_visible(True)
 
     # ------------------------------------------------------------------
     def _linha(self, componente):
@@ -178,6 +220,7 @@ class Janela(Adw.ApplicationWindow):
         self.atualizar_componentes()
         self.atualizar_publicacao()
         self.atualizar_tokens()
+        self.atualizar_serie()
 
     def _abrir(self, _botao, componente):
         caminho = instalador.lancador(componente)
@@ -492,6 +535,7 @@ class Janela(Adw.ApplicationWindow):
         self._republicar()
         self.atualizar_publicacao()
         self.atualizar_tokens()
+        self.atualizar_serie()
         self.toasts.add_toast(Adw.Toast(title="%s instalado" % componente.nome))
         if componente.permissao and not permissoes.tem_documentos():
             self._oferecer_permissao(componente)

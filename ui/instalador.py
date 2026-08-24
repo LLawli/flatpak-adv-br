@@ -71,6 +71,19 @@ def _fontes(componente):
                            formato="zip" if componente.dentro_de_zip else "deb")]
 
 
+# De onde vêm os componentes do próprio projeto (hoje só o p11-kit de
+# compatibilidade). Trocável por variável de ambiente para poder exercitar a
+# instalação contra um servidor local, sem depender do que está publicado.
+ORIGEM = "https://flatpak.lukakuuhaku.dev"
+
+
+def _url(fonte):
+    origem = os.environ.get("ADV_BR_ORIGEM")
+    if origem and fonte.url.startswith(ORIGEM):
+        return origem + fonte.url[len(ORIGEM):]
+    return fonte.url
+
+
 def baixar(componente, progresso=None, fonte=None):
     """Baixa um pacote e devolve os bytes, conferindo o sha256.
 
@@ -78,7 +91,7 @@ def baixar(componente, progresso=None, fonte=None):
     total pode vir zero quando o servidor não informa o tamanho.
     """
     fonte = fonte or _fontes(componente)[0]
-    pedido = urllib.request.Request(fonte.url, headers={"User-Agent": AGENTE})
+    pedido = urllib.request.Request(_url(fonte), headers={"User-Agent": AGENTE})
     partes = []
     recebido = 0
     with urllib.request.urlopen(pedido, timeout=60,
