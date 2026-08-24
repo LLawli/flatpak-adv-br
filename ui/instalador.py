@@ -139,5 +139,13 @@ def instalar(componente, progresso=None):
     return destino
 
 
+def lancador(componente):
+    """Caminho do executável do componente, quando ele traz um aplicativo."""
+    if not componente.lancador:
+        return ""
+    caminho = os.path.join(diretorio(componente), "bin", componente.chave)
+    return caminho if os.access(caminho, os.X_OK) else ""
+
+
 def desinstalar(componente):
     shutil.rmtree(diretorio(componente), ignore_errors=True)

@@ -4,6 +4,7 @@ A tela responde, de cima para baixo, as perguntas na ordem em que a pessoa as
 faz: "o meu certificado apareceu?" primeiro, "o que eu preciso instalar?"
 depois. Quem abre isto está com o token na mão e quer assinar, não configurar.
 """
+import subprocess
 import threading
 
 import gi
@@ -97,12 +98,19 @@ class Janela(Adw.ApplicationWindow):
         botao = Gtk.Button(valign=Gtk.Align.CENTER)
         botao.connect("clicked", self._clicou, componente)
 
+        # Só para o componente que traz um aplicativo com janela própria, como
+        # o SerproID. Fica escondido enquanto ele não estiver instalado.
+        abrir = Gtk.Button(label="Abrir", valign=Gtk.Align.CENTER, visible=False)
+        abrir.connect("clicked", self._abrir, componente)
+        linha.add_suffix(abrir)
+
         progresso = Gtk.ProgressBar(valign=Gtk.Align.CENTER, visible=False,
                                     show_text=True, width_request=140)
 
         linha.add_suffix(progresso)
         linha.add_suffix(botao)
-        return {"linha": linha, "botao": botao, "progresso": progresso}
+        return {"linha": linha, "botao": botao, "progresso": progresso,
+                "abrir": abrir}
 
     def atualizar_componentes(self):
         for componente in catalogo.CATALOGO:
@@ -114,8 +122,27 @@ class Janela(Adw.ApplicationWindow):
             partes["botao"].set_sensitive(True)
             partes["botao"].set_css_classes(["destructive-action"] if posto
                                             else ["suggested-action"])
-            partes["linha"].set_subtitle(
-                componente.resumo + (" · instalado" if posto else ""))
+            # O tamanho é o do download, não o do que fica em disco: o
+            # SafeNet baixa 91 MB e instala 3. Quem está numa conexão medida
+            # precisa saber do primeiro número antes de tocar no botão.
+            if posto:
+                sufixo = " · instalado"
+            elif componente.tamanho:
+                sufixo = " · %d MB para baixar" % (
+                    componente.tamanho // (1024 * 1024))
+            else:
+                sufixo = ""
+            partes["linha"].set_subtitle(componente.resumo + sufixo)
+            partes["abrir"].set_visible(
+                bool(posto and instalador.lancador(componente)))
+
+    def _abrir(self, _botao, componente):
+        caminho = instalador.lancador(componente)
+        if not caminho:
+            return
+        # Sem esperar: o aplicativo do componente tem janela própria e vida
+        # própria, e travar a interface até ele fechar seria pior que não abrir.
+        subprocess.Popen([caminho], start_new_session=True)
 
     def atualizar_tokens(self):
         pkcs11.registrar()
