@@ -24,6 +24,7 @@ import os
 import catalogo
 import instalador
 import nssdb
+import registro
 import pkcs11
 
 APP_ID = "dev.lukakuuhaku.AdvBr"
@@ -219,7 +220,8 @@ def _candidatos(casa):
             continue
         try:
             nomes = sorted(os.listdir(base))
-        except OSError:
+        except OSError as erro:
+            registro.falha("não consegui listar %s" % base, erro)
             continue
         for nome in nomes:
             if so_ocultos and not nome.startswith("."):

@@ -11,6 +11,8 @@ existe dentro do sandbox de outro aplicativo.
 import glob
 import os
 
+import registro
+
 # Os nomes com que este aplicativo marca o que registrou. O prefixo é o mesmo
 # dos .module e existe pelo mesmo motivo: a versão de linha de comando usa
 # "adv-br", e cada uma precisa remover só o que escreveu.
@@ -54,7 +56,10 @@ def registrados(banco):
     try:
         with open(arquivo, encoding="utf-8") as f:
             texto = f.read()
-    except OSError:
+    except OSError as erro:
+        # Um banco que não abre é indistinguível de um banco sem módulo
+        # registrado, e os dois levam a publicar e o navegador não ver nada.
+        registro.falha("não consegui ler %s" % arquivo, erro)
         return {}
     return {_campo(b, "name"): _campo(b, "library") for b in _blocos(texto)
             if _campo(b, "name")}

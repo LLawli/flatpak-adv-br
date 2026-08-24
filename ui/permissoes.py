@@ -11,6 +11,8 @@ este módulo, que responde duas perguntas: o que falta, e qual comando devolve.
 """
 import os
 
+import registro
+
 APP_ID = "dev.lukakuuhaku.AdvBr"
 
 
@@ -63,8 +65,11 @@ def _pontos_de_montagem():
                 if len(campos) > 4:
                     # O campo 5 é o ponto de montagem, com octais escapados.
                     pontos.add(campos[4].replace("\\040", " "))
-    except OSError:
-        pass
+    except OSError as erro:
+        # Sem esta leitura, faltando() responde que TUDO falta, e a janela
+        # pede permissões que a pessoa já tem. Registrar é o que separa esse
+        # caso de uma permissão realmente revogada.
+        registro.falha("não consegui ler /proc/self/mountinfo", erro)
     return pontos
 
 

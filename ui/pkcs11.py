@@ -13,6 +13,8 @@ import ctypes
 import glob
 import os
 
+import registro
+
 import instalador
 
 MODULOS = "/etc/pkcs11/modules"
@@ -87,6 +89,7 @@ def modulos_instalados():
 def registrar():
     """Escreve um .module por driver instalado. Devolve quantos foram."""
     if not os.access(MODULOS, os.W_OK):
+        registro.registrar("%s não é gravável; nenhum driver registrado", MODULOS)
         return 0
     quantos = 0
     for caminho in modulos_instalados():
@@ -148,6 +151,7 @@ def tokens():
     """
     caminho = _proxy()
     if not caminho:
+        registro.registrar("não achei o p11-kit-proxy do runtime")
         return []
 
     lib = ctypes.CDLL(caminho)
@@ -156,26 +160,42 @@ def tokens():
 
     tabela = ctypes.POINTER(CK_FUNCTION_LIST)()
     if lib.C_GetFunctionList(ctypes.byref(tabela)) != CKR_OK:
+        registro.registrar("C_GetFunctionList falhou em %s", caminho)
         return []
     fn = tabela.contents
 
-    if fn.C_Initialize(None) not in (CKR_OK, CKR_CRYPTOKI_ALREADY_INITIALIZED):
+    codigo = fn.C_Initialize(None)
+    if codigo not in (CKR_OK, CKR_CRYPTOKI_ALREADY_INITIALIZED):
+        registro.registrar("C_Initialize devolveu 0x%x", codigo)
         return []
 
     contagem = ctypes.c_ulong(0)
-    if fn.C_GetSlotList(CKF_TOKEN_PRESENT, None, ctypes.byref(contagem)) != CKR_OK:
+    codigo = fn.C_GetSlotList(CKF_TOKEN_PRESENT, None, ctypes.byref(contagem))
+    if codigo != CKR_OK:
+        registro.registrar("C_GetSlotList devolveu 0x%x", codigo)
         return []
     if contagem.value == 0:
+        # Nenhum token espetado é o caso normal, e não é erro. Fica no log
+        # porque "não aparece nada" é o relato mais comum que se recebe, e
+        # distinguir "não há token" de "a pilha quebrou" é metade do
+        # diagnóstico.
+        registro.registrar("nenhum slot com token presente")
         return []
 
     slots = (ctypes.c_ulong * contagem.value)()
-    if fn.C_GetSlotList(CKF_TOKEN_PRESENT, slots, ctypes.byref(contagem)) != CKR_OK:
+    codigo = fn.C_GetSlotList(CKF_TOKEN_PRESENT, slots, ctypes.byref(contagem))
+    if codigo != CKR_OK:
+        registro.registrar("C_GetSlotList (segunda chamada) devolveu 0x%x", codigo)
         return []
 
     encontrados = []
     for slot in slots:
         info = CK_TOKEN_INFO()
-        if fn.C_GetTokenInfo(slot, ctypes.byref(info)) != CKR_OK:
+        codigo = fn.C_GetTokenInfo(slot, ctypes.byref(info))
+        if codigo != CKR_OK:
+            # 0xe1 é CKR_TOKEN_NOT_RECOGNIZED, e é o que uma YubiKey em modo
+            # FIDO responde. Não é defeito: é um slot que não interessa.
+            registro.registrar("slot %d: C_GetTokenInfo devolveu 0x%x", slot, codigo)
             continue
         rotulo = _texto(info.label)
         # O módulo de confiança do Flatpak aparece aqui como se fosse token, e
