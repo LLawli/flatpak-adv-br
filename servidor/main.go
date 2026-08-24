@@ -198,8 +198,13 @@ func responder(w http.ResponseWriter, codigo int, corpo any) {
 }
 
 // quemChama devolve o endereço de quem fez o pedido, respeitando o cabeçalho
-// que o nginx põe. O serviço só escuta em localhost, então confiar no
-// X-Forwarded-For aqui é confiar no nginx, que é quem está na frente.
+// que o proxy põe. O serviço só escuta em localhost, então confiar no
+// X-Forwarded-For aqui é confiar no proxy, que é quem está na frente.
+//
+// O Caddy manda esse cabeçalho por conta própria em todo reverse_proxy; com
+// nginx é preciso configurar. Se um dia o serviço passar a escutar em endereço
+// público, este cabeçalho vira mentira que qualquer cliente pode contar, e o
+// limite por endereço deixa de valer.
 func quemChama(r *http.Request) string {
 	if repassado := r.Header.Get("X-Forwarded-For"); repassado != "" {
 		return strings.TrimSpace(strings.Split(repassado, ",")[0])

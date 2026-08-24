@@ -81,19 +81,23 @@ primeiro relato perdido:
     AVISO: não consigo escrever em /var/lib/adv-br/fila (read-only file system).
     Relatos serão PERDIDOS se o GitHub recusar. Monte um volume gravável ali.
 
-## nginx na frente
+## Caddy na frente
 
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:8080;
-    proxy_set_header X-Forwarded-For $remote_addr;
-    # Os objetos do repositório não mudam: o nome deles é o hash do conteúdo.
-    proxy_cache_valid 200 1h;
+```caddy
+flatpak.lukakuuhaku.dev {
+    reverse_proxy 127.0.0.1:8080
 }
 ```
 
-O `X-Forwarded-For` não é enfeite: é o que o limite por endereço usa. Sem ele,
-todo mundo conta como um endereço só, que é o do proxy.
+Só isso. O Caddy cuida do certificado sozinho e já manda o `X-Forwarded-For`,
+que é o cabeçalho de que o limite por endereço depende: sem ele, todo mundo
+conta como um endereço só, o do proxy. (Com nginx seria preciso acrescentar
+`proxy_set_header X-Forwarded-For $remote_addr;` à mão.)
+
+Se quiser cache dos objetos do repositório, eles nunca mudam de conteúdo: o
+nome de cada um é o hash do que ele contém. O que muda é o `summary`, e esse
+não deve ser cacheado por muito tempo, senão uma versão nova demora a aparecer
+para quem já tem o remoto configurado.
 
 ## Publicar uma versão
 
