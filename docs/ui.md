@@ -194,6 +194,40 @@ dentro do mesmo SDK do aplicativo, e publicados junto do repositório Flatpak. O
 p11-kit é BSD-3-Clause, então redistribuí-lo é permitido, ao contrário de tudo
 o mais neste catálogo.
 
+## O log de cada módulo
+
+Até aqui o aplicativo não escrevia uma linha de log. Pior: os três processos que
+rodam fora da janela escrevem em stderr e ninguém guarda isso, porque quem os
+inicia é o navegador ou o p11-kit do sistema. Quando um testador dizia "não
+funcionou", não havia o que pedir a ele.
+
+O caminho agora é um só, e vem de fora do código: `ui/registro.sh` aponta o
+stderr do processo para `$XDG_DATA_HOME/logs/<módulo>.log`, e é incluído como
+primeira coisa por cada lançador. Nenhum processo precisa saber escrever log, e
+o **stdout continua intocado** — que é a única regra que não podia ser
+quebrada, porque nele trafega o RPC do p11-kit e o native messaging.
+
+Um arquivo por módulo: `janela`, `pkcs11`, `assinador-<chave>` e `app-<chave>`.
+Um Lacuna que não responde e um Certisign que não responde são problemas
+diferentes, e misturá-los num arquivo só custa justamente o tempo de separá-los
+de novo. Rotação por tamanho, com um arquivo velho: a ponte roda a cada abertura
+de navegador, e sem isso o log vira um arquivo grande demais para acompanhar um
+relato de erro.
+
+Do lado Python, `ui/registro.py` não abre arquivo nenhum: escreve no mesmo
+stderr, com hora e origem. O que ele acrescenta é captura do que se perdia:
+exceção não tratada, exceção dentro de callback do GTK (que não passa pelo
+`sys.excepthook`, chega como "não levantável"), e os erros que o código engole
+de propósito para não interromper o trabalho. Esses últimos são os que mais
+importam: um `/proc/self/mountinfo` ilegível fazia a janela pedir permissões
+que a pessoa já tinha, e um banco NSS que não abre é indistinguível de um banco
+sem módulo registrado.
+
+Em `ui/pkcs11.py`, os sete pontos em que `tokens()` devolvia lista vazia agora
+dizem qual deles foi. "Nenhum certificado encontrado" é o relato mais comum que
+se recebe, e separar "não há token espetado" de "a pilha PKCS#11 quebrou" é
+metade do diagnóstico.
+
 ## O que ainda não existe
 
 - desinstalar componentes que deixaram de existir no catálogo;
@@ -296,3 +330,13 @@ o mais neste catálogo.
   `~/.var/app/.../componentes/`, esse caminho não existe e o comando responde
   "'remote' is not a valid command", como se a versão estivesse errada. Chamar o
   auxiliar diretamente resolve e não depende de onde o componente foi parar.
+- **Um handler de log do GLib não serve para capturar o GLib.** A primeira
+  versão do registro instalava `GLib.log_set_writer_func` e o log encheu de
+  linhas como `128 do sistema gráfico: 93847593327200`: nessa API o campo da
+  mensagem é um ponteiro, não uma string, e o que entrava no arquivo era o
+  endereço. Não era preciso gancho nenhum: o GLib já escreve no stderr, e o
+  stderr já está no arquivo.
+- **O nome do módulo do assinador vem de um argumento do navegador.** Ele vira
+  nome de arquivo, então um argumento com barras escreveria fora do diretório
+  de logs. Medido antes de corrigir: `../../fuga` virava um arquivo com esse
+  caminho. Hoje só sobrevivem letras, números e hífen.

@@ -235,6 +235,14 @@ if [ -f ui/publicador.py ]; then
     fi
 fi
 
+if [ -f ui/registro.sh ]; then
+    if python3 tests/prova-registro.py; then
+        ok "os lançadores registram e não escrevem em stdout"
+    else
+        falha "os lançadores registram e não escrevem em stdout"
+    fi
+fi
+
 if [ -f ui/serie.py ]; then
     if python3 tests/prova-serie.py; then
         ok "o catálogo de compatibilidade do p11-kit"

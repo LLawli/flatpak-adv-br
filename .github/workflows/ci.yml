@@ -44,6 +44,7 @@ jobs:
           python3 tests/prova-navegadores.py
           python3 tests/prova-atributos.py
           python3 tests/prova-serie.py
+          python3 tests/prova-registro.py
 
       - name: Manifestos
         run: |
