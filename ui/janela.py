@@ -326,8 +326,7 @@ class Janela(Adw.ApplicationWindow):
         if instalador.instalado(componente):
             instalador.desinstalar(componente)
             self.atualizar_componentes()
-            if publicador.publicado():
-                publicador.publicar()
+            self._republicar()
             self.atualizar_publicacao()
             self.atualizar_tokens()
             self.toasts.add_toast(Adw.Toast(title="%s removido" % componente.nome))
@@ -360,9 +359,25 @@ class Janela(Adw.ApplicationWindow):
             return
         GLib.idle_add(self._terminou, componente)
 
+    def _republicar(self):
+        """Reescreve o que já estava publicado, depois de o catálogo mudar.
+
+        Publicar de novo é o passo que se esquece, e o sintoma engana: quem
+        instala um assinador vê "instalado" na janela, abre o navegador e a
+        extensão continua dizendo que ele não existe, porque o manifesto que o
+        navegador lê não menciona o que acabou de chegar. Vale nos dois
+        sentidos, e é por isso que isto está aqui e não só na remoção.
+
+        Só reescreve o que já estava publicado: publicar pela primeira vez é
+        decisão de quem usa, e acontece pelo botão.
+        """
+        if publicador.publicado():
+            publicador.publicar()
+
     def _terminou(self, componente):
         self.linhas[componente.chave]["progresso"].set_visible(False)
         self.atualizar_componentes()
+        self._republicar()
         self.atualizar_publicacao()
         self.atualizar_tokens()
         self.toasts.add_toast(Adw.Toast(title="%s instalado" % componente.nome))
