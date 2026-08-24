@@ -235,6 +235,14 @@ if [ -f ui/publicador.py ]; then
     fi
 fi
 
+if [ -f ui/serie.py ]; then
+    if python3 tests/prova-serie.py; then
+        ok "o catálogo de compatibilidade do p11-kit"
+    else
+        falha "o catálogo de compatibilidade do p11-kit"
+    fi
+fi
+
 if [ -d ui ]; then
     if python3 tests/prova-atributos.py; then
         ok "nenhum self._atributo órfão na interface"

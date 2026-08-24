@@ -149,6 +149,51 @@ são as permissões de OUTROS programas, que este aplicativo não pode conceder:
   é a única que exige terminal, em vez de deixar a pessoa procurar num lugar
   onde ela não está.
 
+## A série do p11-kit, e por que ela muda com a distribuição binária
+
+A ponte PKCS#11 é o remoting do p11-kit: o p11-kit do sistema executa um
+processo deste aplicativo e conversa com ele por um pipe. O que trafega ali é a
+tabela de funções PKCS#11 serializada, e as duas pontas precisam concordar
+sobre o formato dela. Quando não concordam, **nada recusa a conexão**: os slots
+enumeram, o PIN é aceito, a lista de certificados aparece inteira, e toda
+assinatura falha com `CKR_DEVICE_ERROR`. Como autenticar por certificado também
+assina, no `CertificateVerify` do handshake TLS, o login no Projudi e no eproc
+para de funcionar com o certificado aparecendo normalmente na lista.
+
+O runtime traz a série 0.26. Debian trixie e Ubuntu 24.04 trazem a 0.25.
+
+Na versão de linha de comando isso é resolvido antes de construir: o
+`instalar.sh` compara as duas séries e embute um p11-kit da série do host. Esta
+branch nasceu sem esse mecanismo, e o modelo de distribuição por repositório o
+tornaria impossível de qualquer forma, porque some o momento do build na
+máquina de quem instala.
+
+Aqui a série virou um componente, como os drivers:
+
+- **Descobrir a série do sistema de dentro do sandbox** parecia impossível e não
+  é. O campo `library-version` do `p11-kit list-modules` é reportado pelo
+  **módulo carregado**, não pela biblioteca do processo que pergunta. Então
+  `ui/adv-br-serie` carrega o módulo de confiança **do host**, que o
+  `--filesystem=host-os:ro` monta em `/run/host`, e lê a versão que ele reporta.
+  Medido nesta máquina: `0.26`, igual ao que o host responde por fora.
+- **Não serve o soname.** Aqui o host tem `libp11-kit.so.0.4.10` e o runtime
+  `0.4.11`: sonames diferentes, mesma série, compatíveis. E as séries 0.23 e
+  0.24 têm o mesmo soname `0.3.0`. O soname distingue por acaso.
+- **Só a série necessária é instalada**, e só quando a divergência é detectada.
+  Carregar três versões da mesma biblioteca seria carregar três superfícies de
+  ataque para usar uma.
+- **A ponte chama `p11-kit-remote` direto**, e não `p11-kit remote`: o
+  `p11-kit` procura esse auxiliar por um caminho absoluto gravado em tempo de
+  compilação, que não existe quando o componente vive nos dados do aplicativo.
+- **Só o processo da ponte usa a biblioteca do componente.** O `LD_LIBRARY_PATH`
+  é exportado dentro do `ui/adv-br-pkcs11`, e não no preparo comum: assinadores
+  e PJeOffice continuam com a do runtime, porque não atravessam pipe nenhum.
+
+Os artefatos são gerados por `bin/compilar-p11kit <série>`, do tarball oficial,
+dentro do mesmo SDK do aplicativo, e publicados junto do repositório Flatpak. O
+p11-kit é BSD-3-Clause, então redistribuí-lo é permitido, ao contrário de tudo
+o mais neste catálogo.
+
 ## O que ainda não existe
 
 - desinstalar componentes que deixaram de existir no catálogo;
@@ -240,3 +285,14 @@ são as permissões de OUTROS programas, que este aplicativo não pode conceder:
   fonte monoespaçada, uma linha cada, selecionáveis, com rolagem horizontal
   própria, e a lista inteira rolando na vertical se for longa. Medido: 668x550
   px para o aviso dos navegadores, contra uma tela de 1080 de altura.
+- **Da série 0.24 para trás o p11-kit não compila com um compilador atual.** Ele
+  usa uma variável chamada `thread_local`, que o C23 tornou palavra reservada, e
+  o padrão do compilador do SDK já é o C23. `-Dc_std=gnu11` resolve. Sem isso, a
+  compilação falha com "expected identifier before '=' token", que não diz nada
+  sobre o que houve.
+- **Um componente instalado nos dados do aplicativo não pode depender do
+  `--prefix` com que foi compilado.** O `p11-kit` procura o auxiliar
+  `p11-kit-remote` num caminho absoluto gravado no binário; instalado em
+  `~/.var/app/.../componentes/`, esse caminho não existe e o comando responde
+  "'remote' is not a valid command", como se a versão estivesse errada. Chamar o
+  auxiliar diretamente resolve e não depende de onde o componente foi parar.
