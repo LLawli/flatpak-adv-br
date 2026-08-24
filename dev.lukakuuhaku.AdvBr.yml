@@ -26,31 +26,6 @@ runtime-version: '50'
 sdk: org.gnome.Sdk
 command: adv-br-ui
 
-# Aplicativos que não cabem no modelo de baixar-e-extrair entram como extensão
-# Flatpak, e não como componente.
-#
-# O critério é o que o pacote precisa para rodar. Um driver é uma biblioteca:
-# baixar o .deb do fabricante e abrir o .so de dentro dos dados do aplicativo
-# funciona. O PJeOffice é um programa Java, e o .deb dele não traz JVM nenhuma:
-# só a máquina virtual são 300 MB, que teriam de vir no aplicativo base e ser
-# baixados por todo mundo, inclusive por quem nunca abriu o PJe.
-#
-# Como extensão, ele é construído contra este aplicativo, monta dentro dele,
-# usa os mesmos drivers e o mesmo p11-kit, e quem não usa o PJe não baixa nada.
-# O preço é que instalar exige o comando `flatpak install`, que um aplicativo
-# em sandbox não pode executar sozinho: a janela mostra o comando e a pessoa o
-# roda uma vez.
-#
-# autodelete fica em false: a extensão guarda a configuração do PJeOffice, e
-# desinstalar o aplicativo base para reinstalar não pode levá-la junto.
-add-extensions:
-  dev.lukakuuhaku.AdvBr.App:
-    directory: lib/apps
-    subdirectories: true
-    no-autodownload: true
-    autodelete: false
-    version: master
-
 finish-args:
   - --socket=wayland
   # x11 de verdade, e não fallback-x11: o Lacuna Web PKI e o Softplan
@@ -179,14 +154,12 @@ modules:
   # ele aceita um diretório em PKCS11_DRIVER e carrega dali um "pkcs11.so";
   # este repassa ao p11-kit-proxy do runtime, que responde por todos os drivers
   # registrados de uma vez. São 8 KB no aplicativo base, e é o que permite ao
-  # PJeOffice enxergar componentes que serão baixados depois dele.
+  # PJeOffice, que chega como componente, enxergar driver instalado depois
+  # dele.
   - name: pkcs11-shim
     buildsystem: simple
     build-commands:
       - install -d /app/lib/pkcs11
-      # Ponto de montagem das extensões de aplicativo: o diretório precisa
-      # existir no app, ou o Flatpak não tem onde montar a extensão.
-      - install -d /app/lib/apps
       - gcc -shared -fPIC -O2 -Wall -Wextra -Werror -o /app/lib/pkcs11/pkcs11.so
         pkcs11-shim.c -ldl
       # Um shim que não exporte o ponto de entrada do PKCS#11 é indistinguível

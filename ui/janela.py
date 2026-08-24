@@ -134,12 +134,7 @@ class Janela(Adw.ApplicationWindow):
                 continue
             partes = self.linhas[componente.chave]
             posto = instalador.instalado(componente)
-            if componente.extensao:
-                # As reticências são a convenção de que o botão abre um
-                # diálogo em vez de fazer a coisa.
-                partes["botao"].set_label("Remover…" if posto else "Instalar…")
-            else:
-                partes["botao"].set_label("Remover" if posto else "Instalar")
+            partes["botao"].set_label("Remover" if posto else "Instalar")
             partes["botao"].set_sensitive(True)
             partes["botao"].set_css_classes(["destructive-action"] if posto
                                             else ["suggested-action"])
@@ -148,12 +143,6 @@ class Janela(Adw.ApplicationWindow):
             # precisa saber do primeiro número antes de tocar no botão.
             if posto:
                 sufixo = " · instalado"
-            elif componente.extensao:
-                # Aqui o tamanho é o da extensão inteira, com a JVM dentro, e
-                # não há barra de progresso para acompanhar: quem baixa é o
-                # Flatpak, no terminal.
-                sufixo = " · %d MB, instala por comando" % (
-                    componente.tamanho // (1024 * 1024))
             elif componente.tamanho:
                 sufixo = " · %d MB para baixar" % (
                     componente.tamanho // (1024 * 1024))
@@ -311,58 +300,32 @@ class Janela(Adw.ApplicationWindow):
         dialogo.present()
 
     # ------------------------------------------------------------------
-    def _mostrar_comando(self, componente, posto):
-        """O diálogo do que a janela não pode fazer sozinha.
+    def _oferecer_permissao(self, componente):
+        """A permissão OPCIONAL de um componente, depois de ele ser instalado.
 
-        Um aplicativo em sandbox não instala nem remove um Flatpak: fazer isso
-        exigiria a permissão org.freedesktop.Flatpak, que é acesso irrestrito à
-        máquina, e pedi-la para instalar uma extensão seria trocar um comando
-        eventual por um risco permanente. Então a janela faz o que pode: diz
-        exatamente qual é o comando.
+        Opcional de verdade: o aplicativo funciona sem ela, e o diálogo diz
+        para que serve antes de pedir qualquer coisa. Só aparece se ela ainda
+        não existe, e nunca antes de o componente estar instalado, porque até
+        aí não havia motivo nenhum para pedi-la.
         """
-        if posto:
-            comando = instalador.comando_de_desinstalar(componente)
-            corpo = ["Para remover o %s, cole isto num terminal:" % componente.nome,
-                     "", comando]
-        else:
-            comando = instalador.comando_de_instalar(componente)
-            corpo = [componente.detalhe, "",
-                     "Ele é construído no seu computador, a partir do pacote "
-                     "publicado pelo CNJ: o programa é gratuito, mas ninguém "
-                     "além do CNJ pode distribuí-lo pronto. Precisa do "
-                     "flatpak-builder instalado, e demora alguns minutos.", "",
-                     "Cole isto num terminal e volte aqui:", "", comando]
-            # A permissão opcional aparece aqui, junto do resto, e não como um
-            # segundo diálogo depois: quem está lendo comandos já está no
-            # terminal. E aparece como opcional de verdade, com o que se perde
-            # ao não dar: nada do fluxo pelo navegador depende dela.
-            if componente.permissao and not permissoes.tem_documentos():
-                argumento, para_que = componente.permissao
-                corpo += ["", "Opcional, só se você for %s:" % para_que, "",
-                          permissoes.comando_opcional(argumento)]
-
+        argumento, para_que = componente.permissao
         dialogo = Adw.MessageDialog(
             transient_for=self,
-            heading=("Remover o %s" if posto else "Instalar o %s") % componente.nome,
-            body="\n".join(corpo))
-        dialogo.add_response("fechar", "Fechar")
+            heading="Quer poder %s?" % para_que,
+            body="\n".join([
+                "O %s funciona sem isso: assinando pelo PJe, quem entrega o "
+                "documento é o navegador." % componente.nome, "",
+                "Se você também for assinar arquivos guardados no computador, "
+                "cole isto num terminal:", "",
+                permissoes.comando_opcional(argumento)]))
+        dialogo.add_response("fechar", "Agora não")
         dialogo.add_response("copiar", "Copiar comando")
         dialogo.set_response_appearance("copiar", Adw.ResponseAppearance.SUGGESTED)
-        dialogo.connect("response", self._respondeu_comando, comando)
+        dialogo.connect("response", self._respondeu_comando,
+                        permissoes.comando_opcional(argumento))
         dialogo.present()
 
-    def _respondeu_comando(self, dialogo, resposta, comando):
-        if resposta != "copiar":
-            return
-        self.get_clipboard().set(comando)
-        self.toasts.add_toast(Adw.Toast(
-            title="Comando copiado. Depois de rodá-lo, toque em atualizar."))
-
     def _clicou(self, botao, componente):
-        if componente.extensao:
-            self._mostrar_comando(componente, instalador.instalado(componente))
-            return
-
         if instalador.instalado(componente):
             instalador.desinstalar(componente)
             self.atualizar_componentes()
@@ -421,6 +384,8 @@ class Janela(Adw.ApplicationWindow):
         self.atualizar_publicacao()
         self.atualizar_tokens()
         self.toasts.add_toast(Adw.Toast(title="%s instalado" % componente.nome))
+        if componente.permissao and not permissoes.tem_documentos():
+            self._oferecer_permissao(componente)
 
     def _falhou(self, componente, mensagem):
         partes = self.linhas[componente.chave]

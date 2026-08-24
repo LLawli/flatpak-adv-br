@@ -13,8 +13,14 @@ import collections
 Componente = collections.namedtuple(
     "Componente",
     "chave nome resumo detalhe tipo url sha256 arquivos tamanho ca lancador "
-    "dentro_de_zip extensao executavel permissao",
+    "dentro_de_zip fontes trocas permissao",
 )
+
+# Um componente que precisa de mais de um pacote: o PJeOffice é o programa do
+# CNJ mais uma máquina virtual Java, que vêm de lugares diferentes e em
+# formatos diferentes. Cada fonte é baixada e conferida por si.
+Fonte = collections.namedtuple("Fonte", "url sha256 arquivos formato cortar")
+Fonte.__new__.__defaults__ = ("deb", 0)
 # `ca` nomeia um certificado extra a confiar no download, e existe por um
 # servidor só; ver o Softplan abaixo. `lancador` é o corpo de um script para
 # componentes que trazem aplicativo com janela, e não só biblioteca. Vazios no
@@ -25,14 +31,13 @@ Componente = collections.namedtuple(
 #
 #   dentro_de_zip  caminho do .deb dentro de um zip, para o fabricante que
 #                  distribui assim. Vazio quando a URL já é o pacote.
-#   extensao       id da extensão Flatpak, para o que não é baixado pela
-#                  janela. Quem tem isto não tem url nem sha256: a instalação
-#                  é um comando que a pessoa roda, e a janela o mostra.
-#   executavel     caminho absoluto do programa dentro do aplicativo, para
-#                  saber se a extensão está montada e para abri-la.
+#   fontes         mais de um pacote, quando um só não basta. Quem tem isto
+#                  não tem url nem sha256: cada fonte traz os seus.
+#   trocas         edições em arquivo de texto instalado, no formato
+#                  {destino: (prefixo da linha, linha nova)}.
 #   permissao      permissão OPCIONAL, com o motivo, oferecida depois de
 #                  instalar. Nunca aplicada sozinha nem exigida.
-Componente.__new__.__defaults__ = ("", "", "", "", "", None)
+Componente.__new__.__defaults__ = ("", "", "", (), {}, None)
 
 # tipo:
 #   driver     apresenta o token ao sistema (vira módulo PKCS#11)
@@ -213,27 +218,101 @@ CATALOGO += [
         nome="PJeOffice Pro",
         resumo="Assinador do PJe, do CNJ",
         detalhe=(
-            "Necessário para assinar no PJe. Vem como extensão porque traz "
-            "junto a máquina virtual Java que ele exige: são cerca de 300 MB, "
-            "e quem não usa o PJe não precisa baixá-los."
+            "Necessário para assinar no PJe. Traz junto a máquina virtual "
+            "Java que ele exige, baixada do Eclipse Adoptium."
         ),
         tipo="aplicativo",
-        # Não há download aqui: quem baixa é o Flatpak, e é ele quem confere a
-        # assinatura do repositório.
         url="",
         sha256="",
         arquivos={},
-        extensao="dev.lukakuuhaku.AdvBr.App.PJeOffice",
-        executavel="/app/lib/apps/PJeOffice/bin/pjeoffice-pro",
+        fontes=(
+            # O programa do CNJ. O pacote inteiro tem 65 MB porque carrega um
+            # ffmpeg para cortar vídeo de audiência; daqui sai o assinador, que
+            # é do que se trata.
+            Fonte(
+                url=("https://github.com/pedrohqb/pje-office-debian/releases/"
+                     "download/2.5.16u-3/pje-office_2.5.16u-3_amd64.deb"),
+                sha256="d91510730355ebb82cfc7a810a37840392fb25947422ce29ddf6f63a56775cc7",
+                arquivos={
+                    "./usr/share/pjeoffice-pro/pjeoffice-pro.jar":
+                        "share/pjeoffice-pro/pjeoffice-pro.jar",
+                    "./usr/share/pjeoffice-pro/pjeoffice-update.properties":
+                        "share/pjeoffice-pro/pjeoffice-update.properties",
+                },
+            ),
+            # A máquina virtual, do Eclipse Adoptium: GPLv2 com a exceção de
+            # classpath, baixada do próprio Adoptium. O diretório raiz do
+            # pacote tem a versão no nome, daí o cortar=1.
+            Fonte(
+                url=("https://github.com/adoptium/temurin11-binaries/releases/"
+                     "download/jdk-11.0.32.1%2B1/"
+                     "OpenJDK11U-jre_x64_linux_hotspot_11.0.32.1_1.tar.gz"),
+                sha256="5eb6cf7f45c623272c64b8e7b4934a8051abb7ae73bfd28488a9856da3f4848a",
+                arquivos={"/": "jre"},
+                formato="tar",
+                cortar=1,
+            ),
+        ),
+        # O atualizador do CNJ baixaria uma versão nova por cima desta, sem
+        # conferir nada. Quem atualiza o que está aqui é este aplicativo, com
+        # o sha256 do catálogo.
+        trocas={"share/pjeoffice-pro/pjeoffice-update.properties":
+                ("update.url=", "update.url=disabled")},
+        lancador=r"""
+PJE="$COMPONENTE/share/pjeoffice-pro"
+
+# Os drivers que a pessoa instalou pela janela: o p11-kit do sandbox não sabe
+# deles até que alguém escreva os .module.
+PYTHONPATH=/app/share/adv-br-ui python3 -c 'import pkcs11; pkcs11.registrar()' \
+    || echo "adv-br: não deu para registrar os drivers no p11-kit." >&2
+
+# O PJeOffice descobre driver de duas formas, e as duas são inúteis num
+# sandbox: varrendo nomes fixos em /usr/lib, que é o runtime e é somente
+# leitura, e lendo PKCS11_DRIVER como diretório, de onde carrega um
+# "pkcs11.so". A segunda é a saída, e é um caminho só: o shim do aplicativo
+# repassa ao p11-kit-proxy e responde por todos os drivers de uma vez,
+# inclusive pelos que forem instalados depois dele.
+export PKCS11_DRIVER=/app/lib/pkcs11
+
+# O AWT do Java não fala Wayland: roda por XWayland. Sem isto, o KWin e outros
+# compositores reparentam a janela e o Swing desenha a decoração no lugar
+# errado.
+export _JAVA_AWT_WM_NONREPARENTING=1
+
+# Configuração, log e o registro dos drivers vão para ~/.pjeoffice-pro, e o
+# $HOME do sandbox é um tmpfs: sem este link a pessoa configura o assinador,
+# fecha, e reabre num aplicativo que esqueceu tudo, sem erro nenhum.
+DADOS="${XDG_DATA_HOME:-$HOME/.local/share}/pjeoffice-pro"
+mkdir -p "$DADOS"
+[ -e "$HOME/.pjeoffice-pro" ] || ln -s "$DADOS" "$HOME/.pjeoffice-pro"
+
+# O SafeNet derruba a JVM no ENCERRAMENTO, não em uso: depois que o SunPKCS11
+# foi inicializado, sair dá SIGSEGV dentro de SCardCancel, numa thread nativa
+# que o próprio driver criou. Sem esta opção a JVM ainda escreve um core dump
+# antes de morrer, e a espera faz o crash parecer travamento.
+exec "$COMPONENTE/jre/bin/java" \
+    -XX:-CreateCoredumpOnCrash \
+    -XX:ErrorFile="$DADOS/crash-%p.log" \
+    -XX:+UseG1GC \
+    -XX:MinHeapFreeRatio=3 \
+    -XX:MaxHeapFreeRatio=3 \
+    -Xms20m \
+    -Xmx2048m \
+    -Dpjeoffice_home="$PJE/" \
+    -Dpjeoffice_looksandfeels=Metal \
+    -jar "$PJE/pjeoffice-pro.jar" \
+    "$@"
+""",
         # Nada disto é preciso para assinar pelo PJe: ali quem entrega o
         # documento é o navegador, pelo servidor local do assinador. É só para
         # quem for usar o assinador de arquivos avulsos, e por isso é oferecida
-        # depois, com o motivo, e não embutida no aplicativo.
+        # depois de instalar, com o motivo, e não embutida no aplicativo.
         permissao=(
             "--filesystem=xdg-documents",
             "abrir arquivos da pasta Documentos para assinar avulsos",
         ),
-        tamanho=300 * 1024 * 1024,
+        # O que se baixa: 65 MB do CNJ mais 42 MB da máquina virtual.
+        tamanho=107 * 1024 * 1024,
     ),
 ]
 

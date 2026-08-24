@@ -81,6 +81,18 @@ def abrir_data(dados):
     raise DebInvalido("não achei o membro data.tar.* no pacote")
 
 
+def extrair_tar(dados, destino, mapa, cortar=0):
+    """O mesmo que `extrair`, para um .tar.gz solto em vez de um .deb.
+
+    `cortar` diz quantos componentes do caminho ignorar, como o
+    --strip-components do tar. Serve para o pacote cujo diretorio raiz carrega
+    a versao no nome (o JRE do Adoptium, por exemplo): sem isso, atualizar a
+    versao mudaria todos os caminhos do catalogo.
+    """
+    with tarfile.open(fileobj=io.BytesIO(dados), mode="r:*") as tar:
+        return _extrair_de(tar, destino, mapa, cortar)
+
+
 def extrair(dados, destino, mapa):
     """Extrai de um .deb os caminhos de `mapa` ({de: para}), sob `destino`.
 
@@ -93,9 +105,22 @@ def extrair(dados, destino, mapa):
     significa que o pacote do fabricante mudou de forma, e seguir em frente
     produziria uma instalacao que so' falha na hora de assinar.
     """
-    escritos = []
     with abrir_data(dados) as tar:
-        membros_por_nome = {m.name.lstrip("./"): m for m in tar.getmembers()}
+        return _extrair_de(tar, destino, mapa)
+
+
+def _extrair_de(tar, destino, mapa, cortar=0):
+    escritos = []
+    if True:
+        membros_por_nome = {}
+        for m in tar.getmembers():
+            nome = m.name.lstrip("./")
+            if cortar:
+                partes = nome.split("/")[cortar:]
+                if not partes:
+                    continue
+                nome = "/".join(partes)
+            membros_por_nome[nome] = m
 
         for origem, relativo in mapa.items():
             limpa = origem.lstrip("./")

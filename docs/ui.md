@@ -63,48 +63,49 @@ De cima para baixo, na ordem em que a pessoa faz as perguntas:
    permissão quando falta acesso à home.
 3. **Drivers de token**: OpenSC (já vem), SafeSign, SafeNet, SerproID.
 4. **Assinadores**: Lacuna Web PKI, Certisign WebSigner, Certisign Desktop.
-5. **Aplicativos**: PJeOffice Pro, que vem à parte por ser grande.
+5. **Aplicativos**: PJeOffice Pro, que vem à parte por ser grande e por poucos
+   precisarem dele.
 
 Quem abre isto está com o token na mão e quer assinar, não configurar.
 
 ## O catálogo, e as duas formas de instalar
 
-Sete componentes, em duas categorias que não se parecem por dentro:
+Sete componentes, todos baixados pela janela: três drivers proprietários, três
+assinadores e o PJeOffice. Um clique instala, outro remove, e o terminal não
+entra em momento nenhum.
 
-**Baixados pela janela.** Três drivers proprietários e três assinadores. São
-bibliotecas e programas pequenos: o aplicativo baixa o pacote do site do
-fabricante, confere o sha256, extrai o que interessa para os dados dele e
-pronto. Um clique instala, outro remove. Nenhum é redistribuído por este
-repositório.
+Nada é redistribuído por este repositório. Cada pacote é baixado da origem
+oficial na máquina de quem usa, com sha256 conferido antes de qualquer coisa
+ser extraída, e essa é a razão de o modelo ser este: as licenças dos drivers
+proprietários permitem ao licenciado usar e guardar cópia, não redistribuir, e
+o PJeOffice é distribuído gratuitamente pelo CNJ sem licença publicada que
+autorize terceiros a distribuí-lo. Publicar um repositório próprio não mudaria
+isso: quem dita a regra é a licença de cada binário, não onde ele estaria
+hospedado.
 
-**Extensão Flatpak.** Hoje só o PJeOffice. O critério é o que o pacote precisa
-para rodar: o .deb do CNJ não traz máquina virtual nenhuma, e uma JVM são
-280 MB que teriam de vir no aplicativo base, baixados inclusive por quem nunca
-abriu o PJe. Como extensão ele é construído contra este aplicativo, monta em
-`/app/lib/apps/PJeOffice`, usa os mesmos drivers e o mesmo p11-kit, e quem não
-usa o PJe não baixa nada.
+### O PJeOffice precisa de uma máquina virtual, e ela também é baixada
 
-E é construído na máquina de quem usa, e não baixado pronto de um repositório.
-A diferença não é técnica, é de licença: o PJeOffice é distribuído
-gratuitamente pelo CNJ, e gratuito não é o mesmo que redistribuível. Não há
-licença publicada que autorize terceiros a redistribuir os binários, e para
-obter o código-fonte é preciso ofício à Secretaria-Geral do CNJ. Um repositório
-Flatpak com ele dentro seria redistribuição; um manifesto que a pessoa constrói
-a partir do pacote publicado pelo CNJ não é. É a mesma regra que faz os drivers
-proprietários serem baixados do site do fabricante, e não embutidos aqui.
+O .deb do CNJ não traz JVM nenhuma. A primeira tentativa aqui foi empacotá-lo
+como extensão Flatpak, com o JRE do SDK dentro: funcionava, mas exigia
+`flatpak-builder`, o SDK do GNOME e o de Java (mais de 1 GB para construir), e
+um comando colado num terminal. Para um aplicativo cujo propósito é tirar o
+terminal do caminho, isso é o problema, não a solução.
 
-Publicar um repositório próprio muda o que se pode distribuir por ele, mas não
-muda isso: o que dita a regra é a licença de cada binário, e não onde ele
-estaria hospedado.
+O que resolveu foi tratar a JVM como mais uma fonte do componente: o assinador
+vem do pacote do CNJ, a máquina virtual vem do Eclipse Adoptium (GPLv2 com a
+exceção de classpath), e o componente soma 107 MB baixados e 152 MB em disco.
+Só para quem instala.
 
-O preço é que instalar exige `flatpak-builder`, e um aplicativo em sandbox não
-executa isso sozinho. Poderia: bastaria pedir `--talk-name=
-org.freedesktop.Flatpak`, que é a permissão de rodar comandos fora da caixa.
-Seria trocar um comando eventual por acesso irrestrito à máquina, permanente, e
-não vale. Então a janela faz o que pode, que é mostrar o comando pronto para
-copiar, e reconhecer sozinha quando a extensão apareceu. O comando é um
-`curl | sh` que baixa só o manifesto, constrói num diretório temporário em
-disco (nunca em /tmp, que é memória) e o apaga ao fim, dê certo ou não.
+Duas consequências dessa escolha ficam registradas aqui:
+
+- **O atualizador automático do CNJ é desligado na instalação.** Ele baixaria
+  uma versão nova por cima desta, sem conferir nada, dentro dos dados do
+  aplicativo. Quem atualiza o que está aqui é o catálogo, com sha256. A
+  instalação falha alto se a linha `update.url=` sumir do pacote: silêncio ali
+  significaria o programa voltando a se atualizar sozinho sem ninguém saber.
+- **A função de cortar vídeo de audiência não vem.** Ela depende de JavaFX, que
+  o JRE do Adoptium não traz, e dos 101 MB de `cutplayer4jfx.jar` e `ffmpeg`
+  que o pacote do CNJ carrega. Assinar, que é o que se usa, não depende disso.
 
 ### Permissão nenhuma entra por padrão
 
@@ -113,15 +114,19 @@ disco. Isso NÃO é o caminho normal de uso: assinando pelo PJe, quem entrega o
 documento é o navegador, pelo servidor local em 127.0.0.1:8800, e nada é lido
 da pasta de ninguém.
 
-Por isso o manifesto não ganhou acesso a arquivos por causa dele. O que a
-janela faz é oferecer, no mesmo diálogo em que mostra o comando de instalar, um
-segundo comando marcado como opcional, com o que ele serve:
+Por isso o manifesto não ganhou acesso a arquivos por causa dele. Depois de
+instalar, e só se a permissão ainda não existir, a janela oferece:
 
     flatpak override --user --filesystem=xdg-documents dev.lukakuuhaku.AdvBr
 
 Só a pasta Documentos, e só se a pessoa quiser. Permissão que o aplicativo não
 usa é permissão que ele não deve ter, e uma que ele usa uma vez por ano não
 justifica estar ligada o ano inteiro.
+
+O mesmo vale ao contrário: este aplicativo não pede
+`--talk-name=org.freedesktop.Flatpak`, que seria poder rodar qualquer comando
+fora da caixa. É o que permitiria instalar coisas sozinho, e é caro demais
+para o que compra.
 
 ## O que ainda não existe
 

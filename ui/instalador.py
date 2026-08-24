@@ -14,6 +14,7 @@ import ssl
 import urllib.request
 import zipfile
 
+import catalogo
 import deb
 
 # Onde ficam os certificados extras que alguns downloads exigem.
@@ -37,15 +38,10 @@ def instalado(componente):
     Conferir o diretório não bastaria — uma instalação interrompida no meio
     deixa um diretório que existe e não serve.
     """
-    if componente.extensao:
-        # Extensão Flatpak: quem instala é o `flatpak install` que a pessoa
-        # roda, e o que se pode observar daqui é o resultado, o programa
-        # montado dentro do aplicativo.
-        return bool(componente.executavel
-                    and os.access(componente.executavel, os.X_OK))
-
     destino = diretorio(componente)
     esperados = list(componente.arquivos.values())
+    for fonte in componente.fontes:
+        esperados += list(fonte.arquivos.values())
     if componente.lancador:
         esperados.append(os.path.join("bin", componente.chave))
     return all(os.path.exists(os.path.join(destino, alvo)) for alvo in esperados)
@@ -66,13 +62,23 @@ def _contexto(componente):
     return contexto
 
 
-def baixar(componente, progresso=None):
-    """Baixa o pacote e devolve os bytes, conferindo o sha256.
+def _fontes(componente):
+    """As fontes do componente, seja ele de uma só ou de várias."""
+    if componente.fontes:
+        return list(componente.fontes)
+    return [catalogo.Fonte(url=componente.url, sha256=componente.sha256,
+                           arquivos=componente.arquivos,
+                           formato="zip" if componente.dentro_de_zip else "deb")]
+
+
+def baixar(componente, progresso=None, fonte=None):
+    """Baixa um pacote e devolve os bytes, conferindo o sha256.
 
     `progresso` recebe (recebido, total) e serve para a barra da interface. O
     total pode vir zero quando o servidor não informa o tamanho.
     """
-    pedido = urllib.request.Request(componente.url, headers={"User-Agent": AGENTE})
+    fonte = fonte or _fontes(componente)[0]
+    pedido = urllib.request.Request(fonte.url, headers={"User-Agent": AGENTE})
     partes = []
     recebido = 0
     with urllib.request.urlopen(pedido, timeout=60,
@@ -89,13 +95,13 @@ def baixar(componente, progresso=None):
 
     dados = b"".join(partes)
     digest = hashlib.sha256(dados).hexdigest()
-    if digest != componente.sha256:
+    if digest != fonte.sha256:
         # Um pacote diferente do conferido não é instalado, e a mensagem diz o
         # que se viu: pode ser o fabricante tendo publicado uma versão nova, e
         # aí o catálogo é que precisa mudar.
         raise ValueError(
             "o arquivo baixado não confere com o esperado.\n"
-            "esperado: %s\nrecebido: %s" % (componente.sha256, digest))
+            "esperado: %s\nrecebido: %s" % (fonte.sha256, digest))
     return dados
 
 
@@ -116,28 +122,74 @@ def _escrever_lancador(componente, destino):
     os.chmod(caminho, 0o755)
 
 
+def _aplicar_trocas(componente, destino):
+    """Reescreve as linhas que o catálogo manda trocar, no que foi extraído.
+
+    Uma linha só, e por prefixo: é o suficiente para desligar o atualizador
+    automático do PJeOffice, e qualquer coisa mais esperta seria editar o
+    arquivo de outro projeto às cegas.
+    """
+    for relativo, (prefixo, nova) in componente.trocas.items():
+        caminho = os.path.join(destino, relativo)
+        with open(caminho, encoding="utf-8") as arquivo:
+            linhas = arquivo.readlines()
+        trocou = False
+        for i, linha in enumerate(linhas):
+            if linha.strip().startswith(prefixo):
+                linhas[i] = nova + "\n"
+                trocou = True
+        if not trocou:
+            # Silêncio aqui seria pior: o pacote mudou de forma e o que a
+            # troca evitava (o programa se atualizar sozinho por cima do que
+            # se instalou) volta a acontecer, sem aviso.
+            raise ValueError("%s não tem nenhuma linha começando por %s"
+                             % (relativo, prefixo))
+        with open(caminho, "w", encoding="utf-8") as arquivo:
+            arquivo.writelines(linhas)
+
+
 def instalar(componente, progresso=None):
-    dados = baixar(componente, progresso)
     destino = diretorio(componente)
 
     # Instala num diretório ao lado e só então troca: uma queda no meio da
     # extração não pode deixar meio driver instalado, que é pior que nenhum.
     temporario = destino + ".parcial"
     shutil.rmtree(temporario, ignore_errors=True)
-    if componente.dentro_de_zip:
-        # Alguns fabricantes distribuem um zip com instaladores para várias
-        # distribuições. O sha256 conferido é o do zip, que é o que se baixou.
-        with zipfile.ZipFile(io.BytesIO(dados)) as pacote:
-            try:
-                dados = pacote.read(componente.dentro_de_zip)
-            except KeyError as erro:
-                raise ValueError(
-                    "o arquivo baixado não traz %s. O fabricante pode ter "
-                    "mudado o conteúdo do pacote."
-                    % componente.dentro_de_zip) from erro
 
+    fontes = _fontes(componente)
     try:
-        deb.extrair(dados, temporario, componente.arquivos)
+        for numero, fonte in enumerate(fontes):
+            # A barra anda de 0 a 100 dentro de cada pacote; com mais de um, a
+            # fatia de cada um é proporcional. Sem isso a barra completaria e
+            # recomeçaria, que é o jeito mais rápido de alguém achar que travou.
+            def parcial(recebido, total, numero=numero):
+                if not progresso:
+                    return
+                fatia = 1.0 / len(fontes)
+                andado = (recebido / total if total else 0.0) * fatia
+                progresso(int((numero * fatia + andado) * 1000), 1000)
+
+            dados = baixar(componente, parcial, fonte)
+
+            if componente.dentro_de_zip:
+                # Alguns fabricantes distribuem um zip com instaladores para
+                # várias distribuições. O sha256 conferido é o do zip, que é o
+                # que se baixou.
+                with zipfile.ZipFile(io.BytesIO(dados)) as pacote:
+                    try:
+                        dados = pacote.read(componente.dentro_de_zip)
+                    except KeyError as erro:
+                        raise ValueError(
+                            "o arquivo baixado não traz %s. O fabricante pode "
+                            "ter mudado o conteúdo do pacote."
+                            % componente.dentro_de_zip) from erro
+
+            if fonte.formato == "tar":
+                deb.extrair_tar(dados, temporario, fonte.arquivos, fonte.cortar)
+            else:
+                deb.extrair(dados, temporario, fonte.arquivos)
+
+        _aplicar_trocas(componente, temporario)
         _escrever_lancador(componente, temporario)
         shutil.rmtree(destino, ignore_errors=True)
         os.replace(temporario, destino)
@@ -148,39 +200,10 @@ def instalar(componente, progresso=None):
 
 def lancador(componente):
     """Caminho do executável do componente, quando ele traz um aplicativo."""
-    if componente.extensao:
-        return (componente.executavel
-                if componente.executavel
-                and os.access(componente.executavel, os.X_OK) else "")
     if not componente.lancador:
         return ""
     caminho = os.path.join(diretorio(componente), "bin", componente.chave)
     return caminho if os.access(caminho, os.X_OK) else ""
-
-
-# De onde sai o que a pessoa constrói. O ramo entra separado porque é o que
-# muda enquanto esta versão não é a publicada.
-RECEITAS = "https://raw.githubusercontent.com/LLawli/flatpak-adv-br/main"
-
-
-def comando_de_instalar(componente):
-    """O comando que instala uma extensão, para a janela mostrar.
-
-    É um build na máquina de quem usa, e não um `flatpak install` de um
-    repositório pronto. A diferença não é técnica, é de licença: o PJeOffice é
-    distribuído gratuitamente pelo CNJ, e gratuito não é redistribuível. Não há
-    licença publicada que autorize terceiros a redistribuir os binários dele.
-    Um repositório Flatpak com ele dentro seria redistribuição; um manifesto
-    que a pessoa constrói a partir do pacote publicado pelo CNJ não é.
-
-    É a mesma regra que vale para os drivers proprietários, e a razão de este
-    aplicativo nunca trazer binário de terceiro embutido.
-    """
-    return "curl -fsSL %s/apps/instalar-%s.sh | sh" % (RECEITAS, componente.chave)
-
-
-def comando_de_desinstalar(componente):
-    return "flatpak uninstall --user %s" % componente.extensao
 
 
 def desinstalar(componente):
