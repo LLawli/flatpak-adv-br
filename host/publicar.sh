@@ -191,6 +191,11 @@ if [ "$ACAO" = remover ]; then
         \( -path "*/$SUBDIR_ATALHO_FLATPAK/$PREFIXO_WRAPPER*" \
            -o -path "*/.local/bin/$PREFIXO_WRAPPER*" \) \
         -delete 2>/dev/null || true
+    # E o diretório que os continha, que é nosso: apagar só os arquivos deixa
+    # um ~/.var/app/<navegador>/data/adv-br vazio em cada navegador, que quem
+    # desinstalou não tem por que encontrar depois.
+    find "$HOME/.var/app" -maxdepth 3 -type d -name "$(basename "$SUBDIR_ATALHO_FLATPAK")" \
+        -empty -delete 2>/dev/null || true
     ok "atalhos de assinador removidos"
 
     for arquivo in "$ATALHOS_HOST/$APP_ID."*.desktop; do
