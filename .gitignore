@@ -7,3 +7,4 @@ __pycache__/
 # Os componentes de compatibilidade do p11-kit, gerados por bin/compilar-p11kit.
 # São binários: vão para o servidor, não para o histórico.
 dist/
+build-pub/

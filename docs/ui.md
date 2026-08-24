@@ -257,6 +257,33 @@ ocupado até o fim.
 O título da issue sai da primeira linha do que a pessoa escreveu. Pedir um
 título à parte é pedir que ela resuma antes de contar.
 
+## Como isto chega em quem usa
+
+Duas linhas, sem `flatpak-builder`, sem SDK, sem mais de 1 GB de cache:
+
+    flatpak remote-add --if-not-exists adv-br https://flatpak.lukakuuhaku.dev/adv-br.flatpakrepo
+    flatpak install adv-br dev.lukakuuhaku.AdvBr
+
+O `./instalar.sh` continua existindo para quem quiser construir, mas deixou de
+ser a única porta.
+
+`bin/publicar` faz o caminho inteiro do outro lado: constrói, exporta para um
+repositório OSTree, assina com GPG, gera os deltas estáticos, copia os
+componentes de p11-kit e escreve o `.flatpakrepo` com a chave pública embutida.
+Com `--enviar`, um `rsync` leva o resultado ao servidor. **A chave privada nunca
+sai da máquina de quem publica**: o servidor guarda arquivos assinados e não
+sabe assinar nada.
+
+A chave pública ir dentro do `.flatpakrepo` é o que faz o arquivo ser o único
+ponto de confiança: quem o baixa por HTTPS do domínio certo já leva a chave
+certa, sem importar nada à mão.
+
+Verificado ponta a ponta, com o serviço em container servindo o repositório:
+adicionar o remoto pelo `.flatpakrepo`, instalar (2,3 s), publicar uma versão
+nova e atualizar. E o caminho que precisava falhar falhou: publicando com uma
+chave diferente, o flatpak recusou o repositório inteiro em vez de aceitar a
+versão nova.
+
 ## O que ainda não existe
 
 - desinstalar componentes que deixaram de existir no catálogo;
@@ -369,3 +396,8 @@ título à parte é pedir que ela resuma antes de contar.
   nome de arquivo, então um argumento com barras escreveria fora do diretório
   de logs. Medido antes de corrigir: `../../fuga` virava um arquivo com esse
   caminho. Hoje só sobrevivem letras, números e hífen.
+- **Um repositório assinado com a chave errada não dá erro de assinatura.** Dá
+  "Ref inexistente no remoto". O flatpak recusa o summary que não consegue
+  verificar e, a partir daí, o repositório parece vazio. É o comportamento
+  certo e a mensagem enganosa: quem trocar a chave de assinatura por engano vai
+  procurar o problema na referência, não na assinatura.

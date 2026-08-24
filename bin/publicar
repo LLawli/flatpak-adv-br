@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Constrói, assina e publica o aplicativo no repositório do projeto.
+#
+#   bin/publicar              constrói e assina no repositório local
+#   bin/publicar --enviar     e manda para o servidor
+#
+# O repositório fica em ~/.local/share/adv-br-repo e é o que o servidor serve.
+# A chave privada de assinatura NUNCA sai desta máquina: o que atravessa a rede
+# é o resultado assinado, e o servidor não precisa saber assinar nada.
+#
+# Por que existe: até aqui o único jeito de instalar era clonar e construir,
+# com flatpak-builder, o SDK do GNOME e mais de 1 GB de cache, para um pacote
+# de 18 MB. Isso continua valendo para quem quiser (./instalar.sh), mas não
+# pode ser a única porta.
+#
+# O que NÃO entra aqui, e o motivo, porque a pergunta volta: os drivers
+# proprietários e o PJeOffice. Nenhum deles é redistribuível, e o modelo do
+# aplicativo é justamente esse, cada um é baixado da origem oficial na máquina
+# de quem usa. O que vai junto do repositório são os componentes de p11-kit,
+# que são BSD-3-Clause e compilados por bin/compilar-p11kit.
+set -euo pipefail
+
+RAIZ=$(cd "$(dirname "$0")/.." && pwd)
+MANIFESTO=$RAIZ/dev.lukakuuhaku.AdvBr.yml
+APP_ID=dev.lukakuuhaku.AdvBr
+REPO=${ADV_BR_REPO:-${XDG_DATA_HOME:-$HOME/.local/share}/adv-br-repo}
+TRABALHO=${ADV_BR_TRABALHO:-${XDG_CACHE_HOME:-$HOME/.cache}/adv-br-publicacao}
+CHAVE=${ADV_BR_CHAVE_GPG:-}
+DESTINO=${ADV_BR_VPS:-}
+ORIGEM=${ADV_BR_ORIGEM_PUBLICA:-https://flatpak.lukakuuhaku.dev}
+RAMO=${ADV_BR_RAMO:-master}
+
+erro() { printf '\033[1;31m ✗\033[0m %s\n' "$*" >&2; exit 1; }
+passo() { printf '\033[1;36m ▸\033[0m %s\n' "$*"; }
+ok() { printf '\033[1;32m ✓\033[0m %s\n' "$*"; }
+
+ENVIAR=nao
+for argumento in "$@"; do
+    case $argumento in
+        --enviar) ENVIAR=sim ;;
+        *) erro "argumento desconhecido: $argumento" ;;
+    esac
+done
+
+command -v flatpak-builder >/dev/null || erro "falta o flatpak-builder."
+[ -n "$CHAVE" ] || erro "defina ADV_BR_CHAVE_GPG com o id da chave de assinatura.
+     Sem assinatura, quem instalar não tem como saber que o pacote é seu.
+     Para criar uma:  gpg --quick-generate-key 'adv-br <voce@exemplo>' default sign never"
+gpg --list-secret-keys "$CHAVE" >/dev/null 2>&1 ||
+    erro "não achei a chave privada $CHAVE neste computador."
+
+# ---------------------------------------------------------------------------
+passo "Construindo o $APP_ID"
+mkdir -p "$TRABALHO"
+flatpak-builder --force-clean --disable-rofiles-fuse \
+    --repo="$REPO" --gpg-sign="$CHAVE" \
+    --default-branch="$RAMO" \
+    "$TRABALHO/base" "$MANIFESTO" >/dev/null
+
+# ---------------------------------------------------------------------------
+passo "Assinando e gerando os deltas"
+# Os deltas são o que faz uma atualização baixar poucos MB em vez do pacote
+# inteiro. Sem eles, cada versão nova custa 18 MB a cada pessoa.
+flatpak build-update-repo "$REPO" \
+    --gpg-sign="$CHAVE" \
+    --generate-static-deltas \
+    --prune --prune-depth=3 \
+    --title="Certificado Digital (adv-br)" >/dev/null
+
+# ---------------------------------------------------------------------------
+passo "Componentes que acompanham o repositório"
+# Só os de p11-kit: são software livre e o aplicativo precisa deles para a
+# ponte funcionar em Debian e Ubuntu. Ver bin/compilar-p11kit.
+mkdir -p "$REPO/componentes"
+encontrados=0
+for arquivo in "$RAIZ"/dist/p11kit-*.tar.gz; do
+    [ -e "$arquivo" ] || continue
+    cp -f "$arquivo" "$REPO/componentes/"
+    encontrados=$((encontrados + 1))
+done
+if [ "$encontrados" -eq 0 ]; then
+    printf '   nenhum em dist/; rode bin/compilar-p11kit 0.25 (e 0.24, 0.23)\n'
+else
+    ok "$encontrados componente(s) de p11-kit"
+fi
+
+# ---------------------------------------------------------------------------
+passo "Arquivo que as pessoas adicionam"
+# A chave pública vai DENTRO do .flatpakrepo, em base64. É o que permite ao
+# flatpak verificar as assinaturas sem que ninguém precise importar chave à
+# mão, e é também o que torna o arquivo o único ponto de confiança: quem o
+# baixa por HTTPS do seu domínio já leva a chave certa.
+gpg --export "$CHAVE" | base64 -w0 > "$TRABALHO/chave.b64"
+cat > "$REPO/adv-br.flatpakrepo" <<FIM
+[Flatpak Repo]
+Title=Certificado Digital (adv-br)
+Url=$ORIGEM
+Homepage=https://github.com/LLawli/flatpak-adv-br
+Comment=Certificado digital ICP-Brasil no Linux, sem terminal
+Description=Drivers de token, assinadores e PJeOffice, instalados com um clique
+GPGKey=$(cat "$TRABALHO/chave.b64")
+FIM
+
+cat > "$REPO/index.html" <<FIM
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Certificado Digital (adv-br)</title>
+<style>
+ body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto;
+        padding: 0 1rem; line-height: 1.6; }
+ pre { background: #f4f4f5; padding: 1rem; overflow-x: auto; border-radius: .4rem; }
+ @media (prefers-color-scheme: dark) {
+   body { background: #18181b; color: #e4e4e7; }
+   pre { background: #27272a; }
+ }
+</style>
+<h1>Certificado Digital</h1>
+<p>Use o seu certificado ICP-Brasil no Linux: token nos navegadores, assinatura
+   nos sistemas do Judiciário e no PJe.</p>
+<h2>Instalar</h2>
+<pre>flatpak remote-add --if-not-exists adv-br $ORIGEM/adv-br.flatpakrepo
+flatpak install adv-br $APP_ID</pre>
+<p>Depois é só abrir <strong>Certificado Digital</strong> no menu.</p>
+<p><a href="https://github.com/LLawli/flatpak-adv-br">Código e documentação</a></p>
+FIM
+
+TAMANHO=$(du -sh "$REPO" | cut -f1)
+ok "repositório em $REPO ($TAMANHO)"
+
+# ---------------------------------------------------------------------------
+if [ "$ENVIAR" = sim ]; then
+    [ -n "$DESTINO" ] || erro "defina ADV_BR_VPS, por exemplo: vps:/srv/adv-br/repo"
+    passo "Enviando para $DESTINO"
+    # Só o que mudou atravessa: os objetos do OSTree têm o hash no nome, então
+    # o que já está lá não é reenviado.
+    rsync -a --delete --info=stats1 "$REPO/" "$DESTINO/"
+    ok "enviado"
+else
+    printf '\n   Para publicar:  ADV_BR_VPS=servidor:/srv/adv-br/repo %s --enviar\n' "$0"
+fi
+
+printf '\n   Testar aqui mesmo, como quem instala:\n'
+printf '       flatpak remote-add --user --if-not-exists --no-gpg-verify adv-br-local %s\n' "$REPO"
+printf '       flatpak install --user adv-br-local %s\n\n' "$APP_ID"
