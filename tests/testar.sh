@@ -32,7 +32,7 @@ done
 # ---------------------------------------------------------------------------
 titulo "Manifestos"
 
-for manifesto in io.github.llawli.AdvBr.yml drivers/*.yml; do
+for manifesto in io.github.llawli.AdvBr.yml drivers/*.yml assinadores/*.yml apps/*.yml; do
     [ -e "$manifesto" ] || continue
     if python3 - "$manifesto" <<'PY'
 import sys
@@ -45,12 +45,21 @@ PY
     then ok "$manifesto"; else falha "$manifesto"; fi
 done
 
-# Cada arquivo citado como 'path:' no manifesto principal precisa existir, ou o
-# build falha só depois de baixar meio giga de fontes.
-while read -r caminho; do
-    [ -n "$caminho" ] || continue
-    if [ -e "$caminho" ]; then ok "fonte $caminho"; else falha "fonte ausente: $caminho"; fi
-done < <(sed -n 's/^ *path: *//p' io.github.llawli.AdvBr.yml)
+# Cada arquivo citado como 'path:' precisa existir, ou o build falha só depois
+# de baixar centenas de megabytes. Nos manifestos de extensão o caminho é
+# relativo ao diretório do próprio manifesto.
+for manifesto in io.github.llawli.AdvBr.yml drivers/*.yml assinadores/*.yml apps/*.yml; do
+    [ -e "$manifesto" ] || continue
+    base=$(dirname "$manifesto")
+    while read -r caminho; do
+        [ -n "$caminho" ] || continue
+        if [ -e "$caminho" ] || [ -e "$base/$caminho" ]; then
+            ok "fonte $caminho"
+        else
+            falha "fonte ausente: $caminho (citado em $manifesto)"
+        fi
+    done < <(sed -n 's/^ *path: *//p' "$manifesto")
+done
 
 # ---------------------------------------------------------------------------
 titulo "nssdb.py"
@@ -68,7 +77,8 @@ if [ -e "$BANCO/pkcs11.txt" ]; then
     ok "banco NSS de teste criado sem certutil"
 
     python3 host/nssdb.py registrar "$BANCO" teste-adv-br /caminho/que/nao/existe.so
-    if python3 host/nssdb.py listar "$BANCO" | grep -q '^teste-adv-br	'; then
+    if printf '%s\n' "$(python3 host/nssdb.py listar "$BANCO")" |
+        grep -q '^teste-adv-br	'; then
         ok "registrar"
     else
         falha "registrar"
@@ -83,7 +93,8 @@ if [ -e "$BANCO/pkcs11.txt" ]; then
     fi
 
     python3 host/nssdb.py remover "$BANCO" teste-adv-br
-    if python3 host/nssdb.py listar "$BANCO" | grep -q '^teste-adv-br	'; then
+    if printf '%s\n' "$(python3 host/nssdb.py listar "$BANCO")" |
+        grep -q '^teste-adv-br	'; then
         falha "remover"
     else
         ok "remover"
@@ -91,7 +102,8 @@ if [ -e "$BANCO/pkcs11.txt" ]; then
 
     # O módulo interno do NSS não pode ser levado junto: sem ele o perfil perde
     # as chaves e os certificados.
-    if python3 host/nssdb.py listar "$BANCO" | grep -q 'NSS Internal PKCS #11 Module'; then
+    if printf '%s\n' "$(python3 host/nssdb.py listar "$BANCO")" |
+        grep -q 'NSS Internal PKCS #11 Module'; then
         ok "o módulo interno do NSS ficou intacto"
     else
         falha "o módulo interno do NSS sumiu"
@@ -108,7 +120,7 @@ APP_ID=io.github.llawli.AdvBr
 if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
     for comando in adv-br adv-br-pkcs11 adv-br-modulos adv-br-assinadores \
                    adv-br-ferramentas adv-br-atalhos adv-br-webpki adv-br-websigner \
-                   adv-br-certisign adv-br-serie pjeoffice-pro; do
+                   adv-br-certisign adv-br-serie; do
         if flatpak run --command=sh "$APP_ID" -c "test -x /app/bin/$comando" 2>/dev/null; then
             ok "comando $comando"
         else
@@ -125,7 +137,8 @@ if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
     # A série do p11-kit precisa sair como "0.26", e não vazia: é ela que o
     # diagnóstico compara com a do host para pegar o modo de falha que
     # autentica e não assina.
-    if flatpak run --command=adv-br-serie "$APP_ID" 2>/dev/null | grep -qE '^[0-9]+\.[0-9]+$'; then
+    if printf '%s\n' "$(flatpak run --command=adv-br-serie "$APP_ID" 2>/dev/null)" |
+        grep -qE '^[0-9]+\.[0-9]+$'; then
         ok "adv-br-serie responde com uma série de p11-kit"
     else
         falha "adv-br-serie não devolveu uma série"
@@ -142,12 +155,29 @@ if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
         falha "contagem de módulos: $registrados registrados, $carregados carregados"
     fi
 
-    # Três assinadores, três famílias de navegador cada: seis linhas. Comparar
-    # com zero deixaria passar um pacote sem assinador nenhum.
-    if [ "$(flatpak run --command=adv-br-assinadores "$APP_ID" 2>/dev/null | wc -l)" -ge 6 ]; then
-        ok "adv-br-assinadores descreve os três assinadores"
+    # As ferramentas e os atalhos das extensões instaladas têm de aparecer: é
+    # por eles que se abre o SerproID e o PJeOffice, que não são comandos do
+    # pacote base.
+    for extensao in App.PJeOffice Driver.SerproID; do
+        flatpak info --user "$APP_ID.$extensao" >/dev/null 2>&1 || continue
+        if printf '%s\n' "$(flatpak run --command=adv-br-ferramentas "$APP_ID" 2>/dev/null)" |
+            grep -q "de ${extensao#*.}"; then
+            ok "adv-br-ferramentas encontra a de $extensao"
+        else
+            falha "adv-br-ferramentas não encontrou a ferramenta de $extensao"
+        fi
+    done
+
+    # Duas linhas por assinador instalado, uma por família de navegador. O
+    # número não é fixo porque os assinadores são extensões: o que se confere é
+    # a coerência entre o que está instalado e o que é descrito.
+    instalados=$(flatpak list --columns=application 2>/dev/null |
+        grep -c "^$APP_ID\.Assinador\." || true)
+    descritos=$(flatpak run --command=adv-br-assinadores "$APP_ID" 2>/dev/null | wc -l)
+    if [ "$descritos" = "$((instalados * 2))" ]; then
+        ok "adv-br-assinadores descreve os $instalados assinador(es) instalado(s)"
     else
-        falha "adv-br-assinadores descreveu menos do que os três assinadores"
+        falha "$instalados assinador(es) instalado(s), $descritos linha(s) descritas"
     fi
 else
     printf '   (pacote não instalado; pulando)\n'

@@ -168,7 +168,7 @@ if [ "$ACAO" = remover ]; then
         while read -r banco; do
             [ -n "$banco" ] || continue
             for nome in "$NOME_NSS_HOST" "$NOME_NSS_SANDBOX"; do
-                if nss listar "$banco" | grep -q "^$nome	"; then
+                if printf '%s\n' "$(nss listar "$banco")" | grep -q "^$nome	"; then
                     nss remover "$banco" "$nome" && ok "$nome removido de $banco"
                 fi
             done

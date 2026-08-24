@@ -131,7 +131,7 @@ for arquivo in "$MODULOS_HOST/$PREFIXO_MODULO"*.module; do
     [ -e "$arquivo" ] || continue
     caminho=$(sed -n "s/^remote: .*$APP_ID //p" "$arquivo")
     [ -n "$caminho" ] || continue
-    printf '%s\n' "$MODULOS" | cut -f2 | grep -qx "$caminho" ||
+    printf '%s\n' "$(printf '%s\n' "$MODULOS" | cut -f2)" | grep -qx "$caminho" ||
         falha_conta "$(basename "$arquivo") aponta para $caminho, que não existe mais
       no pacote.  ./host/publicar.sh"
 done
@@ -224,7 +224,8 @@ conferir_banco() {
         [ -n "${BANCO_VISTO[$banco]:-}" ] && continue
         BANCO_VISTO[$banco]=1
         conta_banco=$((conta_banco + 1))
-        if nss listar "$banco" | grep -qE "^($NOME_NSS_HOST|$NOME_NSS_SANDBOX)	"; then
+        if printf '%s\n' "$(nss listar "$banco")" |
+            grep -qE "^($NOME_NSS_HOST|$NOME_NSS_SANDBOX)	"; then
             ok "${id:-host}: $(basename "$banco")"
         else
             falha_conta "${id:-host}: $banco sem o módulo.  ./host/publicar.sh"
@@ -246,7 +247,7 @@ done
 # Resquício comum: o sora-adv-br publica com outros nomes e aponta para uma box
 # do distrobox. Com a box removida, o módulo continua registrado e o p11-kit
 # tenta iniciá-la a cada abertura de navegador.
-if nss listar "$HOME/.pki/nssdb" 2>/dev/null | grep -q '^sora-'; then
+if printf '%s\n' "$(nss listar "$HOME/.pki/nssdb" 2>/dev/null)" | grep -q '^sora-'; then
     aviso "há módulos do sora-adv-br registrados em ~/.pki/nssdb. Se você não usa
       mais a box do distrobox, eles só custam tempo em cada abertura:
           python3 host/nssdb.py remover ~/.pki/nssdb sora-p11-kit-proxy"

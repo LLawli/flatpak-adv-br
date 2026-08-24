@@ -365,6 +365,26 @@ que foi removido e o sintoma continuou. Só isolando módulo a módulo
 (`rm /etc/pkcs11/modules/*.module` e recolocando um por vez) o SafeNet
 apareceu.
 
+## `cmd | grep -q` mente quando há `pipefail`
+
+O `grep -q` sai assim que encontra a primeira ocorrência. Quem estava
+escrevendo do outro lado do cano leva SIGPIPE, termina com 141, e com
+`set -o pipefail` o pipeline inteiro devolve 141 — ou seja, **falha** — mesmo
+tendo encontrado o que procurava.
+
+O efeito é cruel porque depende da **posição** da linha que casou: se ela vier
+por último, o produtor termina antes do grep sair e tudo passa. Aqui um teste
+que procurava duas ferramentas encontrou a que aparecia por último e "não
+encontrou" a que aparecia primeiro, no mesmo comando e com a mesma saída.
+
+A correção é capturar antes de filtrar:
+
+```sh
+printf '%s\n' "$(cmd)" | grep -q padrao
+```
+
+Vale para todo `| head`, `| grep -q`, `| head -1` num script com `pipefail`.
+
 ## `pkill -f` mata o próprio shell
 
 `pkill -f "pjeoffice-pro.jar"` casa a linha de comando de quem está rodando o
