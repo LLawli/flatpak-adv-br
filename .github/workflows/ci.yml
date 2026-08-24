@@ -1,0 +1,77 @@
+# O que dá para conferir sem token, sem leitora e sem construir o pacote.
+#
+# O que NÃO está aqui, de propósito: construir o Flatpak. Todo módulo baixa de
+# site de fabricante, e um CI que dependa disso fica vermelho por indisponi-
+# bilidade alheia — que é o tipo de ruído que faz as pessoas pararem de olhar o
+# CI. A construção é verificada na máquina de quem instala, pelo ./instalar.sh.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  estatico:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versão do shellcheck
+        # O runner costuma ter um shellcheck mais novo que o da máquina de quem
+        # escreveu o código, e reprovar o que passou lá — já aconteceu com o
+        # SC2093. Sem esta linha no log, a divergência vira mistério.
+        run: shellcheck --version
+
+      - name: shellcheck
+        run: |
+          shellcheck -S warning \
+              src/*.sh host/*.sh tests/*.sh drivers/*.sh packaging/*.sh \
+              instalar.sh diagnostico.sh
+
+      - name: Python compila
+        run: |
+          python3 -m py_compile host/*.py tests/*.py
+
+      - name: Manifestos
+        run: |
+          python3 - <<'PY'
+          import glob
+          import sys
+
+          manifestos = sorted(glob.glob("*.yml") + glob.glob("drivers/*.yml"))
+          # Piso absoluto: um glob que não casa nada faria este teste passar
+          # sem conferir manifesto nenhum.
+          if len(manifestos) < 4:
+              sys.exit("esperava ao menos 4 manifestos, achei %d" % len(manifestos))
+          for arquivo in manifestos:
+              texto = open(arquivo, encoding="utf-8").read()
+              if "\t" in texto:
+                  sys.exit("%s: tabulação em YAML" % arquivo)
+              if not any(l.startswith("id:") for l in texto.splitlines()):
+                  sys.exit("%s: sem id:" % arquivo)
+              print("ok  %s" % arquivo)
+          PY
+
+      - name: Fontes citadas nos manifestos existem
+        run: |
+          faltando=0
+          for manifesto in *.yml drivers/*.yml; do
+              while read -r caminho; do
+                  [ -n "$caminho" ] || continue
+                  # Nos manifestos de extensão, 'path:' é relativo ao diretório
+                  # do próprio manifesto.
+                  base=$(dirname "$manifesto")
+                  [ -e "$caminho" ] || [ -e "$base/$caminho" ] || {
+                      echo "ausente: $caminho (citado em $manifesto)"
+                      faltando=$((faltando + 1))
+                  }
+              done < <(sed -n 's/^ *path: *//p' "$manifesto")
+          done
+          [ "$faltando" -eq 0 ]
+
+      - name: metainfo e desktop
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq appstream desktop-file-utils
+          appstreamcli validate --no-net io.github.llawli.AdvBr.metainfo.xml
+          desktop-file-validate io.github.llawli.AdvBr.PJeOffice.desktop
