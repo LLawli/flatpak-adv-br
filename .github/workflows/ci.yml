@@ -27,10 +27,16 @@ jobs:
           shellcheck -S warning \
               src/*.sh host/*.sh tests/*.sh drivers/*.sh assinadores/*.sh \
               apps/*.sh packaging/*.sh instalar.sh diagnostico.sh
+          # Os lançadores do aplicativo com interface não terminam em .sh: são
+          # comandos, e o nome deles é o que aparece no `flatpak run`. Sem
+          # listá-los aqui, a única parte do pacote que roda em toda abertura
+          # ficaria fora do lint.
+          shellcheck -S warning -x \
+              ui/adv-br-pkcs11 ui/adv-br-assinador ui/preparar-drivers.sh
 
       - name: Python compila
         run: |
-          python3 -m py_compile host/*.py tests/*.py
+          python3 -m py_compile host/*.py tests/*.py ui/*.py
 
       - name: Manifestos
         run: |
@@ -75,6 +81,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq appstream desktop-file-utils
           appstreamcli validate --no-net io.github.llawli.AdvBr.metainfo.xml
+          appstreamcli validate --no-net dev.lukakuuhaku.AdvBr.metainfo.xml
+          desktop-file-validate dev.lukakuuhaku.AdvBr.desktop
           # Os .desktop das extensões são modelos: @EXEC@ e @ICONE@ entram no
           # lugar certo quando o publicador os leva para o host.
           for d in drivers/*.desktop apps/*.desktop; do
