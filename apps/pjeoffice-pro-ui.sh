@@ -39,6 +39,15 @@ export PKCS11_DRIVER=/app/lib/pkcs11
 RELATORIOS="${XDG_DATA_HOME:-$HOME/.local/share}/pjeoffice-relatorios"
 mkdir -p "$RELATORIOS"
 
+# O PJeOffice grava configuração, log e certificados de confiança em
+# ~/.pjeoffice-pro, montando o caminho com o user.home da JVM. No sandbox isso
+# é o $HOME, que é um tmpfs: o Flatpak monta ali dentro apenas config, data e
+# cache. Sem este link a pessoa configura o assinador, fecha, e reabre num
+# aplicativo que esqueceu tudo, sem nenhum erro que explique o que houve.
+DADOS="${XDG_DATA_HOME:-$HOME/.local/share}/pjeoffice-pro"
+mkdir -p "$DADOS"
+[ -e "$HOME/.pjeoffice-pro" ] || ln -s "$DADOS" "$HOME/.pjeoffice-pro"
+
 # O AWT do Java não fala Wayland: roda por XWayland. Sem isto, o KWin e outros
 # compositores reparentam a janela e o Swing desenha a decoração no lugar
 # errado.
