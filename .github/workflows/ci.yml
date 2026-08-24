@@ -84,6 +84,14 @@ jobs:
           done
           [ "$faltando" -eq 0 ]
 
+      - name: O serviço
+        run: |
+          cd servidor
+          gofmt -l . | tee /tmp/malformatados
+          test ! -s /tmp/malformatados
+          go vet ./...
+          go test ./...
+
       - name: metainfo e desktop
         run: |
           sudo apt-get update -qq
