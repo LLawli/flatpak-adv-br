@@ -37,6 +37,13 @@ def instalado(componente):
     Conferir o diretório não bastaria — uma instalação interrompida no meio
     deixa um diretório que existe e não serve.
     """
+    if componente.extensao:
+        # Extensão Flatpak: quem instala é o `flatpak install` que a pessoa
+        # roda, e o que se pode observar daqui é o resultado, o programa
+        # montado dentro do aplicativo.
+        return bool(componente.executavel
+                    and os.access(componente.executavel, os.X_OK))
+
     destino = diretorio(componente)
     esperados = list(componente.arquivos.values())
     if componente.lancador:
@@ -141,10 +148,28 @@ def instalar(componente, progresso=None):
 
 def lancador(componente):
     """Caminho do executável do componente, quando ele traz um aplicativo."""
+    if componente.extensao:
+        return (componente.executavel
+                if componente.executavel
+                and os.access(componente.executavel, os.X_OK) else "")
     if not componente.lancador:
         return ""
     caminho = os.path.join(diretorio(componente), "bin", componente.chave)
     return caminho if os.access(caminho, os.X_OK) else ""
+
+
+def comando_de_instalar(componente):
+    """O comando que instala uma extensão, para a janela mostrar.
+
+    Sem o nome do repositório: quem chegou até aqui instalou o aplicativo de
+    algum lugar, e o Flatpak procura a referência nos repositórios que a pessoa
+    já tem. Fixar um nome aqui quebraria quem o adicionou com outro.
+    """
+    return "flatpak install --user %s" % componente.extensao
+
+
+def comando_de_desinstalar(componente):
+    return "flatpak uninstall --user %s" % componente.extensao
 
 
 def desinstalar(componente):

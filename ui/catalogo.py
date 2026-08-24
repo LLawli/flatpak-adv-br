@@ -13,7 +13,7 @@ import collections
 Componente = collections.namedtuple(
     "Componente",
     "chave nome resumo detalhe tipo url sha256 arquivos tamanho ca lancador "
-    "dentro_de_zip",
+    "dentro_de_zip extensao executavel permissao",
 )
 # `ca` nomeia um certificado extra a confiar no download, e existe por um
 # servidor só; ver o Softplan abaixo. `lancador` é o corpo de um script para
@@ -21,7 +21,18 @@ Componente = collections.namedtuple(
 # resto.
 # `dentro_de_zip` é o caminho do .deb dentro de um zip, para o fabricante que
 # distribui assim. Vazio quando a URL já é o pacote.
-Componente.__new__.__defaults__ = ("", "", "")
+# Campos que só alguns componentes usam:
+#
+#   dentro_de_zip  caminho do .deb dentro de um zip, para o fabricante que
+#                  distribui assim. Vazio quando a URL já é o pacote.
+#   extensao       id da extensão Flatpak, para o que não é baixado pela
+#                  janela. Quem tem isto não tem url nem sha256: a instalação
+#                  é um comando que a pessoa roda, e a janela o mostra.
+#   executavel     caminho absoluto do programa dentro do aplicativo, para
+#                  saber se a extensão está montada e para abri-la.
+#   permissao      permissão OPCIONAL, com o motivo, oferecida depois de
+#                  instalar. Nunca aplicada sozinha nem exigida.
+Componente.__new__.__defaults__ = ("", "", "", "", "", None)
 
 # tipo:
 #   driver     apresenta o token ao sistema (vira módulo PKCS#11)
@@ -193,6 +204,36 @@ CATALOGO += [
             "./etc/eToken.common.conf": "etc/eToken.common.conf",
         },
         tamanho=87 * 1024 * 1024,
+    ),
+]
+
+CATALOGO += [
+    Componente(
+        chave="pjeoffice",
+        nome="PJeOffice Pro",
+        resumo="Assinador do PJe, do CNJ",
+        detalhe=(
+            "Necessário para assinar no PJe. Vem como extensão porque traz "
+            "junto a máquina virtual Java que ele exige: são cerca de 300 MB, "
+            "e quem não usa o PJe não precisa baixá-los."
+        ),
+        tipo="aplicativo",
+        # Não há download aqui: quem baixa é o Flatpak, e é ele quem confere a
+        # assinatura do repositório.
+        url="",
+        sha256="",
+        arquivos={},
+        extensao="dev.lukakuuhaku.AdvBr.App.PJeOffice",
+        executavel="/app/lib/apps/PJeOffice/bin/pjeoffice-pro",
+        # Nada disto é preciso para assinar pelo PJe: ali quem entrega o
+        # documento é o navegador, pelo servidor local do assinador. É só para
+        # quem for usar o assinador de arquivos avulsos, e por isso é oferecida
+        # depois, com o motivo, e não embutida no aplicativo.
+        permissao=(
+            "--filesystem=xdg-documents",
+            "abrir arquivos da pasta Documentos para assinar avulsos",
+        ),
+        tamanho=300 * 1024 * 1024,
     ),
 ]
 
