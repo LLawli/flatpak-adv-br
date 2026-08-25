@@ -360,7 +360,7 @@ CATALOGO += [
         fontes=(
             Fonte(
                 url="https://flatpak.lukakuuhaku.dev/componentes/p11kit-0.25.tar.gz",
-                sha256="592fe87efbb07b8606c5399e9a69001007b2cadf510d1e821c4fb3025209ac3a",
+                sha256="c77c974726b1d4cccf34005250df4ab756b1b4c22283eab00ac2a5d0357986be",
                 arquivos={"lib/": "lib", "libexec/": "libexec"},
                 formato="tar",
                 cortar=1,
@@ -386,7 +386,7 @@ CATALOGO += [
         fontes=(
             Fonte(
                 url="https://flatpak.lukakuuhaku.dev/componentes/p11kit-0.23.tar.gz",
-                sha256="f5c7c4a5d60f0d56fe72b79ddf2d6ae7c028872b71cb848984ae00052f5ab5aa",
+                sha256="fa4ab9bc8263b594e0a397a0403c7a39e2d17e10f2aa82cc5aeeb65e62eb15df",
                 arquivos={"lib/": "lib", "libexec/": "libexec"},
                 formato="tar",
                 cortar=1,
@@ -412,7 +412,7 @@ CATALOGO += [
         fontes=(
             Fonte(
                 url="https://flatpak.lukakuuhaku.dev/componentes/p11kit-0.24.tar.gz",
-                sha256="420690474a29c6a2d305082e7489613f58e6aa82e2d6ac5ce131e8c74ce0541b",
+                sha256="12f69626f201d5d95c934e2b860a73f6eadaeb03534897c6eeb532c810228e42",
                 arquivos={"lib/": "lib", "libexec/": "libexec"},
                 formato="tar",
                 cortar=1,
