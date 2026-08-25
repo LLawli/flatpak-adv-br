@@ -13,8 +13,28 @@ O Papers, para assinar e validar PDF fora do navegador, também.
 É o [sora-adv-br](https://github.com/LLawli/sora-adv-br) com Flatpak no lugar do
 distrobox. A ideia é a mesma; o que muda é o veículo.
 
+## Duas portas para a mesma coisa
+
+**Com janela**, se você prefere não ver terminal nenhum depois da instalação:
+
+```bash
+flatpak remote-add --if-not-exists adv-br https://flatpak.lukakuuhaku.dev/adv-br.flatpakrepo
+flatpak install adv-br dev.lukakuuhaku.AdvBr
+```
+
+O aplicativo instala driver, assinador e PJeOffice por um clique, descobre
+sozinho os navegadores que você usa, resolve a compatibilidade do p11-kit quando
+o seu sistema precisa dela, e tem um botão para relatar problema que já mostra o
+que vai ser enviado. É o caminho recomendado para quem só quer usar o
+certificado.
+
+**Por linha de comando**, se você prefere construir o pacote na sua máquina e
+escolher cada peça na mão: siga para [Instalação](#instalação). Os dois caminhos
+levam ao mesmo lugar e podem conviver.
+
 **Instalar**, **desinstalar** e o resto:
 
+[Duas portas](#duas-portas-para-a-mesma-coisa) ·
 [O que vem no pacote](#o-que-vem-e-o-que-você-escolhe) ·
 [Requisitos](#requisitos) ·
 [Instalação](#instalação) ·
@@ -135,6 +155,10 @@ sudo zypper in flatpak flatpak-builder pcsc-ccid p11-kit
 sudo systemctl enable --now pcscd.socket
 ```
 
+O `flatpak-builder` da lista acima só é necessário para o caminho por linha de
+comando, que constrói o pacote aqui. Instalando pelo aplicativo com janela,
+bastam o `flatpak`, o `pcscd` e o `ccid`: o pacote chega pronto e assinado.
+
 Sem `flatpak-builder` no sistema, o instalador aceita o do Flathub:
 `flatpak install --user flathub org.flatpak.Builder`.
 
@@ -142,8 +166,10 @@ Sem `flatpak-builder` no sistema, o instalador aceita o do Flathub:
 que o p11-kit do host e o do pacote estejam na mesma série. O runtime traz a
 0.26; Debian trixie e Ubuntu 24.04 trazem a 0.25, e divergir aí faz o token
 aparecer, o PIN ser aceito e **toda assinatura falhar**, inclusive a do login
-por certificado. O `./instalar.sh` detecta isso sozinho e compila, dentro do
-pacote, um p11-kit da série do seu host; você não precisa fazer nada. Ver
+por certificado. Você não precisa fazer nada em nenhum dos dois caminhos, mas
+eles resolvem de formas diferentes: o `./instalar.sh` compila, dentro do pacote,
+um p11-kit da série do seu host, enquanto o aplicativo com janela oferece o
+componente já pronto da série certa, e só quando detecta a divergência. Ver
 [docs/ARMADILHAS.md](docs/ARMADILHAS.md).
 
 **Não é preciso `nss-tools`.** O registro nos bancos NSS dos navegadores é feito
@@ -151,6 +177,10 @@ editando o `pkcs11.txt`, que é o que o `modutil` faria. Assim o projeto não
 exige um pacote a mais num sistema atômico.
 
 ## Instalação
+
+Esta seção é o caminho por linha de comando, que constrói o pacote na sua
+máquina. Para a instalação com janela, em duas linhas e sem construir nada, veja
+[Duas portas](#duas-portas-para-a-mesma-coisa).
 
 Um comando, sem clonar nada:
 
