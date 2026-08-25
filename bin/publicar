@@ -68,6 +68,34 @@ command -v ostree >/dev/null 2>&1 ||
 gpg --list-secret-keys "$CHAVE" >/dev/null 2>&1 ||
     erro "não achei a chave privada $CHAVE neste computador."
 
+# A chave pública versionada é a segunda fonte de confiança deste repositório.
+# A primeira, o .flatpakrepo, é servida pelo mesmo domínio que serve os
+# pacotes: quem controlasse o servidor trocaria as duas de uma vez. A que está
+# aqui viaja pelo git, num histórico de commits assinados, onde uma troca deixa
+# rastro.
+#
+# Duas cópias da mesma chave viram mentira no dia em que uma desatualiza, e é
+# por isso que publicar confere as duas antes de qualquer outra coisa: assinar
+# com uma chave que o repositório não anuncia produz um repositório que ninguém
+# instala, e o erro que aparece do outro lado fala de referência inexistente,
+# não de assinatura.
+CHAVE_PUBLICA=$RAIZ/packaging/chave-publica.asc
+[ -f "$CHAVE_PUBLICA" ] ||
+    erro "falta $CHAVE_PUBLICA, a chave pública que o repositório anuncia.
+     Para gerar:  gpg --export --armor \"\$ADV_BR_CHAVE_GPG\" > packaging/chave-publica.asc"
+impressao_arquivo=$(gpg --show-keys --with-colons "$CHAVE_PUBLICA" 2>/dev/null |
+    awk -F: '/^fpr/{print $10; exit}')
+impressao_usada=$(gpg --list-keys --with-colons "$CHAVE" 2>/dev/null |
+    awk -F: '/^fpr/{print $10; exit}')
+[ -n "$impressao_arquivo" ] && [ -n "$impressao_usada" ] ||
+    erro "não consegui ler a impressão digital das chaves para comparar."
+[ "$impressao_arquivo" = "$impressao_usada" ] ||
+    erro "a chave que você está usando não é a que o repositório anuncia.
+     no repositório: $impressao_arquivo
+     em uso:         $impressao_usada
+     Se a troca é intencional, atualize packaging/chave-publica.asc; quem já
+     tem o remoto configurado vai precisar readicioná-lo de qualquer forma."
+
 # ---------------------------------------------------------------------------
 passo "Construindo o $APP_ID"
 mkdir -p "$TRABALHO"
