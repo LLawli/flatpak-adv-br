@@ -284,6 +284,20 @@ nova e atualizar. E o caminho que precisava falhar falhou: publicando com uma
 chave diferente, o flatpak recusou o repositório inteiro em vez de aceitar a
 versão nova.
 
+Depois, contra o servidor de verdade, os dois números que importam para quem
+está do outro lado:
+
+| | |
+|---|---|
+| Instalar a 1.0.0, do zero | 1,8 MB baixados, 4,5 MB em disco |
+| Atualizar da 1.0.0 para a 1.0.1 | **23,4 kB** |
+
+A atualização mexeu em quatro arquivos de texto e custou 1,3% do pacote. É para
+isso que servem os deltas estáticos, e é por isso que `bin/publicar` os gera
+depois de assinar, e não antes: sem eles, cada versão nova custaria os 1,8 MB
+inteiros a cada pessoa; com eles gerados na ordem errada, a assinatura vai para
+o repositório e não chega a quem instala.
+
 ## O que ainda não existe
 
 - desinstalar componentes que deixaram de existir no catálogo;
