@@ -401,3 +401,22 @@ versão nova.
   verificar e, a partir daí, o repositório parece vazio. É o comportamento
   certo e a mensagem enganosa: quem trocar a chave de assinatura por engano vai
   procurar o problema na referência, não na assinatura.
+- **"GPG Agent: No pinentry" na publicação não é problema de pinentry.** É o
+  `flatpak-builder` rodando como Flatpak (`org.flatpak.Builder`): o build
+  acontece num sandbox que não tem pinentry instalado nem enxerga o socket do
+  gpg-agent, e a assinatura pedida ao builder morre lá dentro. Do lado de fora
+  tudo parece certo, e `gpg --clearsign` no terminal funciona o tempo todo, o
+  que reforça o diagnóstico errado. Ficou impossível de contornar com a chave
+  num cartão, porque quem conversa com a YubiKey é o agent da sessão, que não
+  existe dentro do sandbox. Por isso `bin/publicar` assina fora do construtor.
+- **Assinar depois de gerar os deltas publica uma assinatura correta e
+  inútil.** Numa instalação nova o cliente não baixa o commit solto: usa o delta
+  estático de origem vazia, que carrega dentro de si uma cópia do commit feita
+  no instante em que o delta foi gerado. O `.commitmeta` fica publicado e
+  ninguém o pede. O sintoma aparece só na máquina de quem instala, como "GPG
+  verification enabled, but no signatures found", e é especialmente enganoso
+  porque do lado de quem publica todas as refs aparecem assinadas, o summary
+  também, e o arquivo responde por HTTP. Medido aqui: o commitmeta estava no
+  servidor, com 142 bytes e HTTP 200, enquanto a instalação recusava o mesmo
+  commit. A ordem em `bin/publicar` existe por causa disto, e o guarda no fim
+  recusa terminar com qualquer ref sem assinatura.
