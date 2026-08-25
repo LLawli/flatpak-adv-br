@@ -198,13 +198,21 @@ func responder(w http.ResponseWriter, codigo int, corpo any) {
 }
 
 // quemChama devolve o endereço de quem fez o pedido, respeitando o cabeçalho
-// que o proxy põe. O serviço só escuta em localhost, então confiar no
-// X-Forwarded-For aqui é confiar no proxy, que é quem está na frente.
+// que o proxy põe. O Caddy manda esse cabeçalho por conta própria em todo
+// reverse_proxy; com nginx seria preciso configurar.
 //
-// O Caddy manda esse cabeçalho por conta própria em todo reverse_proxy; com
-// nginx é preciso configurar. Se um dia o serviço passar a escutar em endereço
-// público, este cabeçalho vira mentira que qualquer cliente pode contar, e o
-// limite por endereço deixa de valer.
+// Confiar nele é confiar em quem consegue falar com esta porta, e vale saber
+// quem é. O serviço não escuta em localhost: escuta numa rede do Docker
+// compartilhada com os outros containers do mesmo host, e qualquer um deles
+// alcança esta porta direto, sem passar pelo proxy, mandando o
+// X-Forwarded-For que quiser. Ou seja: o limite por endereço protege contra
+// quem vem da internet e não protege contra um vizinho de rede comprometido,
+// que passaria por quantos endereços quisesse sem que nada acusasse.
+//
+// Foi uma escolha, não um esquecimento: uma rede dedicada só entre o proxy e
+// este serviço fecharia isso. Se um dia o serviço passar a escutar em endereço
+// público, aí o cabeçalho vira mentira que QUALQUER cliente pode contar, e o
+// limite por endereço deixa de valer por inteiro.
 func quemChama(r *http.Request) string {
 	if repassado := r.Header.Get("X-Forwarded-For"); repassado != "" {
 		return strings.TrimSpace(strings.Split(repassado, ",")[0])
