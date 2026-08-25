@@ -42,7 +42,21 @@ for argumento in "$@"; do
     esac
 done
 
-command -v flatpak-builder >/dev/null || erro "falta o flatpak-builder."
+# O builder vem de dois jeitos, e os dois servem: instalado no sistema ou como
+# Flatpak. O instalar.sh já aceitava ambos; aqui só aceitava o do sistema, o
+# que obrigava a instalar no host quem só queria publicar.
+if command -v flatpak-builder >/dev/null; then
+    construtor=(flatpak-builder)
+elif flatpak info org.flatpak.Builder >/dev/null 2>&1; then
+    construtor=(flatpak run org.flatpak.Builder)
+else
+    erro "falta o flatpak-builder. Instale-o:
+      Fedora: sudo dnf install flatpak-builder
+      Debian: sudo apt install flatpak-builder
+      Arch:   sudo pacman -S flatpak-builder
+      ou, sem tocar no sistema:
+              flatpak install --user flathub org.flatpak.Builder"
+fi
 [ -n "$CHAVE" ] || erro "defina ADV_BR_CHAVE_GPG com o id da chave de assinatura.
      Sem assinatura, quem instalar não tem como saber que o pacote é seu.
      Para criar uma:  gpg --quick-generate-key 'adv-br <voce@exemplo>' default sign never"
@@ -52,7 +66,7 @@ gpg --list-secret-keys "$CHAVE" >/dev/null 2>&1 ||
 # ---------------------------------------------------------------------------
 passo "Construindo o $APP_ID"
 mkdir -p "$TRABALHO"
-flatpak-builder --force-clean --disable-rofiles-fuse \
+"${construtor[@]}" --force-clean --disable-rofiles-fuse \
     --repo="$REPO" --gpg-sign="$CHAVE" \
     --default-branch="$RAMO" \
     "$TRABALHO/base" "$MANIFESTO" >/dev/null
