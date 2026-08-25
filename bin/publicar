@@ -67,9 +67,50 @@ gpg --list-secret-keys "$CHAVE" >/dev/null 2>&1 ||
 passo "Construindo o $APP_ID"
 mkdir -p "$TRABALHO"
 "${construtor[@]}" --force-clean --disable-rofiles-fuse \
-    --repo="$REPO" --gpg-sign="$CHAVE" \
+    --repo="$REPO" \
     --default-branch="$RAMO" \
     "$TRABALHO/base" "$MANIFESTO" >/dev/null
+
+# ---------------------------------------------------------------------------
+passo "Assinando as refs, aqui fora"
+# A assinatura NÃO é pedida ao flatpak-builder de propósito. Quando ele é o
+# org.flatpak.Builder, que é um Flatpak, o build roda num sandbox sem pinentry
+# e sem o socket do gpg-agent: a assinatura falha com "GPG Agent: No pinentry",
+# mensagem que não menciona sandbox nenhum e manda procurar no lugar errado.
+# Assinar aqui fora vale para os dois construtores, e é o único jeito quando a
+# chave mora num cartão, porque quem fala com o cartão é o agent desta sessão.
+#
+# Todas as refs, e não só a do aplicativo: a .Locale é instalada junto por
+# padrão, e uma única ref sem assinatura derruba a instalação inteira.
+refs_do_repositorio() {
+    if command -v ostree >/dev/null 2>&1; then
+        ostree --repo="$REPO" refs
+    else
+        # Sem o binário do ostree, as três que este manifesto gera.
+        arquitetura=$(flatpak --default-arch)
+        printf 'app/%s/%s/%s\n' "$APP_ID" "$arquitetura" "$RAMO"
+        printf 'runtime/%s.Locale/%s/%s\n' "$APP_ID" "$arquitetura" "$RAMO"
+        printf 'runtime/%s.Debug/%s/%s\n' "$APP_ID" "$arquitetura" "$RAMO"
+    fi
+}
+
+assinadas=0
+while IFS=/ read -r tipo id arquitetura ramo; do
+    [ -n "${ramo:-}" ] || continue
+    ehruntime=()
+    [ "$tipo" = runtime ] && ehruntime=(--runtime)
+    flatpak build-sign ${ehruntime[@]+"${ehruntime[@]}"} \
+        --arch="$arquitetura" --gpg-sign="$CHAVE" \
+        "$REPO" "$id" "$ramo" ||
+        erro "não consegui assinar $tipo/$id/$arquitetura/$ramo"
+    assinadas=$((assinadas + 1))
+done < <(refs_do_repositorio)
+
+# Um mínimo absoluto, e não uma contagem comparada com outra contagem tirada da
+# mesma fonte: se o build não exportou nada, o laço acima passa sem assinar
+# nada e o repositório sairia vazio e "verde".
+[ "$assinadas" -ge 1 ] || erro "nenhuma ref assinada. O build exportou alguma coisa?"
+ok "$assinadas ref(s) assinada(s) com $CHAVE"
 
 # ---------------------------------------------------------------------------
 passo "Assinando e gerando os deltas"
