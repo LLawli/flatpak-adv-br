@@ -131,14 +131,14 @@ ok "repositório em $REPO ($TAMANHO)"
 
 # ---------------------------------------------------------------------------
 if [ "$ENVIAR" = sim ]; then
-    [ -n "$DESTINO" ] || erro "defina ADV_BR_VPS, por exemplo: vps:/srv/adv-br/repo"
+    [ -n "$DESTINO" ] || erro "defina ADV_BR_VPS, por exemplo: vps:/home/luka/totalidade/apps/adv-br/repo"
     passo "Enviando para $DESTINO"
     # Só o que mudou atravessa: os objetos do OSTree têm o hash no nome, então
     # o que já está lá não é reenviado.
     rsync -a --delete --info=stats1 "$REPO/" "$DESTINO/"
     ok "enviado"
 else
-    printf '\n   Para publicar:  ADV_BR_VPS=servidor:/srv/adv-br/repo %s --enviar\n' "$0"
+    printf '\n   Para publicar:  ADV_BR_VPS=vps:/home/luka/totalidade/apps/adv-br/repo %s --enviar\n' "$0"
 fi
 
 printf '\n   Testar aqui mesmo, como quem instala:\n'
