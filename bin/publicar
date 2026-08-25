@@ -57,6 +57,11 @@ else
       ou, sem tocar no sistema:
               flatpak install --user flathub org.flatpak.Builder"
 fi
+command -v ostree >/dev/null 2>&1 ||
+    erro "falta o ostree, que é quem assina as refs deste repositório.
+      Fedora: sudo dnf install ostree
+      Debian: sudo apt install ostree
+      Arch:   sudo pacman -S ostree"
 [ -n "$CHAVE" ] || erro "defina ADV_BR_CHAVE_GPG com o id da chave de assinatura.
      Sem assinatura, quem instalar não tem como saber que o pacote é seu.
      Para criar uma:  gpg --quick-generate-key 'adv-br <voce@exemplo>' default sign never"
@@ -72,47 +77,6 @@ mkdir -p "$TRABALHO"
     "$TRABALHO/base" "$MANIFESTO" >/dev/null
 
 # ---------------------------------------------------------------------------
-passo "Assinando as refs, aqui fora"
-# A assinatura NÃO é pedida ao flatpak-builder de propósito. Quando ele é o
-# org.flatpak.Builder, que é um Flatpak, o build roda num sandbox sem pinentry
-# e sem o socket do gpg-agent: a assinatura falha com "GPG Agent: No pinentry",
-# mensagem que não menciona sandbox nenhum e manda procurar no lugar errado.
-# Assinar aqui fora vale para os dois construtores, e é o único jeito quando a
-# chave mora num cartão, porque quem fala com o cartão é o agent desta sessão.
-#
-# Todas as refs, e não só a do aplicativo: a .Locale é instalada junto por
-# padrão, e uma única ref sem assinatura derruba a instalação inteira.
-refs_do_repositorio() {
-    if command -v ostree >/dev/null 2>&1; then
-        ostree --repo="$REPO" refs
-    else
-        # Sem o binário do ostree, as três que este manifesto gera.
-        arquitetura=$(flatpak --default-arch)
-        printf 'app/%s/%s/%s\n' "$APP_ID" "$arquitetura" "$RAMO"
-        printf 'runtime/%s.Locale/%s/%s\n' "$APP_ID" "$arquitetura" "$RAMO"
-        printf 'runtime/%s.Debug/%s/%s\n' "$APP_ID" "$arquitetura" "$RAMO"
-    fi
-}
-
-assinadas=0
-while IFS=/ read -r tipo id arquitetura ramo; do
-    [ -n "${ramo:-}" ] || continue
-    ehruntime=()
-    [ "$tipo" = runtime ] && ehruntime=(--runtime)
-    flatpak build-sign ${ehruntime[@]+"${ehruntime[@]}"} \
-        --arch="$arquitetura" --gpg-sign="$CHAVE" \
-        "$REPO" "$id" "$ramo" ||
-        erro "não consegui assinar $tipo/$id/$arquitetura/$ramo"
-    assinadas=$((assinadas + 1))
-done < <(refs_do_repositorio)
-
-# Um mínimo absoluto, e não uma contagem comparada com outra contagem tirada da
-# mesma fonte: se o build não exportou nada, o laço acima passa sem assinar
-# nada e o repositório sairia vazio e "verde".
-[ "$assinadas" -ge 1 ] || erro "nenhuma ref assinada. O build exportou alguma coisa?"
-ok "$assinadas ref(s) assinada(s) com $CHAVE"
-
-# ---------------------------------------------------------------------------
 passo "Assinando e gerando os deltas"
 # Os deltas são o que faz uma atualização baixar poucos MB em vez do pacote
 # inteiro. Sem eles, cada versão nova custa 18 MB a cada pessoa.
@@ -121,6 +85,46 @@ flatpak build-update-repo "$REPO" \
     --generate-static-deltas \
     --prune --prune-depth=3 \
     --title="Certificado Digital (adv-br)" >/dev/null
+
+# ---------------------------------------------------------------------------
+passo "Assinando as refs, aqui fora"
+# A assinatura NÃO é pedida ao flatpak-builder de propósito. Quando ele é o
+# org.flatpak.Builder, que é um Flatpak, o build roda num sandbox sem pinentry
+# e sem o socket do gpg-agent: a assinatura falha com "GPG Agent: No pinentry",
+# mensagem que não menciona sandbox nenhum e manda procurar no lugar errado.
+# Assinar aqui fora vale para os dois construtores, e é o único jeito quando a
+# chave mora num cartão, porque quem fala com o cartão é o agent desta sessão.
+#
+# Depois do build-update-repo, e não antes: é ele que cria as refs appstream e
+# appstream2, que o cliente baixa para listar o aplicativo. Assinando antes,
+# essas duas ficavam de fora e só apareceriam como falha de verificação na
+# máquina de quem instala.
+#
+# Por ref, e com o ostree, porque o `flatpak build-sign` só entende refs de
+# aplicativo e de runtime: as de appstream ele ignora em silêncio.
+assinadas=0
+mantidas=0
+while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    commit=$(ostree --repo="$REPO" rev-parse "$ref")
+    # A assinatura mora nos metadados destacados do commit. Perguntar por eles
+    # é estável; procurar a palavra "signature" na saída depende do idioma.
+    if ostree --repo="$REPO" show --print-detached-metadata-key=ostree.gpgsigs \
+            "$commit" >/dev/null 2>&1; then
+        mantidas=$((mantidas + 1))
+        continue
+    fi
+    ostree --repo="$REPO" gpg-sign "$commit" "$CHAVE" >/dev/null ||
+        erro "não consegui assinar $ref"
+    assinadas=$((assinadas + 1))
+done < <(ostree --repo="$REPO" refs)
+
+# Um mínimo absoluto, e não uma contagem comparada com outra tirada da mesma
+# fonte: se o build não exportou nada, o laço acima passa sem assinar nada e o
+# repositório sairia vazio e "verde".
+[ $((assinadas + mantidas)) -ge 1 ] ||
+    erro "nenhuma ref no repositório. O build exportou alguma coisa?"
+ok "$assinadas ref(s) assinada(s) agora, $mantidas já assinada(s) antes"
 
 # ---------------------------------------------------------------------------
 passo "Componentes que acompanham o repositório"
