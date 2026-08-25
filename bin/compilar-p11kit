@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Compila um p11-kit de outra série e empacota como componente do aplicativo.
+#
+#   bin/compilar-p11kit 0.25
+#
+# Por que isto existe: a ponte PKCS#11 é o remoting do p11-kit, e as duas
+# pontas precisam concordar sobre a tabela de funções que trafega no pipe. O
+# runtime traz a série 0.26; Debian trixie e Ubuntu 24.04 trazem a 0.25. Quando
+# divergem, nada recusa a conexão: os slots enumeram, o PIN é aceito e TODA
+# assinatura falha, inclusive a do login por certificado. Ver
+# docs/ARMADILHAS.md.
+#
+# Enquanto o pacote era construído na máquina de quem instala, o ./instalar.sh
+# resolvia isso no build. Distribuindo binário pronto não existe esse momento,
+# então a série do host vira um componente que a janela oferece quando detecta
+# a divergência, e só então.
+#
+# O resultado é um .tar.gz para publicar junto do repositório Flatpak, mais o
+# sha256 que vai no catálogo. O p11-kit é BSD-3-Clause: redistribuí-lo é
+# permitido, ao contrário dos drivers proprietários.
+set -euo pipefail
+
+RAIZ=$(cd "$(dirname "$0")/.." && pwd)
+SERIE=${1:-}
+SDK=org.gnome.Sdk//50
+TRABALHO=${ADV_BR_TRABALHO:-${XDG_CACHE_HOME:-$HOME/.cache}/adv-br-p11kit}
+DESTINO=$RAIZ/dist
+
+erro() { printf '\033[1;31m ✗\033[0m %s\n' "$*" >&2; exit 1; }
+passo() { printf '\033[1;36m ▸\033[0m %s\n' "$*"; }
+
+[ -n "$SERIE" ] || erro "uso: bin/compilar-p11kit <série>   (ex: 0.25)"
+
+# A versão e o sha256 saem da tabela do projeto, que é a mesma que o
+# ./instalar.sh consulta. Uma série sem linha lá é uma série que ninguém
+# conferiu.
+LINHA=$(grep -E "^${SERIE}[[:space:]]" "$RAIZ/packaging/p11kit-series.txt" || true)
+[ -n "$LINHA" ] || erro "a série $SERIE não está em packaging/p11kit-series.txt"
+read -r _ VERSAO SHA256 <<< "$LINHA"
+
+command -v flatpak >/dev/null || erro "o flatpak não está instalado."
+flatpak info "$SDK" >/dev/null 2>&1 ||
+    erro "falta o SDK: flatpak install --user flathub $SDK"
+
+# Em disco, nunca em /tmp: aqui se compila e se empacota, e /tmp é memória na
+# maioria das distribuições atuais.
+mkdir -p "$TRABALHO" "$DESTINO"
+TAR="$TRABALHO/p11-kit-$VERSAO.tar.xz"
+
+passo "Baixando p11-kit $VERSAO"
+[ -s "$TAR" ] || curl -fsSL -o "$TAR" \
+    "https://github.com/p11-glue/p11-kit/releases/download/$VERSAO/p11-kit-$VERSAO.tar.xz"
+OBTIDO=$(sha256sum "$TAR" | cut -d' ' -f1)
+[ "$OBTIDO" = "$SHA256" ] ||
+    erro "sha256 não confere para o p11-kit $VERSAO
+     esperado: $SHA256
+     obtido:   $OBTIDO"
+
+FONTE=$TRABALHO/fonte-$VERSAO
+INSTALADO=$TRABALHO/instalado-$VERSAO
+rm -rf "$FONTE" "$INSTALADO"
+mkdir -p "$FONTE"
+tar -xf "$TAR" -C "$FONTE" --strip-components=1
+
+# Compilado DENTRO do SDK, e não no host: o que vai rodar isto é o runtime, e
+# uma biblioteca ligada contra a glibc do host falharia lá.
+passo "Compilando no $SDK"
+flatpak run --devel --command=sh --filesystem="$TRABALHO" "$SDK" -c "
+set -eu
+cd '$FONTE'
+# -Dc_std=gnu11 não é preciosismo: da 0.24 para trás o p11-kit usa uma
+# variável chamada thread_local, que o C23 tornou palavra reservada. Com o
+# padrão do compilador atual, essas séries não compilam.
+meson setup obj --prefix=/uso --sysconfdir=/etc -Dc_std=gnu11 \
+    -Dsystemd=disabled -Dbash_completion=disabled \
+    -Dgtk_doc=false -Dman=false -Dnls=false >/dev/null
+ninja -C obj >/dev/null
+DESTDIR='$INSTALADO' ninja -C obj install >/dev/null
+" || erro "a compilação falhou"
+
+# Só o que a ponte usa. Sem includes, sem documentação, sem as ferramentas de
+# confiança: o componente existe para um processo só.
+passo "Empacotando"
+PREFIXO=$INSTALADO/uso
+ARVORE=$TRABALHO/componente-$VERSAO
+rm -rf "$ARVORE"
+mkdir -p "$ARVORE/lib/pkcs11" "$ARVORE/libexec/p11-kit"
+
+# O layout do build usa lib ou lib64 conforme a arquitetura; o componente usa
+# sempre lib, porque é o caminho que o lançador monta.
+BIBLIOTECAS=$PREFIXO/lib64
+[ -d "$BIBLIOTECAS" ] || BIBLIOTECAS=$PREFIXO/lib
+
+cp -a "$BIBLIOTECAS"/libp11-kit.so* "$ARVORE/lib/"
+cp -a "$BIBLIOTECAS"/pkcs11/p11-kit-trust.so "$ARVORE/lib/pkcs11/"
+cp -a "$PREFIXO"/libexec/p11-kit/p11-kit-remote "$ARVORE/libexec/p11-kit/"
+
+# O que a ponte de fato executa. Sem ele o componente é inútil, e a falta só
+# apareceria na hora de assinar, que é tarde demais.
+[ -x "$ARVORE/libexec/p11-kit/p11-kit-remote" ] ||
+    erro "o build não produziu p11-kit-remote"
+# E a biblioteca precisa ser a da série pedida: o soname é a prova de que não
+# se empacotou por engano a do runtime.
+ls "$ARVORE/lib/"libp11-kit.so.0.* >/dev/null 2>&1 ||
+    erro "o build não produziu a libp11-kit"
+
+ARQUIVO=$DESTINO/p11kit-$SERIE.tar.gz
+tar -czf "$ARQUIVO" -C "$TRABALHO" --transform "s|^componente-$VERSAO|p11kit-$SERIE|" \
+    "componente-$VERSAO"
+
+printf '\n\033[1;32m ✓\033[0m %s\n' "$ARQUIVO"
+printf '   tamanho: %s\n' "$(du -h "$ARQUIVO" | cut -f1)"
+printf '   sha256 : %s\n' "$(sha256sum "$ARQUIVO" | cut -d' ' -f1)"
+printf '   soname : %s\n\n' "$(basename "$(ls "$ARVORE/lib/"libp11-kit.so.0.*)")"
+printf '   Ponha o sha256 na entrada p11kit-%s de ui/catalogo.py e publique o\n' "$SERIE"
+printf '   arquivo junto do repositório Flatpak.\n\n'

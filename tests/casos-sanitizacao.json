@@ -1,0 +1,68 @@
+{
+  "_comentario": [
+    "Casos lidos pelos DOIS lados: ui/sanitizar.py (aplicativo) e",
+    "servidor/sanitizar.go (serviço). As regras precisam ser as mesmas: a do",
+    "aplicativo é a que a pessoa vê antes de enviar, a do serviço é a que",
+    "protege de uma versão antiga do aplicativo. Divergir em silêncio é o",
+    "modo de falha que este arquivo existe para impedir.",
+    "",
+    "'some' é o que não pode sobreviver. 'fica' é o que não pode ser comido:",
+    "uma limpeza que apaga o diagnóstico é perfeita e inútil."
+  ],
+  "casos": [
+    {
+      "nome": "rotulo de token ICP-Brasil",
+      "entrada": "token: MARIA DA SILVA SOUZA:12345678901 no slot 3",
+      "some": ["MARIA", "SILVA", "12345678901"],
+      "fica": ["token", "slot 3"]
+    },
+    {
+      "nome": "CPF com pontuacao",
+      "entrada": "titular 123.456.789-01 emitido por AC",
+      "some": ["123.456.789-01"],
+      "fica": ["titular", "emitido por AC"]
+    },
+    {
+      "nome": "CNPJ",
+      "entrada": "escritorio 12.345.678/0001-99 cadastrado",
+      "some": ["12.345.678/0001-99"],
+      "fica": ["escritorio", "cadastrado"]
+    },
+    {
+      "nome": "email",
+      "entrada": "falar com joao.silva@escritorio.adv.br sobre o erro",
+      "some": ["joao.silva@escritorio.adv.br"],
+      "fica": ["falar com", "sobre o erro"]
+    },
+    {
+      "nome": "home comum",
+      "entrada": "erro ao abrir /home/joana/.mozilla/firefox/perfil",
+      "some": ["/home/joana"],
+      "fica": [".mozilla/firefox/perfil"]
+    },
+    {
+      "nome": "home de sistema atomico",
+      "entrada": "erro ao abrir /var/home/joana/.pki/nssdb",
+      "some": ["/var/home/joana"],
+      "fica": [".pki/nssdb"]
+    },
+    {
+      "nome": "impressao digital de certificado",
+      "entrada": "sha1 da61ebbc1b3f8a2f1c0e9a4b6d8f2e1a3c5b7d9e do certificado",
+      "some": ["da61ebbc1b3f8a2f1c0e9a4b6d8f2e1a3c5b7d9e"],
+      "fica": ["sha1", "do certificado"]
+    },
+    {
+      "nome": "serial com dois-pontos",
+      "entrada": "serial 3a:1f:9c:47:b2:0d:88:e5:6a:11 do token",
+      "some": ["3a:1f:9c:47:b2:0d:88:e5:6a:11"],
+      "fica": ["serial", "do token"]
+    },
+    {
+      "nome": "o diagnostico util sobrevive inteiro",
+      "entrada": "18:20:45 pkcs11: C_GetSlotList devolveu 0x30; serie do host 0.25, do pacote 0.26",
+      "some": [],
+      "fica": ["C_GetSlotList", "0x30", "0.25", "0.26", "pkcs11", "18:20:45"]
+    }
+  ]
+}

@@ -216,5 +216,57 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+titulo "A interface"
+
+# Só o que dá para exercitar sem sessão gráfica. Ver tests/prova-janela.py.
+if [ -f ui/janela.py ]; then
+    if python3 tests/prova-janela.py; then
+        ok "as decisões de clique da janela"
+    else
+        falha "as decisões de clique da janela"
+    fi
+fi
+
+if [ -f ui/publicador.py ]; then
+    if python3 tests/prova-navegadores.py; then
+        ok "a descoberta de navegadores"
+    else
+        falha "a descoberta de navegadores"
+    fi
+fi
+
+if [ -f ui/sanitizar.py ]; then
+    if python3 tests/prova-sanitizacao.py; then
+        ok "a sanitização de dado pessoal"
+    else
+        falha "a sanitização de dado pessoal"
+    fi
+fi
+
+if [ -f ui/registro.sh ]; then
+    if python3 tests/prova-registro.py; then
+        ok "os lançadores registram e não escrevem em stdout"
+    else
+        falha "os lançadores registram e não escrevem em stdout"
+    fi
+fi
+
+if [ -f ui/serie.py ]; then
+    if python3 tests/prova-serie.py; then
+        ok "o catálogo de compatibilidade do p11-kit"
+    else
+        falha "o catálogo de compatibilidade do p11-kit"
+    fi
+fi
+
+if [ -d ui ]; then
+    if python3 tests/prova-atributos.py; then
+        ok "nenhum self._atributo órfão na interface"
+    else
+        falha "há self._atributo órfão na interface"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n%d passaram, %d falharam\n\n' "$passou" "$falhou"
 [ "$falhou" = 0 ]

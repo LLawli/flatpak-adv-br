@@ -1,0 +1,73 @@
+#!/bin/sh
+# A ponte PKCS#11 para fora: exporta um módulo deste aplicativo pelo
+# stdin/stdout.
+#
+# Quem executa isto é o p11-kit do HOST, a partir do .module que o aplicativo
+# escreveu na home de quem usa:
+#
+#   remote: |flatpak run --command=adv-br-pkcs11 dev.lukakuuhaku.AdvBr <módulo>
+#
+# O p11-kit-proxy do host inicia este comando sob demanda e conversa com ele
+# pelo pipe. É assim que um navegador que roda fora do sandbox enxerga um
+# driver que só existe dentro dele.
+#
+# NÃO ESCREVA NADA EM STDOUT AQUI. O stdout é o protocolo RPC do p11-kit;
+# qualquer byte a mais o corrompe. Mensagens vão para stderr.
+set -eu
+
+# O stderr deste processo vai para o log do módulo. Precisa vir antes de tudo:
+# o que for escrito antes disto se perde onde sempre se perdeu, dentro do
+# processo que nos iniciou. Ver ui/registro.sh.
+ADV_BR_MODULO=pkcs11
+# shellcheck source=ui/registro.sh
+. /app/share/adv-br-ui/registro.sh
+
+MODULO=${1:-}
+if [ -z "$MODULO" ]; then
+    echo "uso: adv-br-pkcs11 <caminho-do-modulo.so>" >&2
+    exit 2
+fi
+
+if [ ! -e "$MODULO" ]; then
+    echo "adv-br: o driver $MODULO não está instalado neste aplicativo." >&2
+    echo "     Abra o Certificado Digital e instale-o, ou publique de novo." >&2
+    exit 1
+fi
+
+# Ver ui/preparar-drivers.sh: bibliotecas de apoio dos componentes e os
+# remendos que os drivers proprietários exigem antes de serem abertos. Define
+# COMPONENTES.
+. /app/share/adv-br-ui/preparar-drivers.sh
+
+# Quando o p11-kit do host está numa série diferente da do runtime, a pessoa
+# instala pela janela um p11-kit da série dele, e é ELE que a ponte usa. As
+# duas pontas precisam concordar sobre a tabela de funções que trafega no pipe;
+# quando não concordam, nada recusa a conexão, os slots enumeram, o PIN é
+# aceito e toda assinatura falha. Ver docs/ARMADILHAS.md.
+#
+# Só este processo o usa. Os assinadores e o PJeOffice continuam com o p11-kit
+# do runtime, e não precisam concordar com ninguém porque não atravessam pipe
+# nenhum: por isso o LD_LIBRARY_PATH abaixo é exportado aqui, e não no preparo
+# comum.
+#
+# O binário chamado é o p11-kit-remote, e não "p11-kit remote": o "p11-kit"
+# procura o auxiliar por um caminho absoluto gravado nele em tempo de
+# compilação, que não existe quando o pacote é instalado nos dados do
+# aplicativo. Chamar o auxiliar direto faz o mesmo trabalho e não depende
+# de onde o componente foi parar.
+# O laço escolhe e o exec vem depois, fora dele. Um exec dentro do laço é
+# apontado pelo SC2093 e, pior que o aviso, esconde de quem lê que o script
+# termina ali.
+COMPAT=""
+for candidato in "$COMPONENTES"/p11kit-*/; do
+    [ -x "$candidato/libexec/p11-kit/p11-kit-remote" ] || continue
+    COMPAT=$candidato
+    break
+done
+
+if [ -n "$COMPAT" ]; then
+    export LD_LIBRARY_PATH="$COMPAT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    exec "$COMPAT/libexec/p11-kit/p11-kit-remote" "$MODULO"
+fi
+
+exec p11-kit remote "$MODULO"

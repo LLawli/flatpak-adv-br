@@ -1,0 +1,25 @@
+#!/bin/sh
+# O comando do aplicativo: prepara o ambiente e abre a janela.
+#
+# Existe como shell, e não como o próprio Python, por causa da ordem. A janela
+# lista os tokens, e para isso carrega os mesmos drivers que a ponte PKCS#11
+# carrega, com as mesmas armadilhas: a libgcc_s que o SerproID não declara só
+# adianta no LD_PRELOAD de quem ainda não abriu biblioteca nenhuma, e o
+# diretório em que ele faz readdir precisa existir antes.
+#
+# Fazer isso de dentro do Python custava um os.execv para reexecutar o
+# interpretador com o ambiente novo, e ainda assim deixava de fora o resto do
+# preparo. Aqui é uma linha, é a mesma dos outros lançadores, e o que valer
+# para eles vale para a janela.
+set -eu
+
+# O stderr deste processo vai para o log do módulo. Precisa vir antes de tudo:
+# o que for escrito antes disto se perde onde sempre se perdeu, dentro do
+# processo que nos iniciou. Ver ui/registro.sh.
+ADV_BR_MODULO=janela
+# shellcheck source=ui/registro.sh
+. /app/share/adv-br-ui/registro.sh
+
+. /app/share/adv-br-ui/preparar-drivers.sh
+
+exec python3 /app/share/adv-br-ui/aplicativo.py "$@"

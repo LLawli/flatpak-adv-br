@@ -4,6 +4,77 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.0.0] - 2026-08-25
+
+O aplicativo com janela, `dev.lukakuuhaku.AdvBr`, e a distribuição própria.
+
+A numeração passa a ser do repositório, e não de cada pacote: a 0.1.0 foi a
+versão de linha de comando, e daqui em diante os dois produtos andam juntos no
+mesmo número. É 1.0.0 porque o que estreia aqui é um produto que alguém instala
+sem terminal, e isso é um compromisso com a interface, não só uma versão a mais.
+
+### Adicionado
+
+- Aplicativo com janela: instala um driver com um clique, publica o *native
+  messaging* para os navegadores e diz o que fazer quando falta permissão, em
+  vez de falhar calado.
+- Catálogo de componentes baixados sob demanda: drivers SerproID e SafeNet,
+  assinadores, e o PJeOffice. Cada um mostra o tamanho do download antes, e
+  abre o aplicativo próprio quando existe.
+- PJeOffice construído na máquina de quem usa, com a máquina virtual junto
+  (Zulu 11 com JavaFX). Não é redistribuível, então o que viaja é a receita, e
+  não o binário.
+- Descoberta dos navegadores instalados, no lugar de uma lista fixa, incluindo
+  os que estão em Flatpak, com as permissões que cada um exige.
+- Compatibilidade de série do p11-kit resolvida por componente: o aplicativo
+  descobre a série dos dois lados da ponte e oferece o ajuste só quando o
+  sistema precisa dele. Sem isso o token aparece, o PIN é aceito, e toda
+  assinatura falha.
+- Log por módulo em `$XDG_DATA_HOME/logs/`, com o stdout intocado, que é por
+  onde trafegam o RPC do p11-kit e o *native messaging*.
+- Botão de relatar um problema, com prévia editável do que será enviado, e o
+  serviço que recebe o relato e abre a issue.
+- Repositório Flatpak próprio, assinado, com `bin/publicar` fazendo o caminho
+  inteiro (construir, exportar, assinar, gerar os deltas e enviar).
+- Cortador de vídeo de audiência.
+- `docs/ui.md` e `docs/deploy.md`, com as armadilhas medidas e o roteiro do
+  deploy na ordem em que ele acontece.
+- O aplicativo com interface entrou no CI.
+
+### Modificado
+
+- **Instalar deixou de exigir `flatpak-builder`, o SDK do GNOME e mais de 1 GB
+  de cache para um pacote de poucos megabytes.** Passa a ser adicionar o
+  remoto e instalar. O `./instalar.sh` continua para quem quiser construir,
+  mas deixou de ser a única porta.
+- O PJeOffice deixou de ser extensão Flatpak e virou componente. O que o
+  prendia era a máquina virtual; tratando ela como mais uma fonte do
+  componente, instalar virou um clique.
+- Os diálogos que entregam comandos ficaram legíveis, e mostram o comando em
+  vez de pedir permissão para executá-lo.
+
+### Corrigido
+
+- Botão que fazia o oposto do que dizia.
+- Diretório do SerproID criado onde a biblioteca de fato o procura.
+- A configuração do PJeOffice sobrevive a fechar o aplicativo.
+- A republicação para os navegadores acontece também depois de instalar, e não
+  só depois de remover.
+- O aplicativo saiu da própria lista de navegadores.
+- Voltou o método que fazia o popup das permissões aparecer.
+
+### Segurança
+
+- Nada proprietário é redistribuído, nem pelo repositório próprio: quem dita é
+  a licença de cada binário, não onde ele estaria hospedado.
+- A chave privada de assinatura nunca sai da máquina de quem publica. O
+  servidor guarda arquivos assinados e não sabe assinar nada.
+- O token do GitHub fica no servidor, e não dentro do aplicativo: token
+  embutido em programa distribuído não é segredo. O que o aplicativo manda é
+  texto já sanitizado, com uma prova de trabalho para encarecer o abuso.
+- Nenhum lançador escreve mais no próprio stdout, o que corrompia o protocolo
+  em vez de falhar de forma visível.
+
 ## [0.1.0] - 2026-08-24
 
 Primeira versão. O [sora-adv-br](https://github.com/LLawli/sora-adv-br) com
