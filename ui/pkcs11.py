@@ -74,6 +74,12 @@ def _texto(campo):
 # existe para quem pergunta.
 MODULOS_DO_APP = ["/app/lib/opensc-pkcs11.so"]
 
+# O caminho que a pessoa digita na aba "Cripto Dispositivos" da extensão do
+# assinador. Um caminho só, que responde por todos os drivers registrados.
+# Quem o cria é ui/preparar-drivers.sh, a cada execução de um lançador, e a
+# prova de janela confere que as duas pontas dizem a mesma string.
+ATALHO_DOS_ASSINADORES = "/pkcs11/adv-br.so"
+
 
 def modulos_instalados():
     """Caminhos dos módulos PKCS#11 que o aplicativo enxerga.

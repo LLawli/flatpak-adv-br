@@ -22,6 +22,46 @@ def carregar(nome):
     return espaco[nome]
 
 
+def caminho_declarado():
+    """A string de ATALHO_DOS_ASSINADORES, lida sem importar o módulo."""
+    arvore = ast.parse(open("ui/pkcs11.py", encoding="utf-8").read())
+    for no in arvore.body:
+        if not isinstance(no, ast.Assign):
+            continue
+        for alvo in no.targets:
+            if isinstance(alvo, ast.Name) and alvo.id == "ATALHO_DOS_ASSINADORES":
+                return ast.literal_eval(no.value)
+    raise SystemExit("ui/pkcs11.py não declara ATALHO_DOS_ASSINADORES")
+
+
+def provar_caminho_do_driver():
+    """O caminho tem de ser o mesmo nas duas pontas, e ele tem duas.
+
+    Quem CRIA o link é um script de shell; quem DIZ o caminho à pessoa é a
+    janela. Divergir aqui não quebra nada visível: a janela mostra um caminho, a
+    extensão do assinador não encontra nada nele, e a conclusão de quem usa é
+    que o token não funciona.
+    """
+    caminho = caminho_declarado()
+    falhas = 0
+
+    shell = open("ui/preparar-drivers.sh", encoding="utf-8").read()
+    if caminho in shell:
+        print("  ok   preparar-drivers.sh cria %s" % caminho)
+    else:
+        print("  ERRO preparar-drivers.sh não menciona %s" % caminho)
+        falhas += 1
+
+    janela = open(CAMINHO, encoding="utf-8").read()
+    if "pkcs11.ATALHO_DOS_ASSINADORES" in janela:
+        print("  ok   a janela usa a constante, e não a string repetida")
+    else:
+        print("  ERRO a janela não usa pkcs11.ATALHO_DOS_ASSINADORES")
+        falhas += 1
+
+    return falhas
+
+
 def main():
     decidir = carregar("decidir")
 
@@ -46,6 +86,8 @@ def main():
         print("  %s desenhado=%-5s real=%-5s -> %s"
               % (marca, desenhado, real, obtido))
         falhas += obtido != esperado
+
+    falhas += provar_caminho_do_driver()
 
     return 1 if falhas else 0
 

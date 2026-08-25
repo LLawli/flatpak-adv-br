@@ -66,3 +66,25 @@ done
 # A biblioteca guarda cache de token aqui e falha ao gravar se o diretório não
 # existir. /var é gravável no sandbox.
 mkdir -p /var/tmp/eToken.cache
+
+# /pkcs11/adv-br.so: o caminho que se digita na aba "Cripto Dispositivos" das
+# extensões dos assinadores.
+#
+# As opções prontas dessas extensões apontam para /usr/lib, que aqui pertence ao
+# runtime e é somente leitura: não há como fazer o caminho de fábrica existir. O
+# que dá para oferecer é um caminho curto, estável e digitável, e que responde
+# por todos os drivers registrados, inclusive os instalados depois.
+#
+# Aponta para o SHIM, e não direto para o p11-kit-proxy do runtime, porque há
+# quem canonize o caminho antes de guardá-lo: o PJeOffice grava o resultado de
+# toRealPath() em ~/.pjeoffice-pro/pjeoffice-pro.config. Com o proxy no fim do
+# link, o que ficaria gravado é libp11-kit.so.0.4.10, e a primeira atualização de
+# runtime que mude esse número tira o driver da pessoa sem dizer nada. O shim é
+# arquivo regular: o caminho real dele é ele mesmo. Ver src/pkcs11-shim.c.
+#
+# A raiz do sandbox é tmpfs, então o link nasce a cada execução e some com ela.
+# É de propósito: nada disto precisa sobreviver ao processo.
+if [ -e /app/lib/pkcs11/pkcs11.so ]; then
+    { mkdir -p /pkcs11 && ln -sfn /app/lib/pkcs11/pkcs11.so /pkcs11/adv-br.so; } 2>/dev/null ||
+        echo "adv-br: não consegui criar /pkcs11/adv-br.so; a extensão do assinador não vai achar o driver." >&2
+fi

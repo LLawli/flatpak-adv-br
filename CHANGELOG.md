@@ -4,6 +4,28 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.0.1] - 2026-08-25
+
+### Corrigido
+
+- **O aplicativo não dizia, e nem tornava possível, o caminho que a extensão do
+  assinador precisa.** As extensões (Lacuna Web PKI, WebSigner) pedem um arquivo
+  de driver na aba "Cripto Dispositivos", e as opções que elas oferecem prontas
+  apontam para `/usr/lib` do sistema, onde não há nada deste pacote. Sem isso a
+  pessoa instalava o assinador, instalava a extensão, e o site continuava
+  dizendo que nenhum certificado foi encontrado.
+
+  O caminho `/pkcs11/adv-br.so` passa a existir dentro do aplicativo, criado a
+  cada execução de um lançador, e responde por todos os drivers instalados,
+  inclusive os que forem instalados depois. Ele aponta para o shim, e não para o
+  p11-kit-proxy do runtime, porque o PJeOffice grava o caminho já canonizado na
+  configuração dele: com o proxy no fim do link, uma atualização de runtime
+  tiraria o driver da pessoa sem dizer nada.
+
+  A janela passa a ensinar o caminho em dois lugares: na descrição do grupo de
+  assinadores, sempre visível, e num diálogo com botão de copiar assim que um
+  assinador termina de instalar.
+
 ## [1.0.0] - 2026-08-25
 
 O aplicativo com janela, `dev.lukakuuhaku.AdvBr`, e a distribuição própria.

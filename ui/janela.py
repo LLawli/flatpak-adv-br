@@ -110,7 +110,9 @@ class Janela(Adw.ApplicationWindow):
             title="Assinadores",
             description=(
                 "Para assinar dentro do navegador. Cada um precisa também da "
-                "extensão correspondente, instalada no navegador."))
+                "extensão correspondente, instalada no navegador, e do caminho "
+                "do driver na aba \"Cripto Dispositivos\" dela: "
+                "%s" % pkcs11.ATALHO_DOS_ASSINADORES))
         for componente in catalogo.por_tipo("assinador"):
             self.linhas[componente.chave] = self._linha(componente)
             self.grupo_assinadores.add(self.linhas[componente.chave]["linha"])
@@ -715,8 +717,35 @@ class Janela(Adw.ApplicationWindow):
         self.atualizar_tokens()
         self.atualizar_serie()
         self.toasts.add_toast(Adw.Toast(title="%s instalado" % componente.nome))
+        # Um diálogo por vez: dois Adw.MessageDialog presentes ao mesmo tempo se
+        # sobrepõem, e o de baixo só aparece quando o de cima sai, o que faz o
+        # segundo parecer surgir do nada. A permissão vem primeiro porque sem
+        # ela nada funciona; o caminho do driver continua visível na descrição
+        # do grupo de assinadores, então não se perde.
         if componente.permissao and not permissoes.tem_documentos():
             self._oferecer_permissao(componente)
+        elif componente.tipo == "assinador":
+            self._mostrar_caminho_do_driver(componente)
+
+    def _mostrar_caminho_do_driver(self, componente):
+        """O caminho que a extensão do assinador precisa, na hora em que ela vai
+        ser configurada.
+
+        A extensão roda no navegador, do lado de fora, e pergunta por um arquivo
+        de driver. As opções que ela oferece prontas apontam para /usr/lib do
+        sistema, onde não há nada deste pacote: sem digitar este caminho, a
+        pessoa instala o assinador, instala a extensão, e mesmo assim o site diz
+        que nenhum certificado foi encontrado.
+        """
+        self._dialogo_de_comandos(
+            "Falta dizer isto à extensão do %s" % componente.nome,
+            ("Na extensão do %s, no navegador, abra a aba \"Cripto "
+             "Dispositivos\" e informe este caminho como driver:"
+             % componente.nome,
+             "É um caminho só, e ele responde por todos os drivers que você "
+             "tiver instalado aqui, inclusive os que instalar depois."),
+            (pkcs11.ATALHO_DOS_ASSINADORES,),
+            confirmar="Copiar caminho")
 
     def _falhou(self, componente, mensagem):
         partes = self.linhas[componente.chave]

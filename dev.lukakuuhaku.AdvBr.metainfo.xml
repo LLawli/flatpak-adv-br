@@ -26,6 +26,15 @@
   <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.0.1" date="2026-08-25">
+      <description>
+        <p>
+          Ensina o caminho do driver que a extensão do assinador precisa, e passa
+          a criá-lo. Sem ele, o site continuava dizendo que nenhum certificado
+          foi encontrado mesmo com tudo instalado.
+        </p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-08-25">
       <description>
         <p>Primeira versão publicada.</p>
