@@ -77,16 +77,23 @@ mkdir -p "$TRABALHO"
     "$TRABALHO/base" "$MANIFESTO" >/dev/null
 
 # ---------------------------------------------------------------------------
-passo "Assinando e gerando os deltas"
-# Os deltas são o que faz uma atualização baixar poucos MB em vez do pacote
-# inteiro. Sem eles, cada versão nova custa 18 MB a cada pessoa.
-flatpak build-update-repo "$REPO" \
-    --gpg-sign="$CHAVE" \
-    --generate-static-deltas \
-    --prune --prune-depth=3 \
-    --title="Certificado Digital (adv-br)" >/dev/null
+# A ordem aqui é o que faz o repositório ser instalável, e ela não é óbvia.
+#
+# Numa instalação nova, o cliente NÃO baixa o commit solto: ele usa o delta
+# estático de origem vazia, que carrega dentro de si uma cópia do commit feita
+# no instante em que o delta foi gerado. Assinar depois de gerar os deltas
+# deixa a assinatura no repositório, correta e inútil: o commitmeta está lá, o
+# cliente não o pede, e a instalação morre com "GPG verification enabled, but
+# no signatures found". Nada no lado de quem publica denuncia isso.
+#
+# Por isso: primeiro uma passada que só cria o appstream, depois a assinatura
+# de tudo, e só então os deltas e o summary.
 
-# ---------------------------------------------------------------------------
+passo "Preparando as refs do repositório"
+# Sem deltas e sem assinar: esta passada existe para o appstream nascer, já que
+# ele não existe antes de alguém gerar o repositório e é uma ref como as outras.
+flatpak build-update-repo "$REPO" >/dev/null
+
 passo "Assinando as refs, aqui fora"
 # A assinatura NÃO é pedida ao flatpak-builder de propósito. Quando ele é o
 # org.flatpak.Builder, que é um Flatpak, o build roda num sandbox sem pinentry
@@ -95,36 +102,65 @@ passo "Assinando as refs, aqui fora"
 # Assinar aqui fora vale para os dois construtores, e é o único jeito quando a
 # chave mora num cartão, porque quem fala com o cartão é o agent desta sessão.
 #
-# Depois do build-update-repo, e não antes: é ele que cria as refs appstream e
-# appstream2, que o cliente baixa para listar o aplicativo. Assinando antes,
-# essas duas ficavam de fora e só apareceriam como falha de verificação na
-# máquina de quem instala.
-#
-# Por ref, e com o ostree, porque o `flatpak build-sign` só entende refs de
-# aplicativo e de runtime: as de appstream ele ignora em silêncio.
-assinadas=0
-mantidas=0
+# Pelo ostree, e não pelo `flatpak build-sign`: build-sign só entende refs de
+# aplicativo e de runtime, e ignora em silêncio as de appstream, que são
+# justamente as que o cliente baixa primeiro.
+assinar_pendentes() {
+    pendentes=0
+    while IFS= read -r ref; do
+        [ -n "$ref" ] || continue
+        commit=$(ostree --repo="$REPO" rev-parse "$ref")
+        # A assinatura mora nos metadados destacados do commit. Perguntar por
+        # eles é estável; procurar a palavra "signature" na saída depende do
+        # idioma em que o ostree foi traduzido.
+        if ostree --repo="$REPO" show --print-detached-metadata-key=ostree.gpgsigs \
+                "$commit" >/dev/null 2>&1; then
+            continue
+        fi
+        ostree --repo="$REPO" gpg-sign "$commit" "$CHAVE" >/dev/null ||
+            erro "não consegui assinar $ref"
+        pendentes=$((pendentes + 1))
+    done < <(ostree --repo="$REPO" refs)
+}
+
+assinar_pendentes
+assinadas=$pendentes
+
+passo "Gerando os deltas, já sobre o que está assinado"
+# Os deltas são o que faz uma atualização baixar poucos MB em vez do pacote
+# inteiro. Sem eles, cada versão nova custa 18 MB a cada pessoa.
+atualizar() {
+    flatpak build-update-repo "$REPO" \
+        --gpg-sign="$CHAVE" \
+        --generate-static-deltas \
+        --prune --prune-depth=3 \
+        --title="Certificado Digital (adv-br)" >/dev/null
+}
+atualizar
+
+# Se esta passada recriou alguma ref (o appstream muda quando o repositório
+# muda), ela nasceu sem assinatura e os deltas dela seriam inúteis. Assina e
+# refaz uma única vez: se ainda faltar, é problema novo e o guarda abaixo pega.
+assinar_pendentes
+if [ "$pendentes" -gt 0 ]; then
+    assinadas=$((assinadas + pendentes))
+    atualizar
+fi
+
+# Guarda final, contra um mínimo absoluto e não contra outra contagem tirada da
+# mesma fonte: um build que não exportou nada passaria calado por tudo acima.
+total=0
+faltando=0
 while IFS= read -r ref; do
     [ -n "$ref" ] || continue
+    total=$((total + 1))
     commit=$(ostree --repo="$REPO" rev-parse "$ref")
-    # A assinatura mora nos metadados destacados do commit. Perguntar por eles
-    # é estável; procurar a palavra "signature" na saída depende do idioma.
-    if ostree --repo="$REPO" show --print-detached-metadata-key=ostree.gpgsigs \
-            "$commit" >/dev/null 2>&1; then
-        mantidas=$((mantidas + 1))
-        continue
-    fi
-    ostree --repo="$REPO" gpg-sign "$commit" "$CHAVE" >/dev/null ||
-        erro "não consegui assinar $ref"
-    assinadas=$((assinadas + 1))
+    ostree --repo="$REPO" show --print-detached-metadata-key=ostree.gpgsigs \
+        "$commit" >/dev/null 2>&1 || { faltando=$((faltando + 1)); printf '   sem assinatura: %s\n' "$ref"; }
 done < <(ostree --repo="$REPO" refs)
-
-# Um mínimo absoluto, e não uma contagem comparada com outra tirada da mesma
-# fonte: se o build não exportou nada, o laço acima passa sem assinar nada e o
-# repositório sairia vazio e "verde".
-[ $((assinadas + mantidas)) -ge 1 ] ||
-    erro "nenhuma ref no repositório. O build exportou alguma coisa?"
-ok "$assinadas ref(s) assinada(s) agora, $mantidas já assinada(s) antes"
+[ "$total" -ge 1 ] || erro "nenhuma ref no repositório. O build exportou alguma coisa?"
+[ "$faltando" -eq 0 ] || erro "$faltando ref(s) sem assinatura: o repositório não instalaria."
+ok "$total ref(s), todas assinadas ($assinadas nesta rodada)"
 
 # ---------------------------------------------------------------------------
 passo "Componentes que acompanham o repositório"
