@@ -11,9 +11,11 @@ este módulo, que responde duas perguntas: o que falta, e qual comando devolve.
 """
 import os
 
+import catalogo
+
 import registro
 
-APP_ID = "dev.lukakuuhaku.AdvBr"
+APP_ID = catalogo.APP_ID
 
 
 def _config():

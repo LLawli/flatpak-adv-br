@@ -27,7 +27,7 @@ import nssdb
 import registro
 import pkcs11
 
-APP_ID = "dev.lukakuuhaku.AdvBr"
+APP_ID = catalogo.APP_ID
 
 # O prefixo com que este aplicativo marca o que é dele.
 #

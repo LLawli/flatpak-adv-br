@@ -10,6 +10,11 @@ convenção está errada.
 """
 import collections
 
+# O id do aplicativo, num lugar só: ele aparece no atalho do menu, nas
+# permissões e nos manifestos de native messaging, e três cópias da mesma
+# string são três lugares para esquecer de mudar.
+APP_ID = "dev.lukakuuhaku.AdvBr"
+
 Componente = collections.namedtuple(
     "Componente",
     "chave nome resumo detalhe tipo url sha256 arquivos tamanho ca lancador "
@@ -304,7 +309,24 @@ mkdir -p "$DADOS"
 # foi inicializado, sair dá SIGSEGV dentro de SCardCancel, numa thread nativa
 # que o próprio driver criou. Sem esta opção a JVM ainda escreve um core dump
 # antes de morrer, e a espera faz o crash parecer travamento.
+# A escala do monitor, anotada pela janela deste aplicativo.
+#
+# O AWT do Java não fala Wayland e roda por XWayland, onde não descobre escala
+# fracionária sozinho: num monitor a 125% ou 150% o assinador sai borrado, que
+# foi o relato de um usuário. Passar o número resolve, e quem tem como saber
+# qual é o número é a janela, que é GTK. Ver ui/escala.py.
+#
+# Só dígitos e ponto sobrevivem à conferência: este valor entra na linha de
+# comando da JVM, e o arquivo de onde ele vem é gravável por quem tiver acesso
+# aos dados do aplicativo.
+ESCALA=$(cat "${XDG_DATA_HOME:-$HOME/.local/share}/escala" 2>/dev/null || true)
+case "$ESCALA" in
+    ''|*[!0-9.]*) ESCALA="" ;;
+esac
+
 exec "$COMPONENTE/jre/bin/java" \
+    ${ESCALA:+-Dsun.java2d.uiScale="$ESCALA"} \
+    ${ESCALA:+-Dglass.gtk.uiScale="$ESCALA"} \
     -XX:-CreateCoredumpOnCrash \
     -XX:ErrorFile="$DADOS/crash-%p.log" \
     -XX:+UseG1GC \

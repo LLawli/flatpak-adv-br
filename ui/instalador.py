@@ -16,6 +16,7 @@ import zipfile
 
 import catalogo
 import deb
+import registro
 
 # Onde ficam os certificados extras que alguns downloads exigem.
 CA_DIR = "/app/share/adv-br-ui/ca"
@@ -214,7 +215,63 @@ def instalar(componente, progresso=None):
         os.replace(temporario, destino)
     finally:
         shutil.rmtree(temporario, ignore_errors=True)
+    _escrever_atalho(componente)
     return destino
+
+
+# O atalho vai para o menu do HOST, e não para os dados do aplicativo: é ali que
+# o lançador de aplicativos procura. Dentro do sandbox, ~ é o home de verdade e
+# este diretório chega montado pelo --filesystem=xdg-data/applications:create.
+ATALHOS = os.path.expanduser("~/.local/share/applications")
+
+
+def _atalho(componente):
+    return os.path.join(ATALHOS, "%s.%s.desktop" % (catalogo.APP_ID, componente.chave))
+
+
+def _escrever_atalho(componente):
+    """Põe no menu o componente que traz aplicativo com janela.
+
+    Sem isto, abrir o PJeOffice custa abrir o Certificado Digital, rolar até o
+    fim da lista e clicar em abrir. Um usuário pediu, e a razão é boa: o
+    assinador é usado sozinho, várias vezes por dia, e não faz parte do fluxo de
+    instalar componente.
+
+    O Exec entra pelo adv-br-aplicativo, e não pelo lançador do componente, para
+    o preparo dos drivers acontecer também aqui. Ver ui/adv-br-aplicativo.
+    """
+    if not componente.lancador:
+        return
+    try:
+        os.makedirs(ATALHOS, exist_ok=True)
+        with open(_atalho(componente), "w", encoding="utf-8") as arquivo:
+            arquivo.write(
+                "[Desktop Entry]\n"
+                "Type=Application\n"
+                "Name=%s\n"
+                "Comment=%s\n"
+                "Exec=flatpak run --command=adv-br-aplicativo %s %s\n"
+                "Icon=%s\n"
+                "Terminal=false\n"
+                "StartupNotify=true\n"
+                "Categories=Office;\n"
+                "X-Flatpak=%s\n"
+                % (componente.nome, componente.resumo,
+                   catalogo.APP_ID, componente.chave,
+                   catalogo.APP_ID, catalogo.APP_ID))
+    except OSError as erro:
+        # Não é motivo para a instalação falhar: o componente está instalado e
+        # abre pela janela do mesmo jeito.
+        registro.falha("não consegui criar o atalho de %s" % componente.chave, erro)
+
+
+def _remover_atalho(componente):
+    try:
+        os.remove(_atalho(componente))
+    except FileNotFoundError:
+        pass
+    except OSError as erro:
+        registro.falha("não consegui remover o atalho de %s" % componente.chave, erro)
 
 
 def lancador(componente):
@@ -226,4 +283,5 @@ def lancador(componente):
 
 
 def desinstalar(componente):
+    _remover_atalho(componente)
     shutil.rmtree(diretorio(componente), ignore_errors=True)

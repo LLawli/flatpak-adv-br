@@ -18,6 +18,7 @@ import instalador  # noqa: E402
 import permissoes  # noqa: E402
 import pkcs11  # noqa: E402
 import diagnostico  # noqa: E402
+import escala  # noqa: E402
 import publicador  # noqa: E402
 import registro  # noqa: E402
 import relator  # noqa: E402
@@ -48,6 +49,9 @@ class Janela(Adw.ApplicationWindow):
     def __init__(self, aplicacao):
         super().__init__(application=aplicacao, title="Certificado Digital")
         self.set_default_size(560, 640)
+        # Só depois de existir na tela é que dá para perguntar ao compositor em
+        # que escala esta janela está. Ver _guardar_escala.
+        self.connect("realize", lambda _: self._guardar_escala())
 
         cabecalho = Adw.HeaderBar()
         self.botao_atualizar = Gtk.Button(icon_name="view-refresh-symbolic",
@@ -249,6 +253,38 @@ class Janela(Adw.ApplicationWindow):
         self.atualizar_tokens()
         self.atualizar_serie()
 
+    def _guardar_escala(self):
+        """Anota a escala do monitor, para quem não é GTK poder usá-la.
+
+        O PJeOffice é Swing por XWayland e não descobre escala fracionária
+        sozinho: num monitor a 125% ou 150% ele sai borrado, que foi o relato de
+        um usuário. A JVM aceita o número pronto, e quem tem como saber o número
+        é esta janela. Ver ui/escala.py.
+        """
+        superficie = self.get_surface()
+        if superficie is None:
+            return
+        escala.gravar(self._escala_da(superficie))
+        # A escala muda ao arrastar a janela para um monitor diferente, e o
+        # nome da propriedade mudou de versão: "scale" é fracionária e existe
+        # do GTK 4.12 em diante; "scale-factor" é a inteira, de sempre.
+        for propriedade in ("scale", "scale-factor"):
+            if superficie.find_property(propriedade) is None:
+                continue
+            superficie.connect(
+                "notify::" + propriedade,
+                lambda objeto, _param: escala.gravar(self._escala_da(objeto)))
+            break
+
+    @staticmethod
+    def _escala_da(superficie):
+        obter = getattr(superficie, "get_scale", None)
+        if obter is not None:
+            valor = obter()
+            if valor:
+                return valor
+        return superficie.get_scale_factor() or 1
+
     def _abrir(self, _botao, componente):
         caminho = instalador.lancador(componente)
         if not caminho:
@@ -368,21 +404,40 @@ class Janela(Adw.ApplicationWindow):
         caixa.set_size_request(620, -1)
 
         for comando in comandos:
-            rotulo = Gtk.Label(label=comando, xalign=0, selectable=True,
-                               margin_top=6, margin_bottom=6,
-                               margin_start=8, margin_end=8)
-            rotulo.add_css_class("monospace")
+            # A margem de baixo é o espaço onde a barra de rolagem flutua.
+            #
+            # No GTK4 ela flutua SOBRE o conteúdo, e num comando de uma linha só
+            # ficava exatamente em cima do texto: um usuário relatou não
+            # conseguir selecionar o comando com o mouse. A primeira tentativa
+            # de conserto foi desligar o overlay, e foi pior: a barra passou a
+            # ocupar altura dentro de uma caixa que não cresceu, e o texto
+            # sumiu de todo comando longo o bastante para ter barra. Reservar a
+            # margem resolve sem mexer no tamanho da caixa, e não muda nada nos
+            # comandos curtos, que nem chegam a ter barra.
+            # Um TextView, e não um Label selecionável, porque arrastar a
+            # seleção até a borda precisa ROLAR o resto do comando: o Label
+            # para na borda e a pessoa consegue marcar só o pedaço visível,
+            # que num comando longo é o pedaço inútil. O TextView rola sozinho
+            # enquanto se arrasta, e ainda responde a Ctrl+A e Ctrl+C.
+            buffer = Gtk.TextBuffer()
+            buffer.set_text(comando)
+            texto = Gtk.TextView(
+                buffer=buffer, editable=False, cursor_visible=False,
+                monospace=True, wrap_mode=Gtk.WrapMode.NONE,
+                # A margem de baixo é o espaço onde a barra de rolagem flutua.
+                # No GTK4 ela flutua SOBRE o conteúdo, e num comando de uma
+                # linha só ficava em cima do texto, impedindo selecionar.
+                # Desligar o overlay foi pior: a barra passou a ocupar altura
+                # numa caixa que não cresceu e o texto sumiu. Reservar a margem
+                # resolve sem mexer no tamanho da caixa.
+                top_margin=8, bottom_margin=18,
+                left_margin=8, right_margin=8)
             rolagem = Gtk.ScrolledWindow(
                 hscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
                 vscrollbar_policy=Gtk.PolicyType.NEVER,
-                propagate_natural_width=False)
-            # Sem isto a barra de rolagem FLUTUA sobre o texto, que é o padrão
-            # do GTK4, e num comando de uma linha só ela cobre justamente o que
-            # a pessoa quer selecionar. Um usuário relatou não conseguir marcar
-            # o comando com o mouse. Desligando o overlay, a barra ganha espaço
-            # próprio abaixo do texto e para de disputar o clique.
-            rolagem.set_overlay_scrolling(False)
-            rolagem.set_child(rotulo)
+                propagate_natural_width=False,
+                propagate_natural_height=True)
+            rolagem.set_child(texto)
             moldura = Gtk.Frame()
             moldura.add_css_class("view")
             moldura.set_child(rolagem)

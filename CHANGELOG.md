@@ -4,6 +4,31 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.0.3] - 2026-08-25
+
+Dois pedidos de quem está testando, e uma correção de algo que quebrei na 1.0.2.
+
+### Adicionado
+
+- **Atalho no menu para os componentes que trazem aplicativo**, hoje o PJeOffice
+  e o SerproID. Abrir o assinador deixa de custar abrir o Certificado Digital,
+  rolar até o fim da lista e clicar em abrir: ele é usado sozinho, várias vezes
+  por dia, e não faz parte do fluxo de instalar componente. O atalho nasce ao
+  instalar e some ao desinstalar.
+- **A escala do monitor chega à máquina virtual Java do PJeOffice.** Ele é Swing
+  rodando por XWayland, onde não descobre escala fracionária sozinho: num monitor
+  a 125% ou 150% a janela sai borrada. A janela deste aplicativo, que é GTK e
+  sabe a escala, anota o número, e o lançador o repassa à JVM.
+
+### Corrigido
+
+- **A barra de rolagem do diálogo de comandos escondia o comando.** A correção
+  da 1.0.2 desligou a rolagem flutuante, e com isso a barra passou a ocupar
+  altura numa caixa que não cresceu: em todo comando longo o suficiente para ter
+  barra, o texto sumia. Agora a barra volta a flutuar, sobre um espaço reservado
+  para ela, e o comando é um campo de texto de verdade, que rola sozinho
+  enquanto se arrasta a seleção e aceita Ctrl+A e Ctrl+C.
+
 ## [1.0.2] - 2026-08-25
 
 Duas correções vindas de quem está testando a versão publicada.

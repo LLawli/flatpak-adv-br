@@ -1,0 +1,35 @@
+#!/bin/sh
+# Abre o aplicativo de um componente pelo mesmo caminho que a janela usaria.
+#
+#   flatpak run --command=adv-br-aplicativo dev.lukakuuhaku.AdvBr pjeoffice
+#
+# Existe por causa do atalho no menu. Enquanto o único jeito de abrir era o
+# botão da janela, o aplicativo do componente herdava dela o preparo dos
+# drivers; um atalho que chamasse o lançador direto pularia esse preparo, e o
+# sintoma seria o PJeOffice abrir sem enxergar um token que está instalado, sem
+# erro nenhum na tela. Ver ui/preparar-drivers.sh.
+set -eu
+
+CHAVE=${1:-}
+if [ -z "$CHAVE" ]; then
+    echo "uso: adv-br-aplicativo <chave do componente>" >&2
+    exit 2
+fi
+shift
+
+# O mesmo nome de módulo que o lançador do componente usa: o log continua sendo
+# um arquivo por componente, e não um por caminho de abertura.
+ADV_BR_MODULO="app-$CHAVE"
+# shellcheck source=ui/registro.sh
+. /app/share/adv-br-ui/registro.sh
+
+. /app/share/adv-br-ui/preparar-drivers.sh
+
+LANCADOR="${XDG_DATA_HOME:-$HOME/.local/share}/componentes/$CHAVE/bin/$CHAVE"
+if [ ! -x "$LANCADOR" ]; then
+    echo "adv-br: o componente '$CHAVE' não está instalado." >&2
+    echo "     Abra o Certificado Digital e instale-o." >&2
+    exit 1
+fi
+
+exec "$LANCADOR" "$@"

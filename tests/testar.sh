@@ -259,6 +259,22 @@ if [ -f ui/serie.py ]; then
     fi
 fi
 
+if [ -f ui/adv-br-aplicativo ]; then
+    if python3 tests/prova-atalho.py; then
+        ok "o atalho de menu dos componentes com aplicativo"
+    else
+        falha "o atalho de menu dos componentes com aplicativo"
+    fi
+fi
+
+if [ -f ui/escala.py ]; then
+    if python3 tests/prova-escala.py; then
+        ok "a escala do monitor chega à JVM do PJeOffice"
+    else
+        falha "a escala do monitor não chega à JVM do PJeOffice"
+    fi
+fi
+
 if [ -d ui ]; then
     if python3 tests/prova-atributos.py; then
         ok "nenhum self._atributo órfão na interface"
