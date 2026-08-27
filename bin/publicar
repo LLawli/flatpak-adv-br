@@ -145,8 +145,18 @@ assinar_pendentes() {
                 "$commit" >/dev/null 2>&1; then
             continue
         fi
+        # Avisa na tela antes de cada assinatura. Com a chave num cartão, o
+        # que acontece aqui é a YubiKey piscando e esperando um toque, sem nada
+        # no terminal: quem não estiver olhando para a chave perde a janela de
+        # tempo, e o erro que aparece é "SCD: Tempo limite", que não menciona
+        # toque nenhum. A notificação é opcional de propósito, para o publicar
+        # continuar funcionando onde não há sessão gráfica.
+        command -v notify-send >/dev/null 2>&1 &&
+            notify-send -u normal -t 30000 \
+                -h string:x-canonical-private-synchronous:advbr \
+                "Toque na YubiKey" "Assinando $ref" 2>/dev/null
         ostree --repo="$REPO" gpg-sign "$commit" "$CHAVE" >/dev/null ||
-            erro "não consegui assinar $ref"
+            erro "não consegui assinar $ref (toque não recebido a tempo?)"
         pendentes=$((pendentes + 1))
     done < <(ostree --repo="$REPO" refs)
 }
@@ -158,6 +168,11 @@ passo "Gerando os deltas, já sobre o que está assinado"
 # Os deltas são o que faz uma atualização baixar poucos MB em vez do pacote
 # inteiro. Sem eles, cada versão nova custa 18 MB a cada pessoa.
 atualizar() {
+    # O summary também é assinado, então aqui vem outro toque.
+    command -v notify-send >/dev/null 2>&1 &&
+        notify-send -u normal -t 30000 \
+            -h string:x-canonical-private-synchronous:advbr \
+            "Toque na YubiKey" "Assinando o summary do repositório" 2>/dev/null
     flatpak build-update-repo "$REPO" \
         --gpg-sign="$CHAVE" \
         --generate-static-deltas \
