@@ -214,6 +214,11 @@ BASES = [("", True), (".config", False), ("config", False)]
 
 
 def _candidatos(casa):
+    # A casa e o .config se cruzam: varrer a casa já desce um nível e produz
+    # ~/.config/chromium, e varrer .config produz o mesmo caminho de novo. Sem
+    # isto, o mesmo navegador é publicado duas vezes e aparece repetido no
+    # diagnóstico, que foi como o defeito apareceu.
+    vistos = set()
     for relativo, so_ocultos in BASES:
         base = os.path.join(casa, relativo) if relativo else casa
         if not os.path.isdir(base):
@@ -231,12 +236,18 @@ def _candidatos(casa):
             primeiro = os.path.join(base, nome)
             if not os.path.isdir(primeiro):
                 continue
-            yield primeiro
+            if os.path.realpath(primeiro) not in vistos:
+                vistos.add(os.path.realpath(primeiro))
+                yield primeiro
             try:
                 for dentro in sorted(os.listdir(primeiro)):
                     segundo = os.path.join(primeiro, dentro)
-                    if os.path.isdir(segundo):
-                        yield segundo
+                    if not os.path.isdir(segundo):
+                        continue
+                    if os.path.realpath(segundo) in vistos:
+                        continue
+                    vistos.add(os.path.realpath(segundo))
+                    yield segundo
             except OSError:
                 continue
 
@@ -256,18 +267,38 @@ def navegadores(casa):
       profiles.ini    Firefox e derivados, ao criar o primeiro perfil.
       Local State     Chromium e derivados, junto do diretório Default.
 
-    Exigir os dois campos do Chromium (o arquivo e o diretório) é o que evita
-    confundir com aplicativo Electron, que também é Chromium por dentro mas não
-    tem perfil de navegador.
+    O arquivo e o diretório juntos não bastam: Steam, Discord e Spotify embutem
+    Chromium e criam os dois. Um usuário relatou justamente isso, o Steam
+    aparecendo na lista de navegadores. O que separa é o gerenciador de PERFIS:
+    só o navegador completo escreve `profile.info_cache` no Local State, porque
+    só ele tem a tela de trocar de perfil. Ver _tem_perfis.
     """
     achados = []
     for caminho in _candidatos(casa):
         if os.path.isfile(os.path.join(caminho, "profiles.ini")):
             achados.append((caminho, "firefox"))
-        elif (os.path.isfile(os.path.join(caminho, "Local State"))
-              and os.path.isdir(os.path.join(caminho, "Default"))):
+        elif (os.path.isdir(os.path.join(caminho, "Default"))
+              and _tem_perfis(os.path.join(caminho, "Local State"))):
             achados.append((caminho, "chromium"))
     return achados
+
+
+def _tem_perfis(local_state):
+    """Se este Local State é de um navegador, e não de um app com Chromium dentro.
+
+    `profile.info_cache` é escrito pelo gerenciador de perfis do Chromium, que
+    existe no navegador e não em aplicativo que só embute o motor. Um Local
+    State ilegível conta como não sendo navegador: publicar para algo que não é
+    escreve manifesto onde ninguém vai ler, e o silêncio disso é pior do que
+    deixar de publicar para um navegador exótico, que ao menos a pessoa percebe.
+    """
+    try:
+        with open(local_state, encoding="utf-8", errors="replace") as arquivo:
+            dados = json.load(arquivo)
+    except (OSError, ValueError) as erro:
+        registro.falha("não deu para ler %s" % local_state, erro)
+        return False
+    return isinstance(dados, dict) and "info_cache" in dados.get("profile", {})
 
 
 def native_messaging(caminho, familia):

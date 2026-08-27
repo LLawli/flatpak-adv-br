@@ -26,6 +26,15 @@
   <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.0.2" date="2026-08-25">
+      <description>
+        <p>
+          Não confunde mais aplicativos como o Steam com navegadores, não lista o
+          mesmo navegador duas vezes, e deixa selecionar com o mouse o comando
+          que a janela mostra.
+        </p>
+      </description>
+    </release>
     <release version="1.0.1" date="2026-08-25">
       <description>
         <p>

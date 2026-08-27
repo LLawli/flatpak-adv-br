@@ -368,12 +368,20 @@ class Janela(Adw.ApplicationWindow):
         caixa.set_size_request(620, -1)
 
         for comando in comandos:
-            rotulo = Gtk.Label(label=comando, xalign=0, selectable=True)
+            rotulo = Gtk.Label(label=comando, xalign=0, selectable=True,
+                               margin_top=6, margin_bottom=6,
+                               margin_start=8, margin_end=8)
             rotulo.add_css_class("monospace")
             rolagem = Gtk.ScrolledWindow(
                 hscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
                 vscrollbar_policy=Gtk.PolicyType.NEVER,
                 propagate_natural_width=False)
+            # Sem isto a barra de rolagem FLUTUA sobre o texto, que é o padrão
+            # do GTK4, e num comando de uma linha só ela cobre justamente o que
+            # a pessoa quer selecionar. Um usuário relatou não conseguir marcar
+            # o comando com o mouse. Desligando o overlay, a barra ganha espaço
+            # próprio abaixo do texto e para de disputar o clique.
+            rolagem.set_overlay_scrolling(False)
             rolagem.set_child(rotulo)
             moldura = Gtk.Frame()
             moldura.add_css_class("view")

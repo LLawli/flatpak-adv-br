@@ -4,6 +4,27 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.0.2] - 2026-08-25
+
+Duas correções vindas de quem está testando a versão publicada.
+
+### Corrigido
+
+- **Aplicativos com Chromium por dentro apareciam como navegador.** Steam,
+  Discord e Spotify embutem o motor inteiro e criam os mesmos marcadores que um
+  navegador deixa: o arquivo `Local State` e o diretório `Default`. O que eles
+  não têm é gerenciador de perfis, e é isso que passa a separar um do outro.
+  Publicar para algo que não é navegador escreve manifesto onde ninguém lê, e
+  falha em silêncio.
+- **O mesmo navegador era descoberto duas vezes.** A varredura olha a casa e o
+  `.config` separadamente, e como a primeira também desce um nível, o mesmo
+  caminho saía duas vezes. O sintoma visível era o diagnóstico dizendo
+  "chromium, chromium, chromium"; o invisível era publicar duas vezes para o
+  mesmo navegador.
+- **A barra de rolagem cobria o comando que se quer copiar.** No GTK4 ela flutua
+  sobre o conteúdo, e num comando de uma linha só ficava exatamente em cima do
+  texto, impedindo selecionar com o mouse. Agora ela tem espaço próprio.
+
 ## [1.0.1] - 2026-08-25
 
 ### Corrigido
