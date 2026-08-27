@@ -13,6 +13,23 @@ O Papers, para assinar e validar PDF fora do navegador, também.
 É o [sora-adv-br](https://github.com/LLawli/sora-adv-br) com Flatpak no lugar do
 distrobox. A ideia é a mesma; o que muda é o veículo.
 
+## Tokens testados
+
+O que já foi usado para assinar de verdade, e o que existe mas ninguém exercitou
+ainda. Vale dizer isto na cara: o código dos três está pronto, e prontidão não é
+o mesmo que funcionar na mão de alguém.
+
+| Token | Situação |
+|---|---|
+| **SafeSign** | **Funcionando ponta a ponta.** Login por certificado e assinatura, com testadores de verdade |
+| **SafeNet** | Implementado, não testado |
+| **SerproID** | Implementado, não testado |
+
+Os dois de baixo estão nessa condição porque nenhum dos testadores usa esses
+tokens, e não porque algo tenha falhado. Se você tem um deles, o relato é o que
+falta: pelo aplicativo, no botão "Relatar um problema", que mostra o texto antes
+de enviar.
+
 ## Duas portas para a mesma coisa
 
 **Com janela**, se você prefere não ver terminal nenhum depois da instalação:
@@ -34,6 +51,7 @@ levam ao mesmo lugar e podem conviver.
 
 **Instalar**, **desinstalar** e o resto:
 
+[Tokens testados](#tokens-testados) ·
 [Duas portas](#duas-portas-para-a-mesma-coisa) ·
 [O que vem no pacote](#o-que-vem-e-o-que-você-escolhe) ·
 [Requisitos](#requisitos) ·
