@@ -25,6 +25,15 @@ ADV_BR_MODULO="app-$CHAVE"
 
 . /app/share/adv-br-ui/preparar-drivers.sh
 
+# A escala do monitor, medida agora, para o PJeOffice não depender de a janela
+# deste aplicativo ter sido aberta alguma vez. O AWT do Java não descobre escala
+# fracionária sozinho, e quem pergunta ao compositor é o GTK. Ver ui/escala.py.
+#
+# Falhar aqui não pode impedir o aplicativo de abrir: sem medida, o lançador
+# simplesmente não passa a opção, que é como era antes.
+PYTHONPATH=/app/share/adv-br-ui python3 -c 'import escala; escala.atualizar()' ||
+    echo "adv-br: não deu para medir a escala do monitor." >&2
+
 LANCADOR="${XDG_DATA_HOME:-$HOME/.local/share}/componentes/$CHAVE/bin/$CHAVE"
 if [ ! -x "$LANCADOR" ]; then
     echo "adv-br: o componente '$CHAVE' não está instalado." >&2

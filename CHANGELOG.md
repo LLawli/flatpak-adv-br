@@ -4,6 +4,19 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.0.4] - 2026-08-25
+
+### Corrigido
+
+- **A escala do monitor deixa de depender de a janela ter sido aberta.** Na
+  1.0.3 quem anotava o número era a janela do Certificado Digital, então abrir o
+  PJeOffice direto pelo atalho, numa máquina onde a janela nunca tinha rodado,
+  não corrigia nada. Agora o próprio lançador pergunta ao compositor, sem abrir
+  janela nenhuma. Com mais de um monitor ele usa a maior escala: sem janela não
+  há como saber em qual deles o assinador vai abrir, e escala de menos é a tela
+  borrada que motivou tudo isto, enquanto escala de mais é uma janela grande e
+  legível.
+
 ## [1.0.3] - 2026-08-25
 
 Dois pedidos de quem está testando, e uma correção de algo que quebrei na 1.0.2.

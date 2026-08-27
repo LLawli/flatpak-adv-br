@@ -74,6 +74,26 @@ def main():
             print("  %s %-46s %s" % (marca, descricao,
                                      " ".join(passou) if passou else "(nenhuma)"))
 
+        # Sem display, medir tem de falhar em silêncio e não gravar nada: é
+        # assim que o CI roda, e é assim que roda quem abrir o atalho por ssh.
+        limpo = dict(os.environ)
+        for variavel in ("WAYLAND_DISPLAY", "DISPLAY", "GDK_BACKEND"):
+            limpo.pop(variavel, None)
+        limpo["XDG_DATA_HOME"] = os.path.join(base, "sem-display")
+        limpo["PYTHONPATH"] = "ui"
+        os.makedirs(limpo["XDG_DATA_HOME"], exist_ok=True)
+        r = subprocess.run(
+            [sys.executable, "-c",
+             "import escala; print(repr(escala.detectar())); escala.atualizar()"],
+            capture_output=True, text=True, env=limpo)
+        gravou = os.path.exists(os.path.join(limpo["XDG_DATA_HOME"], "escala"))
+        if r.returncode == 0 and "None" in r.stdout and not gravou:
+            print("  ok  sem display, mede nada e não grava nada")
+        else:
+            print("  ERRO sem display: saída=%s stdout=%r gravou=%s"
+                  % (r.returncode, r.stdout.strip(), gravou))
+            falhas += 1
+
         # O que a janela grava tem de ser o que o lançador lê.
         if escala.ARQUIVO.endswith("/escala"):
             print("  ok  janela e lançador combinam o nome do arquivo")
