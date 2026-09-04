@@ -104,12 +104,29 @@ preparar_remoteid() {
         export REMOTEID_SOCKET="$dados/teste/remoteid.sock"
         mkdir -p "$dados/teste" 2>/dev/null || true
         # Com TEST_URL, o RemoteID reloca o estado para /tmp/remoteid-teste sem
-        # consultar REMOTEID_HOME. E /tmp, no sandbox, é tmpfs de cada
-        # instância: o estado gravado pela linha de comando não chegaria ao
-        # aplicativo nem ao módulo. A raiz do sandbox é gravável, então o
-        # caminho que ele espera vira um link e some com a execução.
+        # consultar REMOTEID_HOME.
+        #
+        # O /tmp deste sandbox É compartilhado entre as instâncias do
+        # aplicativo, ao contrário do que estava escrito aqui antes; medido.
+        # Mas ele mora no diretório de execução e SOME NO LOGOUT: quem gravar
+        # ali perde a conta de teste na próxima sessão. Por isso o caminho que
+        # o RemoteID espera vira um link para os dados, que persistem.
+        #
+        # Quando o RemoteID chega primeiro e cria o diretório de verdade, o
+        # estado é resgatado para cá — a não ser que já exista outra conta
+        # gravada, e aí a escolha é de quem usa, não nossa.
         if [ -d /tmp/remoteid-teste ] && [ ! -L /tmp/remoteid-teste ]; then
-            echo "adv-br: /tmp/remoteid-teste já existe como diretório; o modo de teste vai gravar num lugar que não persiste." >&2
+            if [ -e "$dados/teste/state.json" ] &&
+                [ -e /tmp/remoteid-teste/state.json ]; then
+                echo "adv-br: há conta de teste em /tmp/remoteid-teste e em $dados/teste." >&2
+                echo "     Apague a que não interessa; a de /tmp some no logout." >&2
+            elif cp -a /tmp/remoteid-teste/. "$dados/teste"/ 2>/dev/null &&
+                rm -rf /tmp/remoteid-teste &&
+                ln -sfn "$dados/teste" /tmp/remoteid-teste 2>/dev/null; then
+                echo "adv-br: a conta de teste estava em /tmp, que some no logout; trouxe para $dados/teste." >&2
+            else
+                echo "adv-br: não consegui trazer /tmp/remoteid-teste para os dados; o modo de teste vai gravar num lugar que não persiste." >&2
+            fi
         else
             ln -sfn "$dados/teste" /tmp/remoteid-teste 2>/dev/null ||
                 echo "adv-br: não consegui ligar /tmp/remoteid-teste." >&2

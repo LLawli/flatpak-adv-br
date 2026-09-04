@@ -76,7 +76,42 @@ def conferir():
         if "ficaram de fora" not in texto:
             problemas.append("cortou por tamanho sem dizer que cortou")
 
-        # 4. E a sanitização morde o que passa por aqui. O RemoteID já redige
+        # 4. O MODO manda em qual diretório é lido, e isto custou um relato:
+        #    o primeiro que trouxe esta seção veio com o diretório de produção,
+        #    cheio de "sessao.inicio" contra a Certisign, enquanto tudo o que
+        #    interessava tinha acontecido em modo de teste, contra o mock, no
+        #    outro. Uma seção que chega com o log errado responde a pergunta
+        #    com confiança e responde errado.
+        dados = os.path.join(raiz, "dados")
+        prod = os.path.join(dados, "remoteid", "estado", "diag")
+        tst = os.path.join(dados, "remoteid", "teste", "diag")
+        for pasta, marca in ((prod, "producao"), (tst, "modo-de-teste")):
+            os.makedirs(pasta, exist_ok=True)
+            with open(os.path.join(pasta, "run-1-1.jsonl"), "w",
+                      encoding="utf-8") as arquivo:
+                arquivo.write(json.dumps({"evento": marca}) + "\n")
+        salvo_dados = os.environ.get("XDG_DATA_HOME")
+        salvo_url = os.environ.get("TEST_URL")
+        os.environ["XDG_DATA_HOME"] = dados
+        os.environ.pop("REMOTEID_DIAG_DIR", None)
+        try:
+            os.environ["TEST_URL"] = "http://localhost:8799"
+            if "modo-de-teste" not in diagnostico._remoteid():
+                problemas.append("em modo de teste, leu o diagnóstico de produção")
+            os.environ.pop("TEST_URL", None)
+            if "producao" not in diagnostico._remoteid():
+                problemas.append("em uso normal, leu o diagnóstico de teste")
+        finally:
+            if salvo_dados is None:
+                os.environ.pop("XDG_DATA_HOME", None)
+            else:
+                os.environ["XDG_DATA_HOME"] = salvo_dados
+            if salvo_url is None:
+                os.environ.pop("TEST_URL", None)
+            else:
+                os.environ["TEST_URL"] = salvo_url
+
+        # 5. E a sanitização morde o que passa por aqui. O RemoteID já redige
         #    senha, PIN e OTP; o CPF do titular é conosco.
         _diag(os.path.join(raiz, "cpf"), [
             json.dumps({"evento": "login", "cpf": "12345678901"}) + "\n"])

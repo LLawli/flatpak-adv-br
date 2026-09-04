@@ -95,14 +95,20 @@ def _diag_do_remoteid():
     tentados porque um relato pode chegar de qualquer um dos dois.
     """
     dados = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-    candidatos = [
-        os.environ.get("REMOTEID_DIAG_DIR") or "",
-        os.path.join(dados, "remoteid", "estado", "diag"),
-        os.path.join(dados, "remoteid", "teste", "diag"),
-    ]
-    # Um diretório que existe e está vazio não é a resposta: o preparo cria o
-    # de produção na primeira execução, e quem tem execução gravada pode ser o
-    # de teste. Vale o primeiro que tenha o que ler.
+    teste = os.path.join(dados, "remoteid", "teste", "diag")
+    producao = os.environ.get("REMOTEID_DIAG_DIR") or os.path.join(
+        dados, "remoteid", "estado", "diag")
+
+    # O modo manda na ordem, e isto foi aprendido caro: o primeiro relato que
+    # trouxe esta seção veio com o diretório de PRODUÇÃO, cheio de
+    # "sessao.inicio" contra a Certisign, enquanto tudo o que interessava tinha
+    # acontecido em modo de teste, contra o mock, no outro diretório. Uma seção
+    # que chega com o log errado é pior que nenhuma: ela responde a pergunta
+    # com confiança e responde errado.
+    candidatos = [teste, producao] if os.environ.get("TEST_URL") else [producao, teste]
+
+    # Entre os dois, vale o que tenha o que ler: um diretório vazio existe
+    # desde a primeira execução e não diz nada.
     existentes = [c for c in candidatos if c and os.path.isdir(c)]
     for caminho in existentes:
         if glob.glob(os.path.join(caminho, "*.jsonl")):
@@ -164,9 +170,10 @@ def _remoteid():
 
     if not partes:
         return ""
-    return ("\n".join(partes) +
-            "\n--- (acima: o diagnóstico do próprio RemoteID, que ele redige "
-            "antes de gravar: senha, PIN e OTP nunca entram)")
+    modo = "modo de teste" if os.environ.get("TEST_URL") else "uso normal"
+    return ("--- (o diagnóstico do próprio RemoteID, de %s, em %s. Ele redige "
+            "antes de gravar: senha, PIN e OTP nunca entram)\n" % (modo, raiz) +
+            "\n".join(partes))
 
 
 def coletar():

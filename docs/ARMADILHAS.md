@@ -329,24 +329,34 @@ em `preparar_remoteid()` (`src/comum-pkcs11.sh`) e em `ui/preparar-drivers.sh`.
 E isso **não** pode ser feito no `preparar.sh` da extensão: ele é *executado*,
 não incluído, então a variável que ele exportar morre com ele.
 
-## O `/tmp` do sandbox também é de cada instância, e o modo de teste mora nele
+## O `/tmp` do sandbox é compartilhado, mas some no logout
 
 O RemoteID tem um interruptor só para o modo de teste, `TEST_URL`, e com ela
 ligada ele reloca o estado inteiro para `/tmp/remoteid-teste` — o aplicativo, a
 linha de comando e o módulo, todos juntos, sem consultar `REMOTEID_HOME`. Fora
 do sandbox é uma boa decisão: um caminho, um interruptor.
 
-Dentro, `/tmp` é um tmpfs de cada instância. O `remoteid preparar` gravaria a
-conta de teste num `/tmp/remoteid-teste` que morre com o processo, e o
-aplicativo abriria noutro, vazio. O teste falharia dizendo que não há
-certificado, o que é verdade e não explica nada.
+Dentro, o `/tmp` **é** compartilhado entre as instâncias do mesmo aplicativo.
+Isto foi medido, e contradiz o que estava escrito aqui antes: duas execuções de
+`flatpak run` do mesmo id enxergam o mesmo `/tmp`. Não é o `/tmp` do host, é um
+por aplicativo.
 
-A saída é a raiz gravável do sandbox (ver *A raiz do sandbox é gravável, e
-`/usr` não*): o preparo cria `/tmp/remoteid-teste` como **link** para os dados
-do aplicativo, a cada execução. O interruptor continua sendo um só, e agora vale
-dos dois lados da fronteira.
+O problema não é a travessia, então, é a **duração**: esse diretório mora no
+diretório de execução da sessão e some no logout. Quem gravar a conta de teste
+ali a perde na próxima sessão, sem erro nenhum — só um "faça o `preparar` de
+novo" que ninguém entende.
 
-Pelo mesmo motivo, o interruptor aqui é um **arquivo** e não uma variável de
+Por isso o preparo transforma `/tmp/remoteid-teste` num link para os dados do
+aplicativo, que persistem (a raiz do sandbox é gravável; ver *A raiz do sandbox
+é gravável, e `/usr` não*). E, quando o RemoteID chega primeiro e cria o
+diretório de verdade, o preparo **resgata** o que estiver lá para os dados,
+porque foi exatamente o que aconteceu num teste real: a conta com o certificado
+que interessava passou a tarde inteira num diretório que ia sumir.
+
+Havendo conta gravada dos dois lados, ele não escolhe: avisa, e diz qual das
+duas some.
+
+Pelo mesmo motivo o interruptor aqui é um **arquivo** e não uma variável de
 ambiente: a ponte que o p11-kit inicia sob demanda e o assinador que o navegador
 executa não herdam o ambiente de terminal nenhum. Ver `adv-br-remoteid teste`.
 

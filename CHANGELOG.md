@@ -67,6 +67,21 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **O relato levava o diagnóstico do RemoteID errado.** Na primeira vez em que
+  a seção foi exercitada de verdade, ela veio com o diretório de produção,
+  cheio de `sessao.inicio` contra a Certisign, enquanto tudo o que interessava
+  tinha acontecido em modo de teste, contra o mock, no outro diretório. Uma
+  seção que chega com o log errado é pior que nenhuma: responde a pergunta com
+  confiança e responde errado. Agora o modo decide qual é lido, e o relato diz
+  de qual dos dois veio.
+- **A conta do modo de teste podia morar num lugar que some no logout.** O
+  `/tmp` do sandbox é compartilhado entre as instâncias do aplicativo — ao
+  contrário do que este projeto assumia —, mas mora no diretório de execução da
+  sessão. Quando o RemoteID criava `/tmp/remoteid-teste` antes do preparo, o
+  estado ficava lá e seria perdido no logout. O preparo agora resgata o que
+  encontrar para os dados do aplicativo, e só avisa (sem escolher) quando há
+  conta gravada dos dois lados.
+
 - **Um slot de leitora com defeito escondia todos os certificados da janela**,
   e não só o dele. `C_GetSlotList(CKF_TOKEN_PRESENT)` reprova a chamada inteira
   quando um único slot recusa responder, então uma YubiKey em modo
