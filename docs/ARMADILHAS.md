@@ -449,6 +449,50 @@ A série sai do próprio p11-kit (`library-version` do módulo de confiança), e
 não do nome do arquivo: o soname é `libp11-kit.so.0.4.1` na 0.25 e `0.4.10`/
 `0.4.11` na 0.26, o que distingue por acaso e ordena errado como texto.
 
+## O gnupg segurando o cartão cega todos os consumidores de PKCS#11
+
+Quem usa a mesma YubiKey (ou outro cartão) para assinar commit **e** para
+certificado tem dois programas disputando a mesma leitora: o `scdaemon` do
+gnupg e o OpenSC, através do `pcscd`. Enquanto o `scdaemon` tem o cartão, o
+OpenSC responde `CKR_DEVICE_ERROR` naquele slot — e, pela armadilha seguinte,
+isso apaga da lista **todos** os certificados, inclusive os em nuvem, que não
+têm leitura de cartão nenhuma.
+
+O que se vê, do lado de fora:
+
+| onde | o que aparece |
+|---|---|
+| PJeOffice | `DriverFailException: Unabled to list slot from driver` / `CKR_DEVICE_ERROR`, e nenhum certificado |
+| navegador, Papers, assinadores | a lista vazia, sem erro |
+| `pkcs11-tool -L` na linha de comando | **tudo certo**, porque ele pergunta sem o filtro |
+| a janela deste aplicativo | tudo certo, porque ela contorna (ver a armadilha seguinte) |
+
+É essa última linha que mais engana: o aplicativo mostra o certificado e o
+PJeOffice não, então parece defeito do PJeOffice ou do driver novo. Aconteceu
+três vezes num único dia de testes, sempre depois de assinar alguma coisa com a
+chave — porque assinar acorda o `scdaemon`, que volta a tomar a leitora.
+
+**Soltar agora:**
+
+```sh
+gpgconf --kill scdaemon
+```
+
+**Não repetir**, acrescentando ao `~/.gnupg/scdaemon.conf` (ao lado do
+`disable-ccid`, se houver):
+
+```
+card-timeout 1
+```
+
+Com isso o `scdaemon` devolve o cartão pouco depois de usar, em vez de segurá-lo
+enquanto viver.
+
+A seção 7 do `./diagnostico.sh` detecta a situação e imprime esses dois
+comandos, e o relato de erro do aplicativo com janela traz a linha `ATENÇÃO:`
+quando ela acontece — porque a queixa que chega é sempre "o certificado não
+aparece", nunca "a minha leitora está ocupada".
+
 ## Um slot com defeito esconde TODOS os tokens, e não só o dele
 
 `C_GetSlotList(CKF_TOKEN_PRESENT)` parece a pergunta certa — "quais slots têm

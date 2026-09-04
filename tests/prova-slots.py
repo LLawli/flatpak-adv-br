@@ -79,7 +79,24 @@ def conferir():
     if len(tabela.perguntas) != 1:
         problemas.append("lista vazia não é falha; não devia perguntar de novo")
 
-    # 4. E quando as duas quebram, quem chama precisa distinguir de "não há
+    # 4. E o achado precisa SAIR daqui. Contornar em silêncio é meia
+    #    correção: quem faz a pergunta normal — o navegador, o Papers, o
+    #    PJeOffice — continua cego, e a pessoa relata "o certificado não
+    #    aparece" enquanto este aplicativo mostra a lista completa.
+    tabela = TabelaDeMentira(com_token=CKR_DEVICE_ERROR, todos=[17, 18])
+    pkcs11.slots_tolerantes(tabela)
+    if not pkcs11.ULTIMO_AVISO:
+        problemas.append("contornou a leitora travada sem registrar o achado")
+    elif "scdaemon" not in pkcs11.ULTIMO_AVISO:
+        problemas.append("o aviso não diz o que fazer a respeito")
+
+    #    E, no caso bom, não pode sobrar aviso de uma chamada anterior.
+    tabela = TabelaDeMentira(com_token=[7], todos=[7])
+    pkcs11.slots_tolerantes(tabela)
+    if pkcs11.ULTIMO_AVISO:
+        problemas.append("avisou sobre leitora travada quando não havia nenhuma")
+
+    # 5. E quando as duas quebram, quem chama precisa distinguir de "não há
     #    token": None, e não lista vazia.
     tabela = TabelaDeMentira(com_token=CKR_DEVICE_ERROR, todos=CKR_DEVICE_ERROR)
     if pkcs11.slots_tolerantes(tabela) is not None:

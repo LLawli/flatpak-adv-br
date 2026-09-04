@@ -65,6 +65,15 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   token aparece só como impressão digital. O CPF, a nossa sanitização come. E
   a pessoa continua vendo o texto inteiro antes de enviar.
 
+- **O aplicativo passa a dizer quando uma leitora travada está escondendo os
+  certificados dos outros programas.** Ele já contornava a situação para si; o
+  problema é que contornar em silêncio deixa a pessoa com o certificado
+  aparecendo aqui e sumido no PJeOffice, no navegador e no Papers — e a queixa
+  que chega é "o certificado não aparece", nunca "a minha leitora está
+  ocupada". Agora o relato traz uma linha `ATENÇÃO:` com a causa mais comum (o
+  gnupg segurando o cartão) e os dois comandos que resolvem, e o
+  `./diagnostico.sh` ganhou uma seção que detecta o caso.
+
 ### Corrigido
 
 - **O relato levava o diagnóstico do RemoteID errado.** Na primeira vez em que

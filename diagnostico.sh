@@ -291,6 +291,39 @@ done <<<"$MODULOS"
 rm -rf "$TEMP"
 
 # ---------------------------------------------------------------------------
+titulo "7 · Alguma leitora travada?"
+
+# Uma leitora que existe e não responde apaga da lista TODOS os certificados,
+# e não só o dela. A pergunta que todo programa faz é
+# C_GetSlotList(CKF_TOKEN_PRESENT), e um único CKR_DEVICE_ERROR reprova a
+# chamada inteira — some junto o certificado em nuvem, que não tem leitora
+# nenhuma e nada tem com isso.
+#
+# Engana porque a linha de comando desmente: pkcs11-tool -L pergunta SEM o
+# filtro e mostra tudo. Então parece que está tudo bem, enquanto o navegador, o
+# Papers e o PJeOffice não mostram nada.
+TEMP=$(mktemp -d)
+cp "$RAIZ/tests/prova-leitora.py" "$TEMP/leitora.py"
+saida=$(timeout 120 flatpak run --filesystem="$TEMP:ro" --command=sh "$APP_ID" -c "
+    . /app/share/adv-br/comum-pkcs11.sh
+    preparar_drivers >/dev/null 2>&1
+    python3 $TEMP/leitora.py" 2>&1)
+codigo=$?
+rm -rf "$TEMP"
+case $codigo in
+    0) ok "nenhuma leitora travada ($saida)" ;;
+    1) aviso "$saida
+      Uma leitora travada esconde TODOS os tokens de quem pergunta do jeito
+      normal: navegador, Papers, PJeOffice, assinadores. A causa mais comum é o
+      gnupg segurando o cartão, no caso de quem usa a mesma YubiKey para
+      assinar commit e para certificado. Solte-o com:
+          gpgconf --kill scdaemon
+      E para não repetir a cada assinatura, acrescente ao ~/.gnupg/scdaemon.conf:
+          card-timeout 1" ;;
+    *) aviso "não deu para perguntar ao p11-kit: $saida" ;;
+esac
+
+# ---------------------------------------------------------------------------
 printf '\n'
 if [ "$problemas" = 0 ]; then
     printf '\033[1;32m ✓ tudo no lugar.\033[0m\n\n'

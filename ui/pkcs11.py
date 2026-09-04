@@ -153,6 +153,13 @@ def proxy_do_host():
 # todos, e não só pelos que têm token. Não é defeito, é a resposta certa.
 CKR_TOKEN_NOT_PRESENT = 0xE0
 
+# O que a última enumeração descobriu além dos tokens, em uma frase, ou "".
+#
+# Variável de módulo porque a descoberta acontece no meio de tokens(), e
+# repetir a pergunta só para contá-la custaria de novo os segundos que uma
+# leitora travada já custou. Quem lê é ui/diagnostico.py.
+ULTIMO_AVISO = ""
+
 
 def _slots(fn, apenas_com_token):
     """Os slots do proxy. Lista vazia se não há; None se a chamada falhou.
@@ -186,11 +193,32 @@ def slots_tolerantes(fn):
     e a única que dá para exercitar sem token, sem leitora e sem proxy. Ver
     tests/prova-slots.py.
     """
+    global ULTIMO_AVISO
+    ULTIMO_AVISO = ""
+
     slots = _slots(fn, apenas_com_token=True)
-    if slots is None:
-        registro.registrar(
-            "vou perguntar por TODOS os slots e descartar os que não responderem")
-        slots = _slots(fn, apenas_com_token=False)
+    if slots is not None:
+        return slots
+
+    registro.registrar(
+        "vou perguntar por TODOS os slots e descartar os que não responderem")
+    slots = _slots(fn, apenas_com_token=False)
+    if slots:
+        # A pergunta filtrada falhou e a larga funcionou. Isso não é um token
+        # ausente: é uma leitora que existe e não responde, e ela leva TODAS as
+        # outras junto para qualquer programa que pergunte do jeito normal — o
+        # navegador, o Papers, o PJeOffice, os assinadores. Aqui dentro nós
+        # contornamos; eles não.
+        #
+        # A causa mais comum tem nome: o scdaemon do gnupg segurando o cartão,
+        # que é o caso de quem usa a mesma YubiKey para assinar commit e para
+        # certificado.
+        ULTIMO_AVISO = (
+            "uma leitora não respondeu, e isso esconde TODOS os tokens de quem "
+            "pergunta do jeito normal (navegador, Papers, PJeOffice). Este "
+            "aplicativo contorna; eles não. Causa mais comum: o gnupg segurando "
+            "o cartão. Solte-o com `gpgconf --kill scdaemon`, e para não "
+            "repetir, ponha `card-timeout 1` em ~/.gnupg/scdaemon.conf")
     return slots
 
 

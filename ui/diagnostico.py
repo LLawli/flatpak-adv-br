@@ -218,6 +218,12 @@ def coletar():
             "%s [%s]" % (t["rotulo"], t["modelo"]) for t in tokens) or "nenhum"))
         escrever("módulos: %s" % ", ".join(
             os.path.basename(m) for m in pkcs11.modulos_instalados()))
+        # Uma leitora travada cega todo o resto, e o sintoma que a pessoa
+        # descreve é "o certificado não aparece" — no PJeOffice, no navegador,
+        # em tudo menos aqui. Sem esta linha, o relato traz a lista de tokens
+        # certa e a queixa continua sem explicação.
+        if pkcs11.ULTIMO_AVISO:
+            escrever("ATENÇÃO: %s" % pkcs11.ULTIMO_AVISO)
     except Exception as erro:  # noqa: BLE001
         registro.falha("diagnóstico: tokens", erro)
         escrever("tokens: erro ao ler")
