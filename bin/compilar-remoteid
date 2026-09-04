@@ -45,6 +45,12 @@ LINHA=$(grep -vE '^[[:space:]]*(#|$)' "$RAIZ/packaging/remoteid-versao.txt" | he
 [ -n "$LINHA" ] || erro "packaging/remoteid-versao.txt não tem nenhuma versão"
 read -r VERSAO TAG COMMIT <<< "$LINHA"
 
+# O nome do artefato. Quando o commit fixado não é o que a tag aponta, ele
+# entra no nome: dois conteúdos diferentes não podem dividir o mesmo nome de
+# arquivo, e o sha256 do catálogo só descobriria a troca depois do download
+# inteiro. Ver packaging/remoteid-versao.txt.
+NOME=remoteid-$VERSAO
+
 command -v flatpak >/dev/null || erro "o flatpak não está instalado."
 command -v git >/dev/null || erro "o git não está instalado."
 flatpak info "$SDK" >/dev/null 2>&1 ||
@@ -70,6 +76,12 @@ git -C "$FONTE" checkout --quiet --detach "$COMMIT" 2>/dev/null ||
 
 OBTIDO=$(git -C "$FONTE" rev-parse HEAD)
 [ "$OBTIDO" = "$COMMIT" ] || erro "o clone parou em $OBTIDO, e não em $COMMIT"
+
+COMMIT_DA_TAG=$(git -C "$FONTE" rev-list -n1 "$TAG" 2>/dev/null || true)
+if [ "$COMMIT_DA_TAG" != "$COMMIT" ]; then
+    NOME=$NOME+${COMMIT:0:7}
+    passo "o commit fixado não é o da $TAG; o artefato sai como $NOME.tar.gz"
+fi
 
 # A versão do Cargo.toml manda no nome do arquivo; se ela divergir da tabela, o
 # tarball sairia com um nome que não corresponde ao que tem dentro.
@@ -123,6 +135,24 @@ for programa in remoteid remoteid-app remoteid-mock; do
     install -Dm755 "$ALVO/release/$programa" "$ARVORE/libexec/$programa"
 done
 
+# O ícone do aplicativo, nas duas formas de que os dois mundos precisam.
+#
+# O SVG é o que a janela põe no .desktop do menu, por caminho absoluto: o
+# atalho vive no menu do HOST, que não enxerga /app, mas enxerga
+# ~/.var/app/<id>/data, que é o mesmo caminho dentro e fora do sandbox.
+#
+# O PNG é o que a extensão de linha de comando exige: o ./host/publicar.sh
+# copia atalhos/<nome>.png para o host, e ele não converte nada. Rasterizado
+# aqui, dentro do SDK, e não na máquina de quem instala.
+ICONES=$FONTE/data/icons/hicolor/scalable/apps
+install -Dm644 "$ICONES/dev.lukakuuhaku.RemoteID.svg" \
+    "$ARVORE/icone/dev.lukakuuhaku.RemoteID.svg"
+flatpak run --devel --command=sh --filesystem="$TRABALHO" "$SDK" -c "
+set -eu
+rsvg-convert -w 256 -h 256 -o '$ARVORE/icone/remoteid-app.png' \
+    '$ICONES/dev.lukakuuhaku.RemoteID.svg'
+" || erro "não deu para rasterizar o ícone"
+
 # A licença viaja junto: é GPLv3, e distribuir o binário sem ela seria o
 # descumprimento mais bobo possível.
 install -Dm644 "$FONTE/LICENSE" "$ARVORE/LICENSE"
@@ -173,17 +203,23 @@ ldd "$ARVORE/libexec/remoteid-app" 2>/dev/null | grep -q 'libgtk-4' ||
 #    guarda que só compara duas contagens derivadas da mesma fonte passa com
 #    zero de cada lado.
 for arquivo in "$ARVORE/pkcs11/libremoteid_pkcs11.so" "$ARVORE/libexec/remoteid" \
-               "$ARVORE/libexec/remoteid-app" "$ARVORE/libexec/remoteid-mock"; do
+               "$ARVORE/libexec/remoteid-app" "$ARVORE/libexec/remoteid-mock" \
+               "$ARVORE/icone/dev.lukakuuhaku.RemoteID.svg" \
+               "$ARVORE/icone/remoteid-app.png"; do
     [ -s "$arquivo" ] || erro "$(basename "$arquivo") saiu vazio ou não saiu"
 done
+# Um PNG de 0 byte tem tamanho e não é imagem. A assinatura do formato é o que
+# separa "rasterizou" de "criou um arquivo".
+head -c8 "$ARVORE/icone/remoteid-app.png" | od -An -tx1 | grep -q "89 50 4e 47" ||
+    erro "o ícone rasterizado não é um PNG"
 
-ARQUIVO=$DESTINO/remoteid-$VERSAO.tar.gz
+ARQUIVO=$DESTINO/$NOME.tar.gz
 # Empacotado de forma reprodutível: ordem fixa, dono zerado, data zerada, e o
 # gzip sem carimbo de tempo (-n). Sem isso, empacotar duas vezes o MESMO build
 # dá dois sha256 diferentes, e quem confere o catálogo não teria como saber se
 # o que mudou foi o conteúdo ou só o relógio.
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
-    --transform "s|^componente-$VERSAO|remoteid-$VERSAO|" \
+    --transform "s|^componente-$VERSAO|$NOME|" \
     -cf - -C "$TRABALHO" "componente-$VERSAO" | gzip -n9 > "$ARQUIVO"
 
 RUSTC=$("$CARGO_HOME/bin/rustc" --version 2>/dev/null || echo "desconhecido")

@@ -6,6 +6,7 @@ de onde um .so carrega. Verificado antes de o desenho ser escolhido.
 Nada aqui pede permissão nenhuma ao sistema: é o próprio diretório de dados do
 aplicativo. Instalar é escrever ali; desinstalar é apagar.
 """
+import glob
 import hashlib
 import io
 import os
@@ -229,6 +230,17 @@ def _atalho(componente):
     return os.path.join(ATALHOS, "%s.%s.desktop" % (catalogo.APP_ID, componente.chave))
 
 
+def icone(componente):
+    """O ícone que o componente trouxe, ou "" para usar o do aplicativo.
+
+    Um caminho absoluto, e é o que o .desktop precisa: ele vive no menu do
+    HOST, que não tem tema de ícone nosso nem enxerga /app. O que os dois lados
+    enxergam igual é ~/.var/app/<id>/data, onde o componente foi instalado.
+    """
+    achados = sorted(glob.glob(os.path.join(diretorio(componente), "icone", "*.svg")))
+    return achados[0] if achados else ""
+
+
 def _escrever_atalho(componente):
     """Põe no menu o componente que traz aplicativo com janela.
 
@@ -258,7 +270,7 @@ def _escrever_atalho(componente):
                 "X-Flatpak=%s\n"
                 % (componente.nome, componente.resumo,
                    catalogo.APP_ID, componente.chave,
-                   catalogo.APP_ID, catalogo.APP_ID))
+                   icone(componente) or catalogo.APP_ID, catalogo.APP_ID))
     except OSError as erro:
         # Não é motivo para a instalação falhar: o componente está instalado e
         # abre pela janela do mesmo jeito.

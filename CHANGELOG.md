@@ -37,6 +37,12 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   valer também para a ponte que o p11-kit inicia sob demanda e para o assinador
   que o navegador executa — nenhum dos dois herda o ambiente de um terminal.
 
+- **Atalho de menu do RemoteID com o ícone do próprio projeto**, nos dois
+  pacotes. O `Icon=` passa a aceitar um ícone que o componente traga: um caminho
+  absoluto dentro dos dados do aplicativo, porque o atalho vive no menu do host,
+  que não tem tema de ícone nosso nem enxerga `/app`. Componente sem ícone
+  próprio continua usando o do aplicativo.
+
 ### Corrigido
 
 - **Um slot de leitora com defeito escondia todos os certificados da janela**,

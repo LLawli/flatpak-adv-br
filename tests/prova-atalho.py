@@ -75,6 +75,36 @@ def main():
             else:
                 print("  ok  %-10s some ao desinstalar" % componente.chave)
 
+        # O ícone. Quando o componente traz um, o Icon= tem de ser o CAMINHO
+        # ABSOLUTO dele, e não o id do aplicativo: o atalho vive no menu do
+        # host, que não tem tema de ícone nosso nem enxerga /app. O que os dois
+        # lados enxergam igual é ~/.var/app/<id>/data.
+        alvo = comaplicativo[0]
+        pasta = os.path.join(instalador.diretorio(alvo), "icone")
+        os.makedirs(pasta, exist_ok=True)
+        svg = os.path.join(pasta, "dev.exemplo.Icone.svg")
+        with open(svg, "w", encoding="utf-8") as arquivo:
+            arquivo.write("<svg/>")
+        instalador._escrever_atalho(alvo)
+        texto = open(instalador._atalho(alvo), encoding="utf-8").read()
+        if ("Icon=" + svg) in texto:
+            print("  ok  %-10s usa o ícone que o componente trouxe" % alvo.chave)
+        else:
+            print("  ERRO %s: o ícone do componente não entrou no Icon="
+                  % alvo.chave)
+            falhas += 1
+        shutil.rmtree(pasta, ignore_errors=True)
+
+        # E sem ícone próprio, cai no do aplicativo, que é o que sempre foi.
+        instalador._escrever_atalho(alvo)
+        texto = open(instalador._atalho(alvo), encoding="utf-8").read()
+        if ("Icon=%s\n" % catalogo.APP_ID) in texto:
+            print("  ok  %-10s sem ícone próprio, usa o do aplicativo" % alvo.chave)
+        else:
+            print("  ERRO %s: sem ícone próprio, o Icon= ficou errado" % alvo.chave)
+            falhas += 1
+        instalador._remover_atalho(alvo)
+
         # Componente sem aplicativo não pode virar atalho: um driver não abre.
         for componente in semaplicativo:
             instalador._escrever_atalho(componente)

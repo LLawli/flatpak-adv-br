@@ -150,6 +150,11 @@ assinador, um driver quebrado impediria assinar **com qualquer outro token**.
   make remoteid
   ```
 
+  Ele também ganha atalho de menu, com o ícone do próprio projeto: o tarball
+  traz o SVG (que a janela usa por caminho absoluto) e um PNG rasterizado no
+  build (que é o que o `./host/publicar.sh` leva para o host, porque ele copia
+  `atalhos/<nome>.png` e não converte nada).
+
 ## Verificação que cada manifesto faz
 
 Cada extensão confere, ainda no build, duas coisas diferentes:

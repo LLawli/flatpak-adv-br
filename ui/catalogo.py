@@ -210,8 +210,8 @@ CATALOGO += [
         arquivos={},
         fontes=(
             Fonte(
-                url="https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.0.tar.gz",
-                sha256="21dce65cca5a2ecd5d7998579ab3d1348c30c0934ffd085e4880cb51f498bb26",
+                url="https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.0+7961a17.tar.gz",
+                sha256="dafcc106f62f2399f542073477d7fc4c9acc38306ca8d2c62324dc34052add0c",
                 arquivos={
                     # O módulo PKCS#11: é por ele que o navegador, o Papers, o
                     # Lacuna, o Softplan e o PJeOffice enxergam o certificado.
@@ -221,6 +221,10 @@ CATALOGO += [
                     # bin/remoteid vindo do pacote seria sobrescrito por ele, e
                     # o que sumiria é a linha de comando.
                     "libexec/": "libexec",
+                    # O ícone do aplicativo. O .desktop do menu vive no HOST e
+                    # não enxerga /app; o que ele enxerga é este diretório, que
+                    # tem o mesmo caminho absoluto dentro e fora do sandbox.
+                    "icone/": "icone",
                 },
                 formato="tar",
                 cortar=1,
