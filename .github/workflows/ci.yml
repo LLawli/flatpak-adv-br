@@ -50,6 +50,7 @@ jobs:
           python3 tests/prova-remoteid.py
           python3 tests/prova-slots.py
           python3 tests/prova-assinador.py
+          python3 tests/prova-relato.py
 
       - name: Manifestos
         run: |

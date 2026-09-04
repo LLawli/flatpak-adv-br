@@ -259,6 +259,14 @@ if [ -f ui/serie.py ]; then
     fi
 fi
 
+if [ -f ui/diagnostico.py ]; then
+    if python3 tests/prova-relato.py; then
+        ok "o relato leva o diagnóstico do RemoteID"
+    else
+        falha "o relato não leva o diagnóstico do RemoteID como deveria"
+    fi
+fi
+
 if [ -f ui/adv-br-assinador ]; then
     if python3 tests/prova-assinador.py; then
         ok "todo consumidor de módulo registra antes de subir"

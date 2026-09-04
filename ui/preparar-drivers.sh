@@ -178,13 +178,16 @@ else
     # ponte do navegador ou de um assinador — instâncias diferentes desta.
     # Num caminho compartilhado, `adv-br-remoteid diagnostico` lê todas.
     #
-    # O segundo é não vazar. O RemoteID já redige o que grava: senha, PIN e
-    # OTP nunca entram, e token só aparece como impressão digital. Mas o
-    # arquivo IDENTIFICA o titular do certificado, e o "Relatar um problema"
-    # deste aplicativo varre $XDG_DATA_HOME/logs e manda o
-    # que achar. Por isso o diagnóstico do RemoteID fica FORA de lá: quem o
-    # envia é a pessoa, de propósito, por canal privado. Ver ui/relator.py
-    # e a seção de diagnóstico do README do RemoteID-linux.
+    # O segundo é o relato de erro. O RemoteID já redige o que grava:
+    # senha, PIN e OTP nunca entram, e token só aparece como impressão
+    # digital. Ainda assim o arquivo IDENTIFICA o titular, então ele fica
+    # fora de $XDG_DATA_HOME/logs, que é o que o
+    # "Relatar um problema" varre por padrão.
+    #
+    # Enquanto o RemoteID está em fase de teste, o relato o inclui mesmo
+    # assim, de um caminho próprio e com teto de tamanho: os dois primeiros
+    # relatos de quem foi usá-lo chegaram inconclusivos sem ele. Ver
+    # ui/diagnostico.py e tests/prova-relato.py.
     export REMOTEID_DIAG_DIR="$REMOTEID/estado/diag"
     mkdir -p "$REMOTEID_HOME" "$REMOTEID_DIAG_DIR" 2>/dev/null || true
 fi

@@ -22,6 +22,11 @@ ADV_BR_MODULO=pkcs11
 # shellcheck source=ui/registro.sh
 . /app/share/adv-br-ui/registro.sh
 
+# O relógio começa antes do preparo: é ele que se quer medir, e o preparo vem
+# antes de qualquer decisão sobre qual p11-kit usar.
+INICIO=$(date +%s%3N 2>/dev/null || echo 0)
+case "$INICIO" in ''|*[!0-9]*) INICIO=0 ;; esac
+
 MODULO=${1:-}
 if [ -z "$MODULO" ]; then
     echo "uso: adv-br-pkcs11 <caminho-do-modulo.so>" >&2
@@ -65,9 +70,53 @@ for candidato in "$COMPONENTES"/p11kit-*/; do
     break
 done
 
+# Daqui para baixo, o log. Ele existe por um relato: "o Firefox demorou muito
+# para responder a tela de login do gov.br", e o diagnóstico que veio junto
+# trazia três marcadores de sessão desta ponte, vazios. Ou seja: ela subiu três
+# vezes e não disse qual módulo carregou, com qual p11-kit, nem quanto tempo
+# levou. Não dava para responder nada.
+#
+# Nada em stdout: ali corre o RPC do p11-kit, e um byte a mais o corrompe.
+agora_ms() {
+    ms=$(date +%s%3N 2>/dev/null || true)
+    case "$ms" in
+        ''|*[!0-9]*) echo 0 ;;
+        *) echo "$ms" ;;
+    esac
+}
+ABERTURA=$(agora_ms)
+
 if [ -n "$COMPAT" ]; then
     export LD_LIBRARY_PATH="$COMPAT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-    exec "$COMPAT/libexec/p11-kit/p11-kit-remote" "$MODULO"
+    REMOTO="$COMPAT/libexec/p11-kit/p11-kit-remote"
+    QUAL="compatibilidade $(basename "${COMPAT%/}")"
+else
+    # O binário do runtime. Chamado como "p11-kit remote", que é o que existe
+    # quando não há componente de compatibilidade instalado.
+    REMOTO=""
+    QUAL="p11-kit do runtime"
 fi
 
-exec p11-kit remote "$MODULO"
+echo "módulo: $MODULO" >&2
+echo "p11-kit: $QUAL" >&2
+[ "$INICIO" = 0 ] || [ "$ABERTURA" = 0 ] ||
+    echo "preparo: $((ABERTURA - INICIO)) ms" >&2
+
+# Sem exec, e é de propósito: o exec troca este processo pelo p11-kit-remote, e
+# aí não há mais ninguém para anotar quanto tempo a sessão durou nem como ela
+# terminou — que é justamente o que faltava no relato. O custo é um /bin/sh
+# parado enquanto o navegador mantiver o módulo aberto.
+if [ -n "$REMOTO" ]; then
+    "$REMOTO" "$MODULO" || CODIGO=$?
+else
+    p11-kit remote "$MODULO" || CODIGO=$?
+fi
+CODIGO=${CODIGO:-0}
+
+FIM=$(agora_ms)
+if [ "$FIM" != 0 ] && [ "$ABERTURA" != 0 ]; then
+    echo "encerrou com código $CODIGO, depois de $((FIM - ABERTURA)) ms" >&2
+else
+    echo "encerrou com código $CODIGO" >&2
+fi
+exit "$CODIGO"

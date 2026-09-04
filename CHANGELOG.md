@@ -50,6 +50,21 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   que não tem tema de ícone nosso nem enxerga `/app`. Componente sem ícone
   próprio continua usando o do aplicativo.
 
+- **O relato de erro passa a levar o diagnóstico do próprio RemoteID**, e a
+  ponte PKCS#11 passa a dizer o que fez. Os dois primeiros relatos de quem foi
+  usar o certificado em nuvem chegaram inconclusivos: o `app-remoteid.log`
+  trazia avisos do GTK e nada mais, e o `pkcs11.log` trazia três marcadores de
+  sessão vazios — a ponte subia e não dizia qual módulo carregava, com qual
+  p11-kit, nem quanto tempo levava.
+
+  O diagnóstico do RemoteID é uma **exceção deliberada e datada**: ele
+  identifica o titular do certificado, e por isso mora fora do diretório que o
+  relato varre. Entra por um caminho próprio, das três execuções mais recentes,
+  com teto de 20 KB, e sai daqui quando o RemoteID deixar a fase de teste. O
+  que ele grava já vem redigido pelo próprio: senha, PIN e OTP nunca entram, e
+  token aparece só como impressão digital. O CPF, a nossa sanitização come. E
+  a pessoa continua vendo o texto inteiro antes de enviar.
+
 ### Corrigido
 
 - **Um slot de leitora com defeito escondia todos os certificados da janela**,
