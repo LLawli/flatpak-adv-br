@@ -3,7 +3,7 @@
 Certificado digital para a advocacia brasileira **em Flatpak**, usado nos
 navegadores que você já tem.
 
-Os drivers do token (SafeSign, SafeNet, SerproID) e os assinadores (Lacuna Web
+Os drivers do token (SafeSign, SafeNet, SerproID, RemoteID) e os assinadores (Lacuna Web
 PKI, Softplan WebSigner, Certisign WebSigner) ficam dentro de um Flatpak. O que
 muda em relação ao resto do gênero: **nenhum navegador é instalado**. O Firefox,
 o Chrome, o Brave ou o Vivaldi que você já usa continuam sendo os seus,
@@ -24,6 +24,7 @@ o mesmo que funcionar na mão de alguém.
 | **SafeSign** | **Funcionando ponta a ponta.** Login por certificado e assinatura, com testadores de verdade |
 | **SafeNet** | Implementado, não testado |
 | **SerproID** | Implementado, não testado |
+| **RemoteID** | **Assina com PIN e código do autenticador**, conferido contra a chave pública do titular. A aprovação por celular (*push*) está implementada e nunca foi exercitada |
 
 Os dois de baixo estão nessa condição porque nenhum dos testadores usa esses
 tokens, e não porque algo tenha falhado. Se você tem um deles, o relato é o que
@@ -105,6 +106,7 @@ Todo o resto é extensão, instalada quando você for usar, e pode ser depois:
 | `--with-safesign` | driver do token GD Burti, o mais usado na advocacia | ~2 MB |
 | `--with-safenet` | driver dos eToken 5100, 5110 e IDPrime | ~30 MB |
 | `--with-serproid` | certificado em nuvem do Serpro, com o aplicativo dele | ~288 MB |
+| `--with-remoteid` | certificado em nuvem da Certisign, com o aplicativo dele | ~4 MB |
 | `--with-webpki` | Lacuna Web PKI, para assinar em navegador | ~142 MB |
 | `--with-websigner` | Softplan WebSigner, dos sistemas SAJ | ~140 MB |
 | `--with-certisign` | Certisign WebSigner, do portal da OAB | ~2 MB |
@@ -117,9 +119,41 @@ cópia de backup, não redistribuir, então cada extensão baixa da URL do próp
 fabricante, na sua máquina. E **tamanho**: quem não usa o PJe não deveria
 baixar 300 MB de Java para descobrir isso.
 
+O RemoteID é a exceção da primeira regra: ele é GPLv3, então quem compila e
+publica o binário é este projeto (`bin/compilar-remoteid`), e a sua máquina só
+baixa e confere o sha256. Continua fora do pacote base pela segunda razão, e
+por uma terceira: quem não tem certificado na nuvem da Certisign não tem o que
+fazer com ele.
+
 Como se escreve uma extensão nova está em
 [drivers/README.md](drivers/README.md),
 [assinadores/README.md](assinadores/README.md) e [apps/README.md](apps/README.md).
+
+## RemoteID: o certificado em nuvem da Certisign
+
+A Certisign publica aplicativo de RemoteID/DesktopID só para Windows e macOS:
+numa máquina Linux o seu certificado simplesmente não existe. O
+[RemoteID-linux](https://github.com/LLawli/RemoteID-linux) resolve isso, e é o
+que a opção `--with-remoteid` traz.
+
+A chave privada fica no HSM da Certisign e **nunca esteve na sua máquina**. O
+que roda aqui são duas peças, e as duas precisam estar presentes:
+
+| peça | para que serve |
+|---|---|
+| `libremoteid_pkcs11.so` | o token, do ponto de vista do navegador, do Papers, do Lacuna, do Softplan e do PJeOffice |
+| `remoteid-app` | quem fala com a Certisign e mostra o diálogo de PIN e do código do autenticador |
+
+**O aplicativo precisa estar aberto na hora de assinar.** Sem ele o certificado
+aparece na lista normalmente e a assinatura falha, porque não há quem autorize.
+Ele está no menu, com o nome RemoteID, assim que você instala o componente.
+
+O protocolo foi reconstruído por engenharia reversa do aplicativo oficial de
+macOS; não é produto oficial da Certisign, e não há vínculo com a empresa. O
+que foi confirmado com conta real é a autorização por **PIN e código do
+autenticador**; a aprovação por celular está implementada e nunca passou por
+uma assinatura de verdade. Se você usa esse método e topa testar, o endereço
+está no [repositório do RemoteID-linux](https://github.com/LLawli/RemoteID-linux).
 
 ## VIDaaS: em desenvolvimento, e precisando de testadores
 

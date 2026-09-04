@@ -3,7 +3,7 @@
 APP_ID = io.github.llawli.AdvBr
 
 .PHONY: ajuda instalar tudo publicar despublicar diagnostico testar lint \
-        serproid pjeoffice desinstalar limpar
+        serproid remoteid pjeoffice desinstalar limpar
 
 ajuda:
 	@echo 'make instalar            constrói e instala o Flatpak, e publica'
@@ -14,6 +14,7 @@ ajuda:
 	@echo 'make lint                shellcheck nos scripts'
 	@echo 'make tudo                instala o pacote e todas as extensões'
 	@echo 'make serproid            abre o aplicativo SerproID para associar o certificado'
+	@echo 'make remoteid            abre o aplicativo RemoteID para entrar na conta'
 	@echo 'make pjeoffice           abre o PJeOffice Pro'
 	@echo 'make desinstalar         remove tudo: pacote, extensões e publicação'
 
@@ -38,10 +39,15 @@ testar:
 lint:
 	shellcheck -S warning src/*.sh host/*.sh tests/*.sh drivers/*.sh \
 	    assinadores/*.sh apps/*.sh packaging/*.sh instalar.sh desinstalar.sh \
-	    diagnostico.sh bin/release
+	    diagnostico.sh bin/release bin/compilar-remoteid
+	shellcheck -S warning -x ui/adv-br-pkcs11 ui/adv-br-assinador \
+	    ui/adv-br-remoteid ui/preparar-drivers.sh
 
 serproid:
 	flatpak run --command=adv-br-ferramentas $(APP_ID) serproid
+
+remoteid:
+	flatpak run --command=adv-br-ferramentas $(APP_ID) remoteid-app
 
 pjeoffice:
 	flatpak run --command=adv-br-ferramentas $(APP_ID) pjeoffice-pro

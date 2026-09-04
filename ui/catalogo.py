@@ -189,6 +189,54 @@ CATALOGO += [
 
 CATALOGO += [
     Componente(
+        chave="remoteid",
+        nome="RemoteID",
+        resumo="Certificado em nuvem da Certisign",
+        detalhe=(
+            "O certificado fica no HSM da Certisign, não num token: a chave "
+            "privada nunca esteve nesta máquina. Depois de instalar, abra o "
+            "aplicativo do RemoteID uma vez para entrar na sua conta, e "
+            "deixe-o aberto na hora de assinar — é ele que pede o PIN e o "
+            "código do autenticador."
+        ),
+        tipo="driver",
+        # Ao contrário de todo o resto deste catálogo, este componente não é
+        # baixado do site de um fabricante: o RemoteID-linux é GPLv3, então
+        # este projeto pode compilá-lo e redistribuí-lo. Quem instala não
+        # compila nada. Ver bin/compilar-remoteid e
+        # packaging/remoteid-versao.txt.
+        url="",
+        sha256="",
+        arquivos={},
+        fontes=(
+            Fonte(
+                url="https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.0.tar.gz",
+                sha256="21dce65cca5a2ecd5d7998579ab3d1348c30c0934ffd085e4880cb51f498bb26",
+                arquivos={
+                    # O módulo PKCS#11: é por ele que o navegador, o Papers, o
+                    # Lacuna, o Softplan e o PJeOffice enxergam o certificado.
+                    "pkcs11/": "pkcs11",
+                    # Os executáveis ficam em libexec/, e não em bin/, porque
+                    # bin/<chave> é onde o instalador escreve o lançador. Um
+                    # bin/remoteid vindo do pacote seria sobrescrito por ele, e
+                    # o que sumiria é a linha de comando.
+                    "libexec/": "libexec",
+                },
+                formato="tar",
+                cortar=1,
+            ),
+        ),
+        tamanho=4 * 1024 * 1024,
+        # O aplicativo é a metade que assina: o módulo sozinho lista o
+        # certificado e falha em toda assinatura, porque não há quem autorize.
+        # O socket por onde os dois se falam é montado pelo
+        # ui/preparar-drivers.sh, que este lançador herda do adv-br-aplicativo.
+        lancador='exec "$COMPONENTE/libexec/remoteid-app" "$@"\n',
+    ),
+]
+
+CATALOGO += [
+    Componente(
         chave="safenet",
         nome="SafeNet",
         resumo="Driver dos tokens eToken 5100, 5110 e IDPrime",

@@ -19,8 +19,15 @@ Por isso cada driver é uma **extensão Flatpak** separada:
 ./instalar.sh --with-safesign   # token GD Burti, o mais comum na advocacia
 ./instalar.sh --with-safenet    # eToken 5100, 5110, IDPrime
 ./instalar.sh --with-serproid   # certificado em nuvem do Serpro
-./instalar.sh --with-drivers    # os três
+./instalar.sh --with-remoteid   # certificado em nuvem da Certisign
+./instalar.sh --with-drivers    # os quatro
 ```
+
+O RemoteID é a exceção do primeiro parágrafo: ele é GPLv3, e por isso **pode**
+ser redistribuído. A extensão dele não baixa de fabricante nenhum, e também não
+compila na sua máquina: quem compila é este projeto, com `bin/compilar-remoteid`,
+dentro do mesmo SDK do runtime, e o que a extensão consome é esse tarball
+publicado, com sha256 conferido.
 
 ou, se preferir o Makefile:
 
@@ -28,6 +35,7 @@ ou, se preferir o Makefile:
 make driver-safesign
 make driver-safenet
 make driver-serproid
+make driver-remoteid
 make drivers-desinstalar
 ```
 
@@ -123,6 +131,33 @@ assinador, um driver quebrado impediria assinar **com qualquer outro token**.
 
   ```sh
   make serproid
+  ```
+
+- **RemoteID**: não é biblioteca sozinha, e o que ele exige do ambiente não é um
+  arquivo, é um **caminho de socket**. O módulo manda o digest para o
+  `remoteid-app` por um socket UNIX, e é o aplicativo que pede o PIN e o código
+  do autenticador e traz a assinatura do HSM da Certisign.
+
+  O padrão do RemoteID é `$XDG_RUNTIME_DIR/remoteid.sock`, e ele não serve aqui:
+  quem abre o módulo é a ponte do navegador, um assinador ou o PJeOffice, cada um
+  numa instância própria deste Flatpak, e o aplicativo roda em OUTRA, com um
+  `$XDG_RUNTIME_DIR` só dele. Cada lado criaria o seu socket e nenhum acharia o
+  outro — e o sintoma seria o pior deste projeto: o certificado APARECE, o token
+  é listado, e só a assinatura falha.
+
+  Quem resolve é a função `preparar_remoteid()` do `src/comum-pkcs11.sh`, que
+  aponta `REMOTEID_SOCKET` para os dados do aplicativo, o único caminho que todas
+  as instâncias enxergam. E ela está lá, e não num `preparar.sh` desta extensão,
+  por um motivo simples: **o `preparar.sh` é executado, não incluído**, então
+  variável exportada nele morre com ele. É a única coisa que a convenção acima
+  não sabe fazer.
+
+  Ele também não fala com token físico: a chave privada fica no HSM e nunca
+  esteve na máquina. Depois de instalar, abra o aplicativo uma vez para entrar na
+  conta, e deixe-o aberto na hora de assinar:
+
+  ```sh
+  make remoteid
   ```
 
 ## Verificação que cada manifesto faz

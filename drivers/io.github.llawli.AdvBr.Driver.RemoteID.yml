@@ -1,0 +1,86 @@
+# Extensão opcional: RemoteID (certificado em nuvem da Certisign).
+#
+# O RemoteID não é driver de token: é um módulo PKCS#11 mais um aplicativo. A
+# chave privada fica no HSM da Certisign e nunca esteve nesta máquina; o módulo
+# manda o digest para o aplicativo por um socket UNIX, e é o aplicativo que
+# pede o PIN e o código do autenticador e traz a assinatura de volta.
+#
+#   ./instalar.sh --with-remoteid   # instala
+#   make remoteid                   # abre o aplicativo, para entrar na conta
+#
+# Duas coisas o separam de todo o resto de drivers/:
+#
+# 1. Ele é LIVRE (GPLv3), e por isso não é baixado do site de um fabricante:
+#    este projeto compila e publica o binário, e esta extensão o consome
+#    pronto. Ver bin/compilar-remoteid e packaging/remoteid-versao.txt.
+#
+# 2. O caminho do socket NÃO é montado por um preparar.sh daqui. O preparar.sh
+#    de uma extensão é EXECUTADO, e não incluído: variável exportada nele morre
+#    com ele. Quem exporta REMOTEID_SOCKET é a função preparar_remoteid() do
+#    src/comum-pkcs11.sh, que todo processo que carrega módulo já chama.
+id: io.github.llawli.AdvBr.Driver.RemoteID
+branch: master
+runtime: io.github.llawli.AdvBr
+runtime-version: master
+sdk: org.freedesktop.Sdk//24.08
+build-extension: true
+appstream-compose: false
+separate-locales: false
+
+build-options:
+  prefix: /app/lib/pkcs11/drivers/RemoteID
+
+modules:
+  - name: remoteid
+    buildsystem: simple
+    build-commands:
+      # O módulo: é por ele que o navegador, o Papers, o Lacuna, o Softplan e o
+      # PJeOffice enxergam o certificado.
+      - install -Dm755 pkcs11/libremoteid_pkcs11.so
+        "${FLATPAK_DEST}/pkcs11/libremoteid_pkcs11.so"
+      # As ferramentas, alcançáveis por
+      # `flatpak run --command=adv-br-ferramentas io.github.llawli.AdvBr <nome>`.
+      # O remoteid-app é a metade que assina; sem ele no ar o certificado
+      # aparece e nenhuma assinatura sai.
+      - install -Dm755 libexec/remoteid "${FLATPAK_DEST}/bin/remoteid"
+      - install -Dm755 libexec/remoteid-app "${FLATPAK_DEST}/bin/remoteid-app"
+      # O servidor RemoteID falso, para exercitar tudo sem tocar na conta real
+      # nem na Certisign. Ver docs/ARMADILHAS.md.
+      - install -Dm755 libexec/remoteid-mock "${FLATPAK_DEST}/bin/remoteid-mock"
+      - install -Dm644 LICENSE "${FLATPAK_DEST}/LICENSE"
+      # Um módulo que não exporte o ponto de entrada do PKCS#11 é descartado
+      # pelo p11-kit em silêncio, e o sintoma é o certificado não aparecer.
+      - nm -D --defined-only "${FLATPAK_DEST}/pkcs11/libremoteid_pkcs11.so"
+        | grep -q ' T C_GetFunctionList$'
+      # As dependências resolvem contra o runtime. O grep -v 'not found' que
+      # aparece nos assinadores não serve aqui: ele passa enquanto UMA linha
+      # qualquer não disser "not found".
+      - |
+        set -eu
+        faltando=$(ldd "${FLATPAK_DEST}/pkcs11/libremoteid_pkcs11.so" \
+            "${FLATPAK_DEST}/bin/remoteid-app" | grep 'not found' || true)
+        if [ -n "$faltando" ]; then
+            echo "dependencias nao resolvidas:" >&2
+            echo "$faltando" >&2
+            exit 1
+        fi
+      # 'ldd' não vê símbolo indefinido: ele lista o que falta em DT_NEEDED, e
+      # foi por isso que o driver do SerproID passou no build e falhou só ao ser
+      # carregado, que na prática é a hora de assinar. A prova é abrir a
+      # biblioteca de verdade.
+      - |
+        set -eu
+        casa=$(pwd)/casa-de-teste
+        mkdir -p "$casa/estado"
+        HOME="$casa" REMOTEID_HOME="$casa/estado" \
+            python3 -c "import ctypes, sys; ctypes.CDLL(sys.argv[1])" \
+            "${FLATPAK_DEST}/pkcs11/libremoteid_pkcs11.so"
+      # E o aplicativo tem de ser mesmo o GTK: um binário que saísse sem a
+      # interface listaria certificado e nunca abriria o diálogo de PIN.
+      - ldd "${FLATPAK_DEST}/bin/remoteid-app" | grep -q libgtk-4
+    sources:
+      # Compilado e publicado por este projeto, e não baixado de um fabricante:
+      # o RemoteID-linux é GPLv3. Ver bin/compilar-remoteid.
+      - type: archive
+        url: https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.0.tar.gz
+        sha256: 21dce65cca5a2ecd5d7998579ab3d1348c30c0934ffd085e4880cb51f498bb26

@@ -1,0 +1,128 @@
+#!/bin/sh
+# A linha de comando do RemoteID, de dentro deste aplicativo.
+#
+#   flatpak run --command=adv-br-remoteid dev.lukakuuhaku.AdvBr preparar
+#   flatpak run --command=adv-br-remoteid dev.lukakuuhaku.AdvBr assinar --arquivo x.pdf
+#
+# Existe por dois motivos. O primeiro é o preparo: o módulo PKCS#11 e o
+# aplicativo do RemoteID se acham por um socket, e quem decide onde ele fica é
+# o ui/preparar-drivers.sh — chamar o binário direto pularia isso e o sintoma
+# seria "assina pela janela e não pela linha de comando". O segundo é o modo de
+# teste, que aqui é um arquivo e não uma variável, porque precisa valer também
+# para processos que ninguém lança à mão.
+#
+# Os subcomandos próprios são "teste", "mock" e "app"; o resto vai inteiro para
+# a linha de comando do RemoteID.
+set -eu
+
+ADV_BR_MODULO=remoteid
+# shellcheck source=ui/registro.sh
+. /app/share/adv-br-ui/registro.sh
+
+COMPONENTE="${XDG_DATA_HOME:-$HOME/.local/share}/componentes/remoteid"
+
+ajuda() {
+    cat >&2 <<'AJUDA'
+Uso: adv-br-remoteid <comando> [argumentos]
+
+  teste <url>        liga o modo de teste contra um servidor RemoteID falso
+  teste --desligar   volta ao servidor de verdade da Certisign
+  teste              diz em que modo o aplicativo está
+  mock [porta]       sobe o servidor RemoteID falso (padrão 8799)
+  app                abre o aplicativo do RemoteID
+  <resto>            vai para a linha de comando do RemoteID (preparar,
+                     assinar, diagnostico, harness)
+
+O RemoteID tem diagnóstico PRÓPRIO, e é ele que serve para relatar um problema
+de assinatura: um arquivo por execução, com senha, PIN e OTP fora e os tokens
+só como impressão digital. Ele fica junto do estado, e não em logs/, de
+propósito: o "Relatar um problema" desta janela varre logs/ e envia o que
+encontra, e o diagnóstico do RemoteID identifica o titular do certificado.
+Mande-o por canal privado, e só quando pedirem:
+
+  adv-br-remoteid diagnostico
+
+O roteiro do teste local, tudo de dentro do sandbox:
+
+  1. num terminal:  adv-br-remoteid mock
+  2. noutro:        adv-br-remoteid teste http://localhost:8799
+                    adv-br-remoteid preparar
+                    adv-br-remoteid app        (deixe aberto)
+  3. e então assine pelo Papers, pelo navegador ou por
+                    adv-br-remoteid assinar --arquivo algum.pdf
+
+  login teste@remoteid.local / teste-1234, PIN 1234, OTP 123456.
+AJUDA
+}
+
+# O interruptor do modo de teste é gravado ANTES de qualquer preparo: é ele que
+# decide o que o preparo vai exportar.
+REMOTEID_DADOS="${XDG_DATA_HOME:-$HOME/.local/share}/remoteid"
+
+case "${1:-}" in
+    ''|-h|--help|ajuda)
+        ajuda
+        [ -n "${1:-}" ] || exit 2
+        exit 0
+        ;;
+    teste)
+        shift
+        mkdir -p "$REMOTEID_DADOS"
+        case "${1:-}" in
+            '')
+                if [ -s "$REMOTEID_DADOS/TEST_URL" ]; then
+                    echo "modo de teste, contra $(cat "$REMOTEID_DADOS/TEST_URL")"
+                else
+                    echo "modo normal, contra a Certisign"
+                fi
+                ;;
+            --desligar)
+                rm -f "$REMOTEID_DADOS/TEST_URL"
+                echo "modo de teste desligado."
+                ;;
+            http://*|https://*)
+                # A mesma conferência que o preparo faz, feita aqui também: o
+                # erro que se pega na hora de escrever é o que não vira um
+                # "modo de teste ignorado" no meio de uma assinatura.
+                case "$1" in
+                    *[!A-Za-z0-9:/._-]*)
+                        echo "adv-br: '$1' tem caractere que não aceito numa URL." >&2
+                        exit 2
+                        ;;
+                esac
+                printf '%s\n' "$1" > "$REMOTEID_DADOS/TEST_URL"
+                echo "modo de teste ligado, contra $1."
+                echo "Vale para o aplicativo, o Papers, o navegador e os assinadores."
+                ;;
+            *)
+                echo "adv-br: 'teste' quer uma URL http(s), --desligar, ou nada." >&2
+                exit 2
+                ;;
+        esac
+        exit 0
+        ;;
+esac
+
+# Ver ui/preparar-drivers.sh: é ele que aponta REMOTEID_SOCKET para um caminho
+# que todas as instâncias deste Flatpak enxergam, e que transforma o arquivo
+# TEST_URL em variável.
+. /app/share/adv-br-ui/preparar-drivers.sh
+
+if [ ! -d "$COMPONENTE" ]; then
+    echo "adv-br: o RemoteID não está instalado." >&2
+    echo "     Abra o Certificado Digital e instale-o." >&2
+    exit 1
+fi
+
+case "$1" in
+    mock)
+        shift
+        exec "$COMPONENTE/libexec/remoteid-mock" "${1:-8799}"
+        ;;
+    app)
+        shift
+        exec "$COMPONENTE/libexec/remoteid-app" "$@"
+        ;;
+esac
+
+exec "$COMPONENTE/libexec/remoteid" "$@"

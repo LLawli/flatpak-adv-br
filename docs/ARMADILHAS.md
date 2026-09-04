@@ -244,6 +244,57 @@ Conferir de qual tipo é um app: `flatpak info --show-permissions <app>`.
 `filesystems=home` ou `host` significa home real; `persistent=` significa que
 só aquilo é montado.
 
+## Duas instâncias do mesmo Flatpak não compartilham `$XDG_RUNTIME_DIR`
+
+O RemoteID é certificado em nuvem: o módulo PKCS#11 dele não fala com a
+Certisign, ele manda o digest para o `remoteid-app` por um socket UNIX, e é o
+aplicativo que pede o PIN e o código do autenticador. Os dois precisam concordar
+sobre onde está esse socket, e o padrão do RemoteID é
+`$XDG_RUNTIME_DIR/remoteid.sock`.
+
+Dentro de um Flatpak, esse caminho é uma armadilha. Quem abre o módulo é a ponte
+que o p11-kit do host inicia, ou um assinador que o navegador executou, ou o
+PJeOffice: cada um deles é uma instância separada de `flatpak run`. O
+`remoteid-app` é mais uma. E o `$XDG_RUNTIME_DIR` que se vê lá dentro é privado
+de cada instância — o caminho é o mesmo, o diretório não. Cada lado cria o seu
+socket, e nenhum acha o outro.
+
+O sintoma é o pior tipo que este projeto conhece, porque ele não parece um
+problema de encanamento: o certificado **aparece**, o navegador lista o token, a
+janela do aplicativo diz que está tudo certo, e só a assinatura falha, com erro
+de dispositivo. Nada aponta para o socket.
+
+O que atravessa é o diretório de **dados**: `~/.var/app/<id>/data` tem o mesmo
+caminho absoluto dentro e fora do sandbox, é o mesmo arquivo em todas as
+instâncias, e é alcançável também de fora. É a mesma propriedade de que o
+publicador depende para os atalhos dos navegadores em Flatpak (ver *Um sandbox
+não enxerga `~/.var/app/<id>` inteiro*). Daí `REMOTEID_SOCKET` apontar para lá,
+em `preparar_remoteid()` (`src/comum-pkcs11.sh`) e em `ui/preparar-drivers.sh`.
+
+E isso **não** pode ser feito no `preparar.sh` da extensão: ele é *executado*,
+não incluído, então a variável que ele exportar morre com ele.
+
+## O `/tmp` do sandbox também é de cada instância, e o modo de teste mora nele
+
+O RemoteID tem um interruptor só para o modo de teste, `TEST_URL`, e com ela
+ligada ele reloca o estado inteiro para `/tmp/remoteid-teste` — o aplicativo, a
+linha de comando e o módulo, todos juntos, sem consultar `REMOTEID_HOME`. Fora
+do sandbox é uma boa decisão: um caminho, um interruptor.
+
+Dentro, `/tmp` é um tmpfs de cada instância. O `remoteid preparar` gravaria a
+conta de teste num `/tmp/remoteid-teste` que morre com o processo, e o
+aplicativo abriria noutro, vazio. O teste falharia dizendo que não há
+certificado, o que é verdade e não explica nada.
+
+A saída é a raiz gravável do sandbox (ver *A raiz do sandbox é gravável, e
+`/usr` não*): o preparo cria `/tmp/remoteid-teste` como **link** para os dados
+do aplicativo, a cada execução. O interruptor continua sendo um só, e agora vale
+dos dois lados da fronteira.
+
+Pelo mesmo motivo, o interruptor aqui é um **arquivo** e não uma variável de
+ambiente: a ponte que o p11-kit inicia sob demanda e o assinador que o navegador
+executa não herdam o ambiente de terminal nenhum. Ver `adv-br-remoteid teste`.
+
 ## Um caminho de módulo vale dentro de um sandbox só
 
 `/pkcs11/adv-br.so` é criado pelo **lançador deste pacote**, na raiz tmpfs do

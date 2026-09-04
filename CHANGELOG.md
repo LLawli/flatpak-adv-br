@@ -4,6 +4,51 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] - 2026-09-04
+
+### Adicionado
+
+- **RemoteID: o certificado em nuvem da Certisign passa a funcionar no Linux.**
+  A Certisign publica aplicativo só para Windows e macOS; numa máquina Linux o
+  certificado simplesmente não existia. Agora ele aparece como token para o
+  navegador, para o Papers, para o Lacuna Web PKI, para o Softplan WebSigner e
+  para o PJeOffice, como qualquer outro. A chave privada continua no HSM da
+  Certisign e nunca esteve na sua máquina.
+
+  É o primeiro componente que **não** é baixado do site de um fabricante: o
+  [RemoteID-linux](https://github.com/LLawli/RemoteID-linux) é GPLv3, então
+  quem compila e publica é este projeto, com `bin/compilar-remoteid`, dentro do
+  mesmo SDK do runtime. Sua máquina baixa 4 MB e confere o sha256.
+
+  O que foi confirmado com conta real é a autorização por PIN e código do
+  autenticador; a aprovação por celular está implementada e nunca passou por
+  uma assinatura de verdade.
+
+- **`adv-br-remoteid`**, para usar o RemoteID pela linha de comando de dentro do
+  aplicativo, e para ligar o modo de teste contra um servidor RemoteID falso
+  sem tocar na conta real:
+
+  ```sh
+  flatpak run --command=adv-br-remoteid dev.lukakuuhaku.AdvBr mock
+  flatpak run --command=adv-br-remoteid dev.lukakuuhaku.AdvBr teste http://localhost:8799
+  ```
+
+  O interruptor é um arquivo, e não uma variável de ambiente, porque precisa
+  valer também para a ponte que o p11-kit inicia sob demanda e para o assinador
+  que o navegador executa — nenhum dos dois herda o ambiente de um terminal.
+
+### Notas para quem for mexer
+
+- O socket entre o módulo PKCS#11 do RemoteID e o aplicativo dele **não** pode
+  ficar no `$XDG_RUNTIME_DIR`: ele é privado de cada instância de `flatpak run`,
+  e o módulo e o aplicativo nunca rodam na mesma. O sintoma seria o certificado
+  aparecer e só a assinatura falhar. Ver `docs/ARMADILHAS.md`.
+- O diagnóstico do RemoteID fica junto do estado, e **não** em
+  `$XDG_DATA_HOME/logs`: o botão "Relatar um problema" varre esse diretório e
+  envia o que encontra, e o diagnóstico dele identifica o titular do
+  certificado. Ele já redige senha, PIN e OTP por conta própria; quem o envia é
+  a pessoa, de propósito.
+
 ## [1.0.4] - 2026-08-25
 
 ### Corrigido

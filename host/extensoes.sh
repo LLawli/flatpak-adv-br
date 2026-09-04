@@ -13,12 +13,13 @@ declare -A EXTENSOES=(
     [safesign]=drivers/io.github.llawli.AdvBr.Driver.SafeSign.yml
     [safenet]=drivers/io.github.llawli.AdvBr.Driver.SafeNet.yml
     [serproid]=drivers/io.github.llawli.AdvBr.Driver.SerproID.yml
+    [remoteid]=drivers/io.github.llawli.AdvBr.Driver.RemoteID.yml
     [webpki]=assinadores/io.github.llawli.AdvBr.Assinador.WebPKI.yml
     [websigner]=assinadores/io.github.llawli.AdvBr.Assinador.WebSigner.yml
     [certisign]=assinadores/io.github.llawli.AdvBr.Assinador.Certisign.yml
     [pjeoffice]=apps/io.github.llawli.AdvBr.App.PJeOffice.yml
 )
-DRIVERS_TODOS=(safesign safenet serproid)
+DRIVERS_TODOS=(safesign safenet serproid remoteid)
 ASSINADORES_TODOS=(webpki websigner certisign)
 
 # opção → id da extensão instalada. Sai do próprio manifesto, para não haver

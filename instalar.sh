@@ -57,7 +57,8 @@ outra opção acrescenta sem refazer o que já está pronto:
     --with-safesign    token GD Burti, o mais usado na advocacia
     --with-safenet     eToken 5100, 5110, IDPrime
     --with-serproid    certificado em nuvem do Serpro (traz o aplicativo)
-    --with-drivers     os três acima
+    --with-remoteid    certificado em nuvem da Certisign (traz o aplicativo)
+    --with-drivers     os quatro acima
 
   assinadores em navegador
     --with-webpki      Lacuna Web PKI
@@ -75,9 +76,11 @@ outra opção acrescenta sem refazer o que já está pronto:
   --conceder         concede as permissões dos navegadores em Flatpak
   --ajuda            esta mensagem
 
-Nada disso vem no pacote base porque nada disso pode ser redistribuído: cada
-extensão baixa da URL do próprio fabricante, na sua máquina. E porque quem não
-usa o PJe não deve baixar 300 MB de Java para descobrir isso.
+Quase nada disso vem no pacote base porque quase nada disso pode ser
+redistribuído: cada extensão baixa da URL do próprio fabricante, na sua
+máquina. A exceção é o RemoteID, que é GPLv3 e vem compilado por este
+projeto. E fora está também quem não usa o PJe, que não deve baixar 300 MB
+de Java para descobrir isso.
 
 O comando é idempotente: pode ser repetido à vontade.
 FIM

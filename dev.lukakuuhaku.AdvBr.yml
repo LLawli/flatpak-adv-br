@@ -181,6 +181,7 @@ modules:
       - install -Dm755 ui/adv-br-aplicativo /app/bin/adv-br-aplicativo
       - install -Dm755 ui/adv-br-assinador /app/bin/adv-br-assinador
       - install -Dm755 ui/adv-br-serie /app/bin/adv-br-serie
+      - install -Dm755 ui/adv-br-remoteid /app/bin/adv-br-remoteid
       - install -Dm644 ui/preparar-drivers.sh
         /app/share/adv-br-ui/preparar-drivers.sh
       - install -Dm644 ui/registro.sh /app/share/adv-br-ui/registro.sh
