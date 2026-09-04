@@ -37,8 +37,15 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   valer também para a ponte que o p11-kit inicia sob demanda e para o assinador
   que o navegador executa — nenhum dos dois herda o ambiente de um terminal.
 
-- **Atalho de menu do RemoteID com o ícone do próprio projeto**, nos dois
-  pacotes. O `Icon=` passa a aceitar um ícone que o componente traga: um caminho
+- **Atalho de menu do RemoteID, escrito pelo próprio projeto**, nos dois
+  pacotes. O `.desktop` do componente é usado como está e só duas linhas mudam,
+  porque só duas não fazem sentido fora da máquina de quem o escreveu: o `Exec`,
+  que precisa entrar pelo `adv-br-aplicativo` para o preparo dos drivers
+  acontecer também pelo menu, e o `Icon`. Nome, descrição traduzida,
+  palavras-chave e `StartupWMClass` são metadados do autor, e uma cópia nossa
+  divergiria — é a mesma regra dos manifestos de native messaging dos
+  assinadores. Componente sem `.desktop` próprio continua com um composto aqui.
+- **O ícone do componente vale no atalho**, nos dois pacotes. O `Icon=` passa a aceitar um ícone que o componente traga: um caminho
   absoluto dentro dos dados do aplicativo, porque o atalho vive no menu do host,
   que não tem tema de ícone nosso nem enxerga `/app`. Componente sem ícone
   próprio continua usando o do aplicativo.

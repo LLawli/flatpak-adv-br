@@ -105,6 +105,44 @@ def main():
             falhas += 1
         instalador._remover_atalho(alvo)
 
+        # Quando o componente traz o .desktop do próprio autor, ele é o que
+        # vale: nome, descrição traduzida, palavras-chave e StartupWMClass são
+        # metadados dele. Aqui só duas linhas podem mudar, porque só duas não
+        # fazem sentido fora da máquina de quem escreveu: o Exec, que precisa
+        # entrar pelo adv-br-aplicativo, e o Icon, que é um nome de tema que o
+        # menu do host não resolve.
+        pasta = os.path.join(instalador.diretorio(alvo), "atalhos")
+        os.makedirs(pasta, exist_ok=True)
+        with open(os.path.join(pasta, "x.desktop"), "w", encoding="utf-8") as arquivo:
+            arquivo.write("[Desktop Entry]\nType=Application\nName=Do Autor\n"
+                          "Comment[en]=From the author\nExec=programa-solto\n"
+                          "Icon=dev.exemplo.Tema\nStartupWMClass=dev.exemplo.X\n")
+        instalador._escrever_atalho(alvo)
+        texto = open(instalador._atalho(alvo), encoding="utf-8").read()
+
+        esperado = "Exec=flatpak run --command=adv-br-aplicativo %s %s\n" % (
+            catalogo.APP_ID, alvo.chave)
+        problemas = []
+        if esperado not in texto:
+            problemas.append("o Exec do autor não foi trocado pelo nosso")
+        if "Icon=dev.exemplo.Tema" in texto:
+            problemas.append("o Icon do autor sobreviveu, e o host não o resolve")
+        for guardar in ("Name=Do Autor", "Comment[en]=From the author",
+                        "StartupWMClass=dev.exemplo.X"):
+            if guardar not in texto:
+                problemas.append("perdeu o que era do autor: %s" % guardar)
+        if "X-Flatpak=%s" % catalogo.APP_ID not in texto:
+            problemas.append("não marcou o atalho como deste aplicativo")
+        if problemas:
+            for p in problemas:
+                print("  ERRO %s: %s" % (alvo.chave, p))
+            falhas += len(problemas)
+        else:
+            print("  ok  %-10s usa o .desktop do autor, trocando só Exec e Icon"
+                  % alvo.chave)
+        shutil.rmtree(pasta, ignore_errors=True)
+        instalador._remover_atalho(alvo)
+
         # Componente sem aplicativo não pode virar atalho: um driver não abre.
         for componente in semaplicativo:
             instalador._escrever_atalho(componente)

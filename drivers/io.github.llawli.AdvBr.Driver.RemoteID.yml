@@ -48,11 +48,12 @@ modules:
       # nem na Certisign. Ver docs/ARMADILHAS.md.
       - install -Dm755 libexec/remoteid-mock "${FLATPAK_DEST}/bin/remoteid-mock"
       - install -Dm644 LICENSE "${FLATPAK_DEST}/LICENSE"
-      # Atalho de menu no host. A convenção está em drivers/README.md: o
-      # publicador substitui @EXEC@ e @ICONE@, e o <nome> tem de ser igual ao do
-      # bin/<nome>, porque é dele que o Exec é montado. Aqui os dois são
-      # "remoteid-app".
-      - install -Dm644 remoteid-app.desktop "${FLATPAK_DEST}/atalhos/remoteid-app.desktop"
+      # Atalho de menu no host, escrito pelo PRÓPRIO projeto e já com @EXEC@ e
+      # @ICONE@ no lugar (a troca acontece em bin/compilar-remoteid). A
+      # convenção está em drivers/README.md: o <nome> tem de ser igual ao do
+      # bin/<nome>, porque é dele que o publicador monta o Exec.
+      - install -Dm644 atalhos/remoteid-app.desktop
+        "${FLATPAK_DEST}/atalhos/remoteid-app.desktop"
       # O PNG vem rasterizado do tarball: o ./host/publicar.sh copia
       # atalhos/<nome>.png para o host e não converte nada.
       - install -Dm644 icone/remoteid-app.png "${FLATPAK_DEST}/atalhos/remoteid-app.png"
@@ -102,7 +103,5 @@ modules:
       # Compilado e publicado por este projeto, e não baixado de um fabricante:
       # o RemoteID-linux é GPLv3. Ver bin/compilar-remoteid.
       - type: archive
-        url: https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.0+7961a17.tar.gz
-        sha256: dafcc106f62f2399f542073477d7fc4c9acc38306ca8d2c62324dc34052add0c
-      - type: file
-        path: remoteid-app.desktop
+        url: https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.1.tar.gz
+        sha256: 2bce8de3e096aae00a00b5300fbe65f1fa2037105b59834a3ba8c288934f16b8

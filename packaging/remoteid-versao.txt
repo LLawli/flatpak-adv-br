@@ -15,15 +15,12 @@
 # O commit é o que manda, e não a tag: uma tag pode ser movida, um commit não.
 # O bin/compilar-remoteid confere que o clone parou nele antes de compilar.
 #
-# Quando o commit fixado NÃO é o da tag, o nome do tarball leva o commit
-# curto junto (remoteid-<versão>+<commit>.tar.gz). É feio de propósito: reusar
-# o nome "remoteid-0.1.0.tar.gz" para um conteúdo diferente do que a tag v0.1.0
-# produz enganaria quem já baixou, e o sha256 do catálogo só pegaria isso
-# depois do download inteiro. O nome volta a ser limpo quando sair uma tag que
-# contenha o que precisamos.
-#
-# Hoje é o caso: o ícone do aplicativo entrou depois da v0.1.0, e o .desktop
-# do menu precisa dele.
+# Quando o commit fixado NÃO é o da tag, o nome do tarball leva o commit curto
+# junto (remoteid-<versão>+<commit>.tar.gz). É feio de propósito: reusar um nome
+# para um conteúdo diferente do que a tag produz enganaria quem já baixou, e o
+# sha256 do catálogo só pegaria a troca depois do download inteiro. Aconteceu
+# uma vez, entre a v0.1.0 e a v0.1.1, quando o ícone do aplicativo já existia e
+# a tag ainda não.
 #
 # versão  tag     commit
-0.1.0  v0.1.0  7961a17d5a2e34b0e406e4aebcd6c79367e4f0eb
+0.1.1  v0.1.1  10d9bc66def6ffb558695c75718349aff2661981

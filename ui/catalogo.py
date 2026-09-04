@@ -210,8 +210,8 @@ CATALOGO += [
         arquivos={},
         fontes=(
             Fonte(
-                url="https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.0+7961a17.tar.gz",
-                sha256="dafcc106f62f2399f542073477d7fc4c9acc38306ca8d2c62324dc34052add0c",
+                url="https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.1.tar.gz",
+                sha256="2bce8de3e096aae00a00b5300fbe65f1fa2037105b59834a3ba8c288934f16b8",
                 arquivos={
                     # O módulo PKCS#11: é por ele que o navegador, o Papers, o
                     # Lacuna, o Softplan e o PJeOffice enxergam o certificado.
@@ -225,6 +225,11 @@ CATALOGO += [
                     # não enxerga /app; o que ele enxerga é este diretório, que
                     # tem o mesmo caminho absoluto dentro e fora do sandbox.
                     "icone/": "icone",
+                    # O atalho de menu, escrito pelo próprio projeto. O
+                    # instalador troca só o Exec e o Icon; o resto (nome,
+                    # descrição, palavras-chave, StartupWMClass) é metadado
+                    # dele, e uma cópia nossa divergiria.
+                    "atalhos/": "atalhos",
                 },
                 formato="tar",
                 cortar=1,

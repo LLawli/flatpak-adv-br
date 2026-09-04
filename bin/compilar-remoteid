@@ -122,7 +122,7 @@ cargo build --release --locked \
 passo "Empacotando"
 ARVORE=$TRABALHO/componente-$VERSAO
 rm -rf "$ARVORE"
-mkdir -p "$ARVORE/pkcs11" "$ARVORE/libexec"
+mkdir -p "$ARVORE/pkcs11" "$ARVORE/libexec" "$ARVORE/atalhos"
 
 # O módulo vai para pkcs11/, que é onde o aplicativo procura módulo de
 # componente (ver ui/pkcs11.py: componentes/*/pkcs11/*.so).
@@ -152,6 +152,24 @@ set -eu
 rsvg-convert -w 256 -h 256 -o '$ARVORE/icone/remoteid-app.png' \
     '$ICONES/dev.lukakuuhaku.RemoteID.svg'
 " || erro "não deu para rasterizar o ícone"
+
+# O atalho de menu, do PRÓPRIO projeto, e não uma cópia escrita aqui: o nome,
+# a descrição, as palavras-chave e o StartupWMClass são metadados dele, e uma
+# segunda cópia divergiria no dia em que ele mudasse. É a mesma regra dos
+# manifestos de native messaging dos assinadores (ver assinadores/README.md):
+# pega-se o arquivo do autor e troca-se o mínimo.
+#
+# O mínimo aqui são duas linhas. O Exec dele é "remoteid-app", que só existe
+# para quem instalou no host; e o Icon é um nome de tema, que o menu do host não
+# resolve porque o ícone não está no tema dele. Os dois viram as marcas que o
+# ./host/publicar.sh preenche.
+#
+# O nome do arquivo é remoteid-app.desktop porque a convenção exige que ele
+# case com bin/<nome>: é de lá que o publicador monta o Exec.
+sed -e 's|^Exec=.*|Exec=@EXEC@|' -e 's|^Icon=.*|Icon=@ICONE@|' \
+    "$FONTE/data/applications/dev.lukakuuhaku.RemoteID.desktop" \
+    > "$ARVORE/atalhos/remoteid-app.desktop" 2>/dev/null ||
+    erro "não achei o .desktop do RemoteID no commit fixado"
 
 # A licença viaja junto: é GPLv3, e distribuir o binário sem ela seria o
 # descumprimento mais bobo possível.
@@ -205,13 +223,23 @@ ldd "$ARVORE/libexec/remoteid-app" 2>/dev/null | grep -q 'libgtk-4' ||
 for arquivo in "$ARVORE/pkcs11/libremoteid_pkcs11.so" "$ARVORE/libexec/remoteid" \
                "$ARVORE/libexec/remoteid-app" "$ARVORE/libexec/remoteid-mock" \
                "$ARVORE/icone/dev.lukakuuhaku.RemoteID.svg" \
-               "$ARVORE/icone/remoteid-app.png"; do
+               "$ARVORE/icone/remoteid-app.png" \
+               "$ARVORE/atalhos/remoteid-app.desktop"; do
     [ -s "$arquivo" ] || erro "$(basename "$arquivo") saiu vazio ou não saiu"
 done
 # Um PNG de 0 byte tem tamanho e não é imagem. A assinatura do formato é o que
 # separa "rasterizou" de "criou um arquivo".
 head -c8 "$ARVORE/icone/remoteid-app.png" | od -An -tx1 | grep -q "89 50 4e 47" ||
     erro "o ícone rasterizado não é um PNG"
+# E as duas trocas do .desktop aconteceram. Um sed que não casa não falha: ele
+# copia o arquivo intacto, e o atalho chegaria ao menu mandando executar um
+# comando que não existe fora do sandbox.
+for marca in @EXEC@ @ICONE@; do
+    grep -q "$marca" "$ARVORE/atalhos/remoteid-app.desktop" ||
+        erro "o .desktop saiu sem $marca: o formato dele mudou?"
+done
+grep -q '^Name=' "$ARVORE/atalhos/remoteid-app.desktop" ||
+    erro "o .desktop saiu sem Name="
 
 ARQUIVO=$DESTINO/$NOME.tar.gz
 # Empacotado de forma reprodutível: ordem fixa, dono zerado, data zerada, e o

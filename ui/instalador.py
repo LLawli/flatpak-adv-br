@@ -230,6 +230,19 @@ def _atalho(componente):
     return os.path.join(ATALHOS, "%s.%s.desktop" % (catalogo.APP_ID, componente.chave))
 
 
+def modelo_de_atalho(componente):
+    """O .desktop que o componente trouxe, ou "" para compor um.
+
+    Quando o autor do programa escreve o próprio atalho, ele sabe mais do que
+    nós sobre nome, descrição traduzida, palavras-chave e StartupWMClass. É a
+    mesma regra dos manifestos de native messaging dos assinadores: pega-se o
+    arquivo dele e troca-se o mínimo.
+    """
+    achados = sorted(glob.glob(os.path.join(diretorio(componente), "atalhos",
+                                            "*.desktop")))
+    return achados[0] if achados else ""
+
+
 def icone(componente):
     """O ícone que o componente trouxe, ou "" para usar o do aplicativo.
 
@@ -239,6 +252,37 @@ def icone(componente):
     """
     achados = sorted(glob.glob(os.path.join(diretorio(componente), "icone", "*.svg")))
     return achados[0] if achados else ""
+
+
+def _do_modelo(componente, modelo, exec_):
+    """Escreve o atalho a partir do .desktop do próprio programa.
+
+    Duas linhas mudam, e só elas. O Exec porque o programa não está no PATH de
+    ninguém: quem o abre é o adv-br-aplicativo, para o preparo dos drivers
+    acontecer também pelo menu. E o Icon porque o nome de tema que ele usa não
+    resolve no host, onde o atalho vive; o que resolve é o caminho absoluto do
+    ícone dentro dos dados do aplicativo.
+    """
+    with open(modelo, encoding="utf-8") as arquivo:
+        linhas = arquivo.readlines()
+
+    saida = []
+    for linha in linhas:
+        if linha.startswith("Exec="):
+            saida.append("Exec=%s\n" % exec_)
+        elif linha.startswith("Icon="):
+            saida.append("Icon=%s\n" % (icone(componente) or catalogo.APP_ID))
+        else:
+            saida.append(linha)
+    # Marca de que o atalho é deste aplicativo. O modelo do autor não teria
+    # como saber disso, e é o que faz o ambiente associar a janela ao Flatpak.
+    if not any(l.startswith("X-Flatpak=") for l in saida):
+        if saida and not saida[-1].endswith("\n"):
+            saida.append("\n")
+        saida.append("X-Flatpak=%s\n" % catalogo.APP_ID)
+
+    with open(_atalho(componente), "w", encoding="utf-8") as arquivo:
+        arquivo.writelines(saida)
 
 
 def _escrever_atalho(componente):
@@ -254,8 +298,14 @@ def _escrever_atalho(componente):
     """
     if not componente.lancador:
         return
+    exec_ = ("flatpak run --command=adv-br-aplicativo %s %s"
+             % (catalogo.APP_ID, componente.chave))
     try:
         os.makedirs(ATALHOS, exist_ok=True)
+        modelo = modelo_de_atalho(componente)
+        if modelo:
+            _do_modelo(componente, modelo, exec_)
+            return
         with open(_atalho(componente), "w", encoding="utf-8") as arquivo:
             arquivo.write(
                 "[Desktop Entry]\n"
