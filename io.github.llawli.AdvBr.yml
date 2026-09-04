@@ -83,6 +83,18 @@ finish-args:
   - --share=network
   # Bandeja do sistema, que o PJeOffice usa quando o desktop oferece.
   - --talk-name=org.kde.StatusNotifierWatcher
+
+  # O aplicativo do RemoteID registra o próprio id no barramento de sessão
+  # (dev.lukakuuhaku.RemoteID, e .Teste no modo de teste), e o filtro de
+  # barramento que o Flatpak monta por padrão só deixa o sandbox possuir nomes
+  # que comecem pelo id DESTE pacote. Sem estas duas linhas ele morre no
+  # arranque com "Failed to register: ...ServiceUnknown", que não menciona
+  # barramento, nome nem permissão.
+  #
+  # Não é --socket=session-bus: aquilo abriria o barramento inteiro. Isto é o
+  # mínimo, dois nomes, e o segundo cobre o .Teste e o .Preview.
+  - --own-name=dev.lukakuuhaku.RemoteID
+  - --own-name=dev.lukakuuhaku.RemoteID.*
   # Assinar arquivo escolhido pela pessoa, ler certificado A1 (.pfx/.p12) e
   # gravar a configuração de cada assinador onde ele a gravaria instalado
   # nativamente.

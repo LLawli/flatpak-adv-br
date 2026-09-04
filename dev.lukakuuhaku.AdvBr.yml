@@ -44,6 +44,18 @@ finish-args:
   - --socket=pcsc
   - --device=all
 
+  # O aplicativo do RemoteID registra o próprio id no barramento de sessão
+  # (dev.lukakuuhaku.RemoteID, e .Teste no modo de teste), e o filtro de
+  # barramento que o Flatpak monta por padrão só deixa o sandbox possuir nomes
+  # que comecem pelo id DESTE pacote. Sem estas duas linhas ele morre no
+  # arranque com "Failed to register: ...ServiceUnknown", que não menciona
+  # barramento, nome nem permissão.
+  #
+  # Não é --socket=session-bus: aquilo abriria o barramento inteiro. Isto é o
+  # mínimo, dois nomes, e o segundo cobre o .Teste e o .Preview.
+  - --own-name=dev.lukakuuhaku.RemoteID
+  - --own-name=dev.lukakuuhaku.RemoteID.*
+
   # Publicar o token para os programas que já existem na máquina significa
   # escrever arquivo de configuração na home de quem usa. A lista abaixo é o
   # mínimo para isso, caminho por caminho, em vez de --filesystem=home: o que

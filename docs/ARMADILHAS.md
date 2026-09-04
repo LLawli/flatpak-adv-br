@@ -244,6 +244,40 @@ Conferir de qual tipo é um app: `flatpak info --show-permissions <app>`.
 `filesystems=home` ou `host` significa home real; `persistent=` significa que
 só aquilo é montado.
 
+## Um componente com id próprio não consegue se registrar no barramento
+
+O Flatpak monta um filtro de barramento de sessão mesmo sem
+`--socket=session-bus`, e a política padrão dele deixa o sandbox possuir apenas
+nomes que comecem pelo id do **pacote**. Um componente que chega depois e
+registra um id próprio não passa.
+
+Foi o que aconteceu com o aplicativo do RemoteID, que é `AdwApplication` com id
+`dev.lukakuuhaku.RemoteID`. Ele morre no arranque com:
+
+```
+Failed to register: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown
+```
+
+A mensagem não ajuda em nada: não fala em barramento, não fala em nome, não fala
+em permissão, e `ServiceUnknown` sugere um serviço ausente em vez de um nome
+recusado. Pior, ela nem parece problema de empacotamento — parece o aplicativo
+não ter subido.
+
+A correção é `--own-name`, e não `--socket=session-bus`: aquele abriria o
+barramento inteiro para tudo o que roda aqui dentro, incluindo os assinadores
+proprietários. Dois nomes bastam, porque o `.*` do Flatpak casa os filhos e
+**não** o pai:
+
+```yaml
+  - --own-name=dev.lukakuuhaku.RemoteID
+  - --own-name=dev.lukakuuhaku.RemoteID.*
+```
+
+O segundo cobre os ids que o aplicativo usa em modo de teste e em modo de
+demonstração de telas. Como esses ids vêm de outro repositório, quem guarda o
+acordo é `tests/prova-remoteid.py`: ele lista os nomes e confere que os dois
+manifestos os liberam.
+
 ## Duas instâncias do mesmo Flatpak não compartilham `$XDG_RUNTIME_DIR`
 
 O RemoteID é certificado em nuvem: o módulo PKCS#11 dele não fala com a

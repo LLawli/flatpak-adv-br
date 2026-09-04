@@ -43,6 +43,11 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   ficar no `$XDG_RUNTIME_DIR`: ele é privado de cada instância de `flatpak run`,
   e o módulo e o aplicativo nunca rodam na mesma. O sintoma seria o certificado
   aparecer e só a assinatura falhar. Ver `docs/ARMADILHAS.md`.
+- O aplicativo do RemoteID registra um id próprio no barramento de sessão, e o
+  filtro que o Flatpak monta por padrão só deixa possuir nomes que comecem pelo
+  id do pacote. Sem `--own-name` ele morre no arranque com
+  `Failed to register: ...ServiceUnknown`, uma mensagem que não fala em
+  barramento, nome nem permissão. Ver `docs/ARMADILHAS.md`.
 - O diagnóstico do RemoteID fica junto do estado, e **não** em
   `$XDG_DATA_HOME/logs`: o botão "Relatar um problema" varre esse diretório e
   envia o que encontra, e o diagnóstico dele identifica o titular do

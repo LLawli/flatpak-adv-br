@@ -79,8 +79,53 @@ def preparar(mundo, casa, test_url=None):
     return exportado
 
 
-def conferir():
+# Os ids que o aplicativo do RemoteID registra no barramento de sessão. Estão
+# escritos aqui, e não descobertos, porque vêm de outro repositório: é o mesmo
+# tipo de acordo que o sha256 do catálogo, e quebra do mesmo jeito silencioso.
+# Ver crates/remoteid-gtk/src/main.rs no RemoteID-linux.
+NOMES_NO_BARRAMENTO = (
+    "dev.lukakuuhaku.RemoteID",
+    "dev.lukakuuhaku.RemoteID.Teste",
+    "dev.lukakuuhaku.RemoteID.Preview",
+)
+
+MANIFESTOS = ("dev.lukakuuhaku.AdvBr.yml", "io.github.llawli.AdvBr.yml")
+
+
+def _cobre(regra, nome):
+    """Se um --own-name do Flatpak cobre este nome.
+
+    A regra é a do próprio Flatpak: nome exato, ou um prefixo terminado em
+    ".*", que casa os filhos e NÃO o pai.
+    """
+    if regra == nome:
+        return True
+    return regra.endswith(".*") and nome.startswith(regra[:-1])
+
+
+def conferir_barramento():
+    """Os manifestos liberam os nomes que o aplicativo do RemoteID registra.
+
+    O filtro de barramento que o Flatpak monta por padrão só deixa o sandbox
+    possuir nomes que comecem pelo id do PACOTE. O RemoteID chega como
+    componente e registra um id próprio, então o pacote precisa dizer que
+    permite. Sem isso ele morre no arranque com "Failed to register:
+    ...ServiceUnknown" — uma mensagem que não fala em barramento, nem em nome,
+    nem em permissão, e que foi exatamente como o defeito apareceu.
+    """
     problemas = []
+    for manifesto in MANIFESTOS:
+        with open(manifesto, encoding="utf-8") as arquivo:
+            regras = [linha.split("--own-name=", 1)[1].strip()
+                      for linha in arquivo if "--own-name=" in linha]
+        for nome in NOMES_NO_BARRAMENTO:
+            if not any(_cobre(regra, nome) for regra in regras):
+                problemas.append("%s: nenhum --own-name cobre %s" % (manifesto, nome))
+    return problemas
+
+
+def conferir():
+    problemas = conferir_barramento()
     os.makedirs(CASAS, exist_ok=True)
     for mundo in MUNDOS:
         casa = tempfile.mkdtemp(prefix="prova-remoteid-", dir=CASAS)
