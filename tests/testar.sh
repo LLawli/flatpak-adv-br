@@ -259,6 +259,14 @@ if [ -f ui/serie.py ]; then
     fi
 fi
 
+if [ -f ui/pkcs11.py ]; then
+    if python3 tests/prova-slots.py; then
+        ok "um slot com defeito não esconde os tokens que funcionam"
+    else
+        falha "um slot com defeito esconde os tokens que funcionam"
+    fi
+fi
+
 if [ -f ui/preparar-drivers.sh ] && [ -f src/comum-pkcs11.sh ]; then
     if python3 tests/prova-remoteid.py; then
         ok "o socket do RemoteID atravessa as instâncias do sandbox"

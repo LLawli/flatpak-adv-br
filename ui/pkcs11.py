@@ -149,6 +149,51 @@ def proxy_do_host():
     return None
 
 
+# CKR_TOKEN_NOT_PRESENT: o que um slot vazio responde quando se pergunta por
+# todos, e não só pelos que têm token. Não é defeito, é a resposta certa.
+CKR_TOKEN_NOT_PRESENT = 0xE0
+
+
+def _slots(fn, apenas_com_token):
+    """Os slots do proxy. Lista vazia se não há; None se a chamada falhou.
+
+    Os dois casos são diferentes e a distinção é o motivo deste ajudante
+    existir: "não há token espetado" é rotina, e "a enumeração quebrou" é o que
+    faz o chamador tentar de outro jeito.
+    """
+    bandeira = CKF_TOKEN_PRESENT if apenas_com_token else 0
+    contagem = ctypes.c_ulong(0)
+    codigo = fn.C_GetSlotList(bandeira, None, ctypes.byref(contagem))
+    if codigo != CKR_OK:
+        registro.registrar("C_GetSlotList(0x%x) devolveu 0x%x", bandeira, codigo)
+        return None
+    if contagem.value == 0:
+        return []
+
+    slots = (ctypes.c_ulong * contagem.value)()
+    codigo = fn.C_GetSlotList(bandeira, slots, ctypes.byref(contagem))
+    if codigo != CKR_OK:
+        registro.registrar("C_GetSlotList(0x%x), segunda chamada, devolveu 0x%x",
+                           bandeira, codigo)
+        return None
+    return list(slots)
+
+
+def slots_tolerantes(fn):
+    """Os slots a examinar, sem deixar um slot ruim esconder os bons.
+
+    Numa função própria porque é a decisão que este módulo mais precisa acertar,
+    e a única que dá para exercitar sem token, sem leitora e sem proxy. Ver
+    tests/prova-slots.py.
+    """
+    slots = _slots(fn, apenas_com_token=True)
+    if slots is None:
+        registro.registrar(
+            "vou perguntar por TODOS os slots e descartar os que não responderem")
+        slots = _slots(fn, apenas_com_token=False)
+    return slots
+
+
 def tokens():
     """Rótulos dos tokens presentes, pelo proxy do p11-kit.
 
@@ -175,23 +220,29 @@ def tokens():
         registro.registrar("C_Initialize devolveu 0x%x", codigo)
         return []
 
-    contagem = ctypes.c_ulong(0)
-    codigo = fn.C_GetSlotList(CKF_TOKEN_PRESENT, None, ctypes.byref(contagem))
-    if codigo != CKR_OK:
-        registro.registrar("C_GetSlotList devolveu 0x%x", codigo)
+    # Primeiro só os slots COM token, que é a pergunta certa e a mais barata.
+    # Quando ela falha, não é o fim: basta UM slot com defeito para o proxy
+    # reprovar a chamada inteira, e aí todo token vivo some da janela por causa
+    # de uma leitora que ninguém estava usando.
+    #
+    # Caso real: uma YubiKey em modo OTP+FIDO+CCID com o scdaemon do gnupg
+    # segurando a interface. O OpenSC responde CKR_DEVICE_ERROR naquele slot, e
+    # a lista voltava VAZIA — inclusive sem o certificado em nuvem, que não tem
+    # leitora nenhuma e não podia se importar menos com aquilo.
+    #
+    # Então, se a pergunta filtrada falha, faz-se a pergunta larga e descarta-se
+    # slot a slot, no laço abaixo, que já sabe pular quem não responde. É a
+    # mesma tolerância que o `critical: no` dos .module dá do outro lado: um
+    # driver que recuse o cartão não pode derrubar os outros.
+    slots = slots_tolerantes(fn)
+    if slots is None:
         return []
-    if contagem.value == 0:
+    if not slots:
         # Nenhum token espetado é o caso normal, e não é erro. Fica no log
         # porque "não aparece nada" é o relato mais comum que se recebe, e
         # distinguir "não há token" de "a pilha quebrou" é metade do
         # diagnóstico.
         registro.registrar("nenhum slot com token presente")
-        return []
-
-    slots = (ctypes.c_ulong * contagem.value)()
-    codigo = fn.C_GetSlotList(CKF_TOKEN_PRESENT, slots, ctypes.byref(contagem))
-    if codigo != CKR_OK:
-        registro.registrar("C_GetSlotList (segunda chamada) devolveu 0x%x", codigo)
         return []
 
     encontrados = []
@@ -200,8 +251,12 @@ def tokens():
         codigo = fn.C_GetTokenInfo(slot, ctypes.byref(info))
         if codigo != CKR_OK:
             # 0xe1 é CKR_TOKEN_NOT_RECOGNIZED, e é o que uma YubiKey em modo
-            # FIDO responde. Não é defeito: é um slot que não interessa.
-            registro.registrar("slot %d: C_GetTokenInfo devolveu 0x%x", slot, codigo)
+            # FIDO responde. 0xe0 é CKR_TOKEN_NOT_PRESENT, e é o que um slot
+            # vazio responde quando se perguntou por todos. Nenhum dos dois é
+            # defeito: são slots que não interessam.
+            if codigo != CKR_TOKEN_NOT_PRESENT:
+                registro.registrar("slot %d: C_GetTokenInfo devolveu 0x%x",
+                                   slot, codigo)
             continue
         rotulo = _texto(info.label)
         # O módulo de confiança do Flatpak aparece aqui como se fosse token, e

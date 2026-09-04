@@ -418,6 +418,33 @@ A série sai do próprio p11-kit (`library-version` do módulo de confiança), e
 não do nome do arquivo: o soname é `libp11-kit.so.0.4.1` na 0.25 e `0.4.10`/
 `0.4.11` na 0.26, o que distingue por acaso e ordena errado como texto.
 
+## Um slot com defeito esconde TODOS os tokens, e não só o dele
+
+`C_GetSlotList(CKF_TOKEN_PRESENT)` parece a pergunta certa — "quais slots têm
+token?" — e é, até o dia em que um slot recusa responder. Para saber se há token
+o proxy precisa consultar cada slot, e um `CKR_DEVICE_ERROR` num deles reprova a
+chamada **inteira**. A janela recebia `0x30` e mostrava zero certificados.
+
+O caso real: uma YubiKey em modo OTP+FIDO+CCID com o `scdaemon` do gnupg
+segurando a interface CCID. O OpenSC devolve `CKR_DEVICE_ERROR` naquele slot, e
+sumia junto o certificado em nuvem do RemoteID — que não tem leitora nenhuma e
+não podia se importar menos com aquilo.
+
+Engana em dois tempos. Primeiro porque a causa está longe do efeito: quem
+"quebrou" foi uma leitora que ninguém estava usando. Segundo porque
+`pkcs11-tool -L` no mesmo módulo lista tudo direitinho, já que ele pergunta sem
+o filtro — então a linha de comando diz que está tudo bem e a janela diz que não
+há certificado.
+
+A saída é a mesma tolerância que o `critical: no` dos `.module` dá do outro
+lado: quando a pergunta filtrada falha, pergunta-se por **todos** os slots e
+descarta-se slot a slot, no laço que já sabia pular quem não responde. Ver
+`slots_tolerantes()` em `ui/pkcs11.py` e `tests/prova-slots.py`.
+
+Vale para qualquer leitora com defeito, não só para a YubiKey: um cartão mal
+encaixado ou um leitor USB pela metade produziriam o mesmo desaparecimento
+geral.
+
 ## Um módulo que não carrega desaparece da contagem, calado
 
 Todos os `.module` são registrados com `critical: no`, para que um driver

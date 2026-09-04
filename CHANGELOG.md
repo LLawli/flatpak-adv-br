@@ -37,6 +37,17 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   valer também para a ponte que o p11-kit inicia sob demanda e para o assinador
   que o navegador executa — nenhum dos dois herda o ambiente de um terminal.
 
+### Corrigido
+
+- **Um slot de leitora com defeito escondia todos os certificados da janela**,
+  e não só o dele. `C_GetSlotList(CKF_TOKEN_PRESENT)` reprova a chamada inteira
+  quando um único slot recusa responder, então uma YubiKey em modo
+  OTP+FIDO+CCID com o `scdaemon` do gnupg segurando a interface fazia sumir
+  até o certificado em nuvem, que não usa leitora nenhuma. Agora, quando essa
+  pergunta falha, o aplicativo pergunta por todos os slots e descarta um a um
+  — a mesma tolerância que o `critical: no` dos `.module` já dava do outro
+  lado. Vale para qualquer leitora com defeito, não só para essa.
+
 ### Notas para quem for mexer
 
 - O socket entre o módulo PKCS#11 do RemoteID e o aplicativo dele **não** pode
