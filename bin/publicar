@@ -207,20 +207,64 @@ ok "$total ref(s), todas assinadas ($assinadas nesta rodada)"
 
 # ---------------------------------------------------------------------------
 passo "Componentes que acompanham o repositório"
-# Só os de p11-kit: são software livre e o aplicativo precisa deles para a
-# ponte funcionar em Debian e Ubuntu. Ver bin/compilar-p11kit.
+# Os que este projeto pode redistribuir, e por isso compila: o p11-kit das
+# séries que o host pode ter (BSD-3-Clause, bin/compilar-p11kit) e o RemoteID
+# (GPLv3, bin/compilar-remoteid). Os drivers proprietários e o PJeOffice
+# continuam sendo baixados da origem oficial na máquina de quem usa.
 mkdir -p "$REPO/componentes"
-encontrados=0
-for arquivo in "$RAIZ"/dist/p11kit-*.tar.gz; do
+for arquivo in "$RAIZ"/dist/p11kit-*.tar.gz "$RAIZ"/dist/remoteid-*.tar.gz; do
     [ -e "$arquivo" ] || continue
     cp -f "$arquivo" "$REPO/componentes/"
-    encontrados=$((encontrados + 1))
 done
-if [ "$encontrados" -eq 0 ]; then
-    printf '   nenhum em dist/; rode bin/compilar-p11kit 0.25 (e 0.24, 0.23)\n'
-else
-    ok "$encontrados componente(s) de p11-kit"
-fi
+
+# E a conferência que importa: TODO componente que o catálogo espera deste
+# domínio precisa estar aqui, com o sha256 que está escrito lá.
+#
+# Sem isto, publicar com um dist/ incompleto produz um repositório que instala
+# e um componente que dá 404; e enviar um tarball recompilado sem atualizar o
+# catálogo produz um download que a pessoa baixa inteiro e o aplicativo recusa.
+# Os dois só apareceriam do outro lado, na máquina de quem tentou instalar.
+python3 - "$RAIZ" "$REPO/componentes" "$ORIGEM" <<'CONFERE' || erro "componentes faltando ou fora do catálogo"
+import hashlib
+import os
+import sys
+
+raiz, destino, origem = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, os.path.join(raiz, "ui"))
+import catalogo  # noqa: E402
+
+prefixo = origem + "/componentes/"
+esperados = []
+for componente in catalogo.CATALOGO:
+    pares = [(f.url, f.sha256) for f in componente.fontes]
+    if componente.url:
+        pares.append((componente.url, componente.sha256))
+    for url, sha in pares:
+        if url.startswith(prefixo):
+            esperados.append((url[len(prefixo):], sha))
+
+# Piso absoluto: um catálogo lido errado não pode virar "nada a conferir".
+if len(esperados) < 4:
+    sys.exit("esperava ao menos 4 componentes do próprio domínio, achei %d"
+             % len(esperados))
+
+faltando = []
+for nome, sha in esperados:
+    caminho = os.path.join(destino, nome)
+    if not os.path.exists(caminho):
+        faltando.append("%s: não está em dist/" % nome)
+        continue
+    with open(caminho, "rb") as arquivo:
+        obtido = hashlib.sha256(arquivo.read()).hexdigest()
+    if obtido != sha:
+        faltando.append("%s: sha256 %s, e o catálogo diz %s" % (nome, obtido, sha))
+    else:
+        print("   ok  %s" % nome)
+
+for linha in faltando:
+    print("   " + linha, file=sys.stderr)
+sys.exit(1 if faltando else 0)
+CONFERE
 
 # ---------------------------------------------------------------------------
 passo "Arquivo que as pessoas adicionam"

@@ -107,6 +107,27 @@ esteja alcançável.
 
 ## 6. Publicar a primeira versão
 
+Antes, os componentes que este projeto compila e redistribui. Eles não vêm do
+repositório OSTree: são arquivos servidos em `componentes/`, e o `bin/publicar`
+os leva junto de `dist/`.
+
+```sh
+bin/compilar-p11kit 0.23
+bin/compilar-p11kit 0.24
+bin/compilar-p11kit 0.25
+bin/compilar-remoteid
+```
+
+Cada um imprime o sha256 do que gerou, e esse número precisa estar em
+`ui/catalogo.py`. O `bin/publicar` confere os dois lados e **se recusa a
+publicar** quando algum componente do catálogo não está em `dist/` ou está com
+outro conteúdo: as duas falhas só apareceriam na máquina de quem instala, uma
+como 404 e a outra como um download inteiro que o aplicativo recusa no fim.
+
+Quem já publicou uma vez não precisa refazer isto: os arquivos continuam em
+`dist/`, e o empacotamento é reprodutível — recompilar o mesmo commit dá o mesmo
+sha256.
+
 ```sh
 ADV_BR_CHAVE_GPG=<id da chave> ADV_BR_VPS=vps:/home/luka/totalidade/apps/adv-br/repo \
     bin/publicar --enviar
@@ -123,6 +144,7 @@ segundo com o primeiro passando diz exatamente onde olhar.
 | Comando | O que prova |
 |---|---|
 | `curl -I https://flatpak.lukakuuhaku.dev/adv-br.flatpakrepo` | proxy, TLS e roteamento |
+| `curl -I https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.0.tar.gz` | os componentes que não vêm pelo OSTree chegaram |
 | `curl https://flatpak.lukakuuhaku.dev/api/saude` | o serviço está de pé |
 | `flatpak remote-add` e `install` numa máquina limpa | o repositório está íntegro e assinado |
 | um relato de teste pelo botão do aplicativo | token, GitHub e a fila |

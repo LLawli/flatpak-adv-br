@@ -29,16 +29,6 @@ compila na sua máquina: quem compila é este projeto, com `bin/compilar-remotei
 dentro do mesmo SDK do runtime, e o que a extensão consome é esse tarball
 publicado, com sha256 conferido.
 
-ou, se preferir o Makefile:
-
-```sh
-make driver-safesign
-make driver-safenet
-make driver-serproid
-make driver-remoteid
-make drivers-desinstalar
-```
-
 Nada mais é preciso: o pacote varre as extensões instaladas a cada execução, e
 o `./host/publicar.sh` republica os módulos para os navegadores. Depois de
 instalar ou remover um driver, rode-o de novo.
