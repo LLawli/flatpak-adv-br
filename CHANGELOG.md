@@ -74,6 +74,12 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   gnupg segurando o cartão) e os dois comandos que resolvem, e o
   `./diagnostico.sh` ganhou uma seção que detecta o caso.
 
+- **RemoteID v0.1.2**, que faz o PJeOffice conseguir assinar. O módulo
+  implementava só o `C_Sign` de um tiro; quem assina em fluxo — o BouncyCastle,
+  que é como o PJeOffice assina — recebia `CKR_FUNCTION_NOT_SUPPORTED` no
+  `C_SignUpdate`. Medido antes e depois, na mesma JVM que o PJeOffice usa:
+  `initSign` → `C_SignUpdate` → `C_SignFinal`, 256 bytes de assinatura.
+
 ### Corrigido
 
 - **O relato levava o diagnóstico do RemoteID errado.** Na primeira vez em que
