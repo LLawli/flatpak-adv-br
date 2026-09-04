@@ -259,6 +259,14 @@ if [ -f ui/serie.py ]; then
     fi
 fi
 
+if [ -f ui/adv-br-assinador ]; then
+    if python3 tests/prova-assinador.py; then
+        ok "todo consumidor de módulo registra antes de subir"
+    else
+        falha "há consumidor de módulo que sobe sem registrar"
+    fi
+fi
+
 if [ -f ui/pkcs11.py ]; then
     if python3 tests/prova-slots.py; then
         ok "um slot com defeito não esconde os tokens que funcionam"

@@ -40,6 +40,25 @@ fi
 # COMPONENTES.
 . /app/share/adv-br-ui/preparar-drivers.sh
 
+# Os drivers que a pessoa instalou pela janela. Sem isto, o assinador abre,
+# conversa e lista ZERO certificados.
+#
+# O p11-kit deste sandbox só conhece o que estiver em /etc/pkcs11/modules, que é
+# um tmpfs recriado a cada execução: nenhum driver existe até que alguém escreva
+# os .module. A ponte PKCS#11 não precisa disto, porque recebe o caminho do
+# módulo pronto; o assinador precisa, porque o que ele recebe é
+# /pkcs11/adv-br.so, e esse caminho responde pelo p11-kit-proxy — que sem
+# registro não tem o que oferecer.
+#
+# O sintoma não parece encanamento: a extensão do navegador conecta, o
+# getVersion responde, e a lista de certificados volta vazia, como se o token
+# não estivesse espetado.
+#
+# Nada em stdout: ali corre o protocolo de native messaging, e um byte a mais o
+# corrompe. Daí o >&2.
+PYTHONPATH=/app/share/adv-br-ui python3 -c 'import pkcs11; pkcs11.registrar()' >&2 ||
+    echo "adv-br: não deu para registrar os drivers no p11-kit." >&2
+
 # O Certisign abre os .glade da interface por caminho absoluto em
 # /opt/certisign-websigner/res, e não há como redirecioná-lo. A raiz do sandbox
 # é um tmpfs gravável, então o caminho que ele espera é criado aqui e some com

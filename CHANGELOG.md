@@ -48,6 +48,14 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   — a mesma tolerância que o `critical: no` dos `.module` já dava do outro
   lado. Vale para qualquer leitora com defeito, não só para essa.
 
+- **Os assinadores em navegador não enxergavam token nenhum.** O
+  `adv-br-assinador` preparava o ambiente mas nunca registrava os módulos no
+  p11-kit do sandbox, e `/etc/pkcs11/modules` é um tmpfs recriado a cada
+  execução — então o `/pkcs11/adv-br.so` que a extensão usa respondia por um
+  proxy vazio. A extensão conectava, o `getVersion` respondia, e a lista de
+  certificados voltava vazia, como se não houvesse token. Sumia tudo, não só o
+  driver novo. Ver `docs/ARMADILHAS.md`.
+
 ### Notas para quem for mexer
 
 - O socket entre o módulo PKCS#11 do RemoteID e o aplicativo dele **não** pode

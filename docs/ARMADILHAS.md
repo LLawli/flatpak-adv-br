@@ -200,6 +200,27 @@ Uma extensão instalada depois nunca passa por lá. Por isso o
 `./host/publicar.sh` lê o `.desktop` e o ícone de dentro do sandbox e os
 escreve em `~/.local/share`.
 
+## O assinador precisa que ALGUÉM registre os módulos, e não é ele
+
+`/etc/pkcs11/modules` é um tmpfs recriado a cada execução do sandbox: nenhum
+driver existe ali até que `pkcs11.registrar()` escreva os `.module`. A ponte
+PKCS#11 não precisa disso, porque recebe o caminho do módulo pronto na linha de
+comando. O assinador precisa, porque o que a extensão lhe entrega é
+`/pkcs11/adv-br.so` — e esse caminho responde pelo p11-kit-proxy, que sem
+registro não tem o que oferecer.
+
+O `ui/adv-br-assinador` não registrava. O sintoma não parece encanamento: a
+extensão conecta, `getVersion` responde `2.16.0`, e `listCertificates` volta
+com zero certificados — como se não houvesse token espetado. E some TUDO, não
+só o driver novo: um teste com uma YubiKey e um certificado em nuvem ao mesmo
+tempo não listava nem um nem outro.
+
+Medido dos dois lados, com a mesma mensagem: sem registrar, 0 certificados; com
+`pkcs11.registrar()` antes de subir o assinador, 2. Ver `tests/prova-assinador.py`.
+
+O lançador do PJeOffice já registrava, no corpo dele, no catálogo. O SerproID e
+o RemoteID não precisam: eles SERVEM o token em vez de lê-lo.
+
 ## `pkcs11Modules` vai na raiz da mensagem
 
 Na conversa de native messaging com o Lacuna, o campo `pkcs11Modules` vai na
