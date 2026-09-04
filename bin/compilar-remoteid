@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+# Compila o RemoteID-linux e empacota como componente do aplicativo.
+#
+#   bin/compilar-remoteid
+#
+# Por que isto existe: o RemoteID é o certificado em nuvem da Certisign, e a
+# metade que assina não é uma biblioteca sozinha. São duas peças que precisam
+# viajar juntas e concordar de versão:
+#
+#   libremoteid_pkcs11.so   o token, do ponto de vista do navegador, do Papers,
+#                           do Lacuna, do Softplan e do PJeOffice
+#   remoteid-app            quem fala com a nuvem da Certisign e mostra o
+#                           diálogo de PIN/OTP. Sem ele no ar o certificado
+#                           APARECE e nenhuma assinatura sai
+#
+# A release do RemoteID-linux publica só a primeira, de propósito: um binário
+# GTK solto depende do GTK do sistema de quem baixa. Aqui esse problema não
+# existe, porque o runtime é fixo e é o org.gnome.Platform. Então o componente
+# é compilado, e é compilado DENTRO do SDK: o que vai abrir estes arquivos é o
+# runtime, e um binário ligado contra a glibc e o GTK do host falharia lá.
+#
+# O RemoteID-linux é GPLv3, então redistribuí-lo é permitido, ao contrário dos
+# drivers proprietários do catálogo. É por isso que ele pode ser um tarball
+# publicado junto do repositório Flatpak, e ninguém precisa compilar nada na
+# própria máquina.
+#
+# O resultado é um .tar.gz para publicar, mais o sha256 que vai no catálogo.
+set -euo pipefail
+
+RAIZ=$(cd "$(dirname "$0")/.." && pwd)
+SDK=org.gnome.Sdk//50
+REPO=${ADV_BR_REMOTEID_REPO:-https://github.com/LLawli/RemoteID-linux.git}
+# Em disco, nunca em /tmp: aqui se baixa uma cadeia de ferramentas do Rust e se
+# compila um workspace inteiro, e /tmp é memória na maioria das distribuições
+# atuais.
+TRABALHO=${ADV_BR_TRABALHO:-${XDG_CACHE_HOME:-$HOME/.cache}/adv-br-remoteid}
+DESTINO=$RAIZ/dist
+
+erro() { printf '\033[1;31m ✗\033[0m %s\n' "$*" >&2; exit 1; }
+passo() { printf '\033[1;36m ▸\033[0m %s\n' "$*"; }
+
+# A versão e o commit saem da tabela do projeto. Um componente sem linha lá é
+# um componente que ninguém decidiu empacotar.
+LINHA=$(grep -vE '^[[:space:]]*(#|$)' "$RAIZ/packaging/remoteid-versao.txt" | head -1)
+[ -n "$LINHA" ] || erro "packaging/remoteid-versao.txt não tem nenhuma versão"
+read -r VERSAO TAG COMMIT <<< "$LINHA"
+
+command -v flatpak >/dev/null || erro "o flatpak não está instalado."
+command -v git >/dev/null || erro "o git não está instalado."
+flatpak info "$SDK" >/dev/null 2>&1 ||
+    erro "falta o SDK: flatpak install --user flathub $SDK"
+
+mkdir -p "$TRABALHO" "$DESTINO"
+FONTE=$TRABALHO/fonte
+
+# --- o código, no commit que a tabela nomeia --------------------------------
+#
+# O commit, e não a tag: uma tag pode ser movida para outro código sem que o
+# nome mude, e o sha256 do componente sairia diferente sem ninguém entender por
+# quê.
+passo "Buscando o RemoteID-linux $TAG"
+if [ -d "$FONTE/.git" ]; then
+    git -C "$FONTE" fetch --quiet --tags origin || erro "não deu para atualizar $FONTE"
+else
+    rm -rf "$FONTE"
+    git clone --quiet "$REPO" "$FONTE" || erro "não deu para clonar $REPO"
+fi
+git -C "$FONTE" checkout --quiet --detach "$COMMIT" 2>/dev/null ||
+    erro "o commit $COMMIT não existe em $REPO"
+
+OBTIDO=$(git -C "$FONTE" rev-parse HEAD)
+[ "$OBTIDO" = "$COMMIT" ] || erro "o clone parou em $OBTIDO, e não em $COMMIT"
+
+# A versão do Cargo.toml manda no nome do arquivo; se ela divergir da tabela, o
+# tarball sairia com um nome que não corresponde ao que tem dentro.
+VERSAO_CARGO=$(grep -m1 '^version' "$FONTE/Cargo.toml" | cut -d'"' -f2)
+[ "$VERSAO_CARGO" = "$VERSAO" ] ||
+    erro "a tabela diz $VERSAO e o Cargo.toml do commit diz $VERSAO_CARGO"
+
+# --- compilação, dentro do SDK ---------------------------------------------
+#
+# A cadeia do Rust vem pelo rustup, para dentro do diretório de trabalho, e não
+# pela extensão de SDK: a extensão é versionada pela base freedesktop, que muda
+# a cada runtime novo, e o sintoma de errar a versão é um SDK que monta vazio.
+# O rustup não depende de nada disso e sai junto com o --limpar.
+export RUSTUP_HOME=$TRABALHO/rustup
+export CARGO_HOME=$TRABALHO/cargo
+ALVO=$TRABALHO/target
+
+passo "Compilando no $SDK (a primeira vez baixa o Rust, ~400 MB)"
+flatpak run --devel --share=network --command=sh \
+    --filesystem="$TRABALHO" --env=RUSTUP_HOME="$RUSTUP_HOME" \
+    --env=CARGO_HOME="$CARGO_HOME" --env=CARGO_TARGET_DIR="$ALVO" \
+    "$SDK" -c "
+set -eu
+if [ ! -x \"\$CARGO_HOME/bin/cargo\" ]; then
+    curl -fsSL https://sh.rustup.rs |
+        sh -s -- -y --no-modify-path --profile minimal >/dev/null
+fi
+export PATH=\"\$CARGO_HOME/bin:\$PATH\"
+cd '$FONTE'
+# --locked: o Cargo.lock do commit manda, e é ele que confere o sha256 de cada
+# dependência baixada. Sem isso, uma resolução nova entraria sem que nada no
+# repositório dissesse que entrou.
+cargo build --release --locked \
+    -p remoteid-cli -p remoteid-pkcs11 -p remoteid-gtk -p remoteid-mock
+" || erro "a compilação falhou"
+
+# --- empacotamento ---------------------------------------------------------
+passo "Empacotando"
+ARVORE=$TRABALHO/componente-$VERSAO
+rm -rf "$ARVORE"
+mkdir -p "$ARVORE/pkcs11" "$ARVORE/libexec"
+
+# O módulo vai para pkcs11/, que é onde o aplicativo procura módulo de
+# componente (ver ui/pkcs11.py: componentes/*/pkcs11/*.so).
+install -Dm755 "$ALVO/release/libremoteid_pkcs11.so" "$ARVORE/pkcs11/libremoteid_pkcs11.so"
+
+# Os executáveis vão para libexec/, e NÃO para bin/. Em bin/ o instalador
+# escreve o lançador do componente, com o nome da chave: um bin/remoteid vindo
+# daqui seria sobrescrito por ele, e o que sumiria é a linha de comando.
+for programa in remoteid remoteid-app remoteid-mock; do
+    install -Dm755 "$ALVO/release/$programa" "$ARVORE/libexec/$programa"
+done
+
+# A licença viaja junto: é GPLv3, e distribuir o binário sem ela seria o
+# descumprimento mais bobo possível.
+install -Dm644 "$FONTE/LICENSE" "$ARVORE/LICENSE"
+
+# --- provas ----------------------------------------------------------------
+#
+# Um build verde com resultado vazio é pior que um build vermelho, e as duas
+# metades deste componente falham em silêncio de jeitos diferentes: o módulo,
+# só na hora de assinar; o aplicativo, na hora de abrir a janela.
+passo "Conferindo o que saiu"
+
+# 1. O módulo exporta o ponto de entrada do PKCS#11. Sem ele, o p11-kit o
+#    descarta e o certificado simplesmente não aparece.
+nm -D --defined-only "$ARVORE/pkcs11/libremoteid_pkcs11.so" | grep -q ' T C_GetFunctionList$' ||
+    erro "o módulo não exporta C_GetFunctionList"
+
+# 2. As três peças resolvem o que declaram, contra o runtime e não contra o
+#    host. O ldd de dentro do SDK é o único que responde por isso.
+flatpak run --devel --command=sh --filesystem="$TRABALHO" "$SDK" -c "
+set -eu
+faltando=\$(
+    for arquivo in '$ARVORE'/pkcs11/*.so '$ARVORE'/libexec/*; do
+        ldd \"\$arquivo\" | grep 'not found' | sed \"s|^|\$(basename \"\$arquivo\"): |\"
+    done || true
+)
+if [ -n \"\$faltando\" ]; then
+    echo \"dependências não resolvidas:\" >&2
+    echo \"\$faltando\" >&2
+    exit 1
+fi
+# 3. 'ldd' não vê símbolo indefinido: ele lista o que falta em DT_NEEDED. A
+#    prova é ABRIR a biblioteca de verdade, que foi o que pegou o SerproID
+#    passando no build e falhando ao ser carregado.
+casa=\$(mktemp -d)
+HOME=\"\$casa\" REMOTEID_HOME=\"\$casa/estado\" \
+    python3 -c 'import ctypes, sys; ctypes.CDLL(sys.argv[1])' \
+    '$ARVORE/pkcs11/libremoteid_pkcs11.so'
+rm -rf \"\$casa\"
+" || erro "o que saiu do build não carrega dentro do runtime"
+
+# 4. O aplicativo é a metade que assina, e ele é GTK: um binário que tenha
+#    saído sem o GTK ligado abriria a lista de certificados e nunca o diálogo
+#    de PIN.
+ldd "$ARVORE/libexec/remoteid-app" 2>/dev/null | grep -q 'libgtk-4' ||
+    erro "o remoteid-app não está ligado ao GTK4"
+
+# 5. E o mínimo absoluto: os quatro arquivos existem e não estão vazios. Uma
+#    guarda que só compara duas contagens derivadas da mesma fonte passa com
+#    zero de cada lado.
+for arquivo in "$ARVORE/pkcs11/libremoteid_pkcs11.so" "$ARVORE/libexec/remoteid" \
+               "$ARVORE/libexec/remoteid-app" "$ARVORE/libexec/remoteid-mock"; do
+    [ -s "$arquivo" ] || erro "$(basename "$arquivo") saiu vazio ou não saiu"
+done
+
+ARQUIVO=$DESTINO/remoteid-$VERSAO.tar.gz
+# Empacotado de forma reprodutível: ordem fixa, dono zerado, data zerada, e o
+# gzip sem carimbo de tempo (-n). Sem isso, empacotar duas vezes o MESMO build
+# dá dois sha256 diferentes, e quem confere o catálogo não teria como saber se
+# o que mudou foi o conteúdo ou só o relógio.
+tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
+    --transform "s|^componente-$VERSAO|remoteid-$VERSAO|" \
+    -cf - -C "$TRABALHO" "componente-$VERSAO" | gzip -n9 > "$ARQUIVO"
+
+RUSTC=$("$CARGO_HOME/bin/rustc" --version 2>/dev/null || echo "desconhecido")
+
+printf '\n\033[1;32m ✓\033[0m %s\n' "$ARQUIVO"
+printf '   versão : %s (%s)\n' "$VERSAO" "${COMMIT:0:12}"
+printf '   tamanho: %s\n' "$(du -h "$ARQUIVO" | cut -f1)"
+printf '   sha256 : %s\n' "$(sha256sum "$ARQUIVO" | cut -d' ' -f1)"
+printf '   rustc  : %s\n\n' "$RUSTC"
+printf '   Ponha o sha256 na entrada remoteid de ui/catalogo.py e no manifesto\n'
+printf '   drivers/io.github.llawli.AdvBr.Driver.RemoteID.yml, e publique o\n'
+printf '   arquivo junto do repositório Flatpak, em componentes/.\n\n'

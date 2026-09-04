@@ -1,0 +1,19 @@
+# Versão do RemoteID-linux que este projeto empacota como componente.
+#
+# O RemoteID é o certificado em nuvem da Certisign. A Certisign publica
+# aplicativo só para macOS e Windows; o RemoteID-linux é a implementação livre
+# do protocolo, em GPLv3:
+#
+#   https://github.com/LLawli/RemoteID-linux
+#
+# Ele é o ÚNICO componente proprietário-livre desta lista, e a diferença
+# importa: por ser GPLv3, ele pode ser redistribuído. Por isso não é baixado do
+# site de um fabricante como os drivers, e sim compilado por
+# bin/compilar-remoteid e publicado junto do repositório Flatpak, exatamente
+# como o p11-kit de compatibilidade. Quem instala não compila nada.
+#
+# O commit é o que manda, e não a tag: uma tag pode ser movida, um commit não.
+# O bin/compilar-remoteid confere que o clone parou nele antes de compilar.
+#
+# versão  tag     commit
+0.1.0  v0.1.0  ed2b9670051d47165fb7eb977c8d34bac3f77573
