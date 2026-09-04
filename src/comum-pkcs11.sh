@@ -50,6 +50,90 @@ preparar_drivers() {
             "$driver/preparar.sh" >&2 || echo "adv-br: preparar.sh de $nome falhou" >&2
         fi
     done
+    preparar_remoteid
+}
+
+# O RemoteID precisa de uma coisa que preparar.sh não sabe fazer: exportar.
+#
+# Ele é certificado em NUVEM, e o módulo PKCS#11 dele não fala com a Certisign.
+# O módulo manda o digest para o aplicativo do RemoteID por um socket UNIX, e é
+# o aplicativo que pede o PIN e o código do autenticador. Os dois precisam
+# concordar sobre onde está esse socket, e o padrão do RemoteID
+# ($XDG_RUNTIME_DIR/remoteid.sock) não serve: o módulo é aberto numa instância
+# deste Flatpak — a ponte do navegador, um assinador, o PJeOffice — e o
+# aplicativo roda em OUTRA, com um $XDG_RUNTIME_DIR próprio. Cada lado criaria
+# o seu, e o sintoma só apareceria na hora de assinar.
+#
+# O que atravessa é o diretório de dados, que é o mesmo arquivo em todas as
+# instâncias. O REMOTEID_SOCKET vence qualquer padrão do RemoteID, e é por isso
+# que isto está AQUI e não num preparar.sh da extensão: o preparar.sh é
+# executado, não incluído, e variável exportada nele morre com ele.
+#
+# É inofensivo quando o RemoteID não está instalado: são duas variáveis que
+# ninguém lê. Ver drivers/io.github.llawli.AdvBr.Driver.RemoteID.yml.
+preparar_remoteid() {
+    local dados teste
+    dados="${XDG_DATA_HOME:-$HOME/.local/share}/remoteid"
+    mkdir -p "$dados" 2>/dev/null ||
+        echo "adv-br: não deu para criar $dados; o RemoteID pode não assinar." >&2
+
+    # O modo de teste é um ARQUIVO, e não uma variável: ele precisa valer para
+    # processos que ninguém lança à mão, como a ponte que o p11-kit do host
+    # inicia sob demanda e o assinador que o navegador executa. Nenhum deles
+    # herda o ambiente de um terminal.
+    teste=""
+    if [ -s "$dados/TEST_URL" ]; then
+        teste=$(head -1 "$dados/TEST_URL" | tr -d '[:space:]')
+        # O arquivo é gravável por quem tiver acesso aos dados do aplicativo, e
+        # o que estiver nele vira variável de ambiente. Só uma URL http(s) sem
+        # caractere de shell atravessa.
+        case "$teste" in
+            http://*|https://*)
+                case "$teste" in *[!A-Za-z0-9:/._-]*) teste="" ;; esac
+                ;;
+            *) teste="" ;;
+        esac
+        [ -n "$teste" ] ||
+            echo "adv-br: $dados/TEST_URL não é uma URL aceitável; modo de teste ignorado." >&2
+    fi
+
+    if [ -n "$teste" ]; then
+        export TEST_URL="$teste"
+        # Socket separado do de produção: um aplicativo aberto em modo de teste
+        # não pode responder por um pedido de assinatura de verdade.
+        export REMOTEID_SOCKET="$dados/teste/remoteid.sock"
+        mkdir -p "$dados/teste" 2>/dev/null || true
+        # Com TEST_URL, o RemoteID reloca o estado para /tmp/remoteid-teste sem
+        # consultar REMOTEID_HOME. E /tmp, no sandbox, é tmpfs de cada
+        # instância: o estado gravado pela linha de comando não chegaria ao
+        # aplicativo nem ao módulo. A raiz do sandbox é gravável, então o
+        # caminho que ele espera vira um link e some com a execução.
+        if [ -d /tmp/remoteid-teste ] && [ ! -L /tmp/remoteid-teste ]; then
+            echo "adv-br: /tmp/remoteid-teste já existe como diretório; o modo de teste vai gravar num lugar que não persiste." >&2
+        else
+            ln -sfn "$dados/teste" /tmp/remoteid-teste 2>/dev/null ||
+                echo "adv-br: não consegui ligar /tmp/remoteid-teste." >&2
+        fi
+    else
+        export REMOTEID_SOCKET="$dados/remoteid.sock"
+        export REMOTEID_HOME="$dados/estado"
+        # O diagnóstico dele vai junto do estado, e por dois motivos.
+        #
+        # O primeiro é achá-lo: o RemoteID grava um JSONL por execução, e as
+        # execuções que mais interessam são as do MÓDULO, que roda dentro da
+        # ponte do navegador ou de um assinador — instâncias diferentes desta.
+        # Num caminho compartilhado, `adv-br-remoteid diagnostico` lê todas.
+        #
+        # O segundo é não vazar. O RemoteID já redige o que grava: senha, PIN e
+        # OTP nunca entram, e token só aparece como impressão digital. Mas o
+        # arquivo IDENTIFICA o titular do certificado, e o "Relatar um problema"
+        # deste aplicativo varre $XDG_DATA_HOME/logs e manda o
+        # que achar. Por isso o diagnóstico do RemoteID fica FORA de lá: quem o
+        # envia é a pessoa, de propósito, por canal privado. Ver ui/relator.py
+        # e a seção de diagnóstico do README do RemoteID-linux.
+        export REMOTEID_DIAG_DIR="$dados/estado/diag"
+        mkdir -p "$REMOTEID_HOME" "$REMOTEID_DIAG_DIR" 2>/dev/null || true
+    fi
 }
 
 # Imprime, uma por linha, "rótulo<TAB>caminho" de cada módulo PKCS#11 que este

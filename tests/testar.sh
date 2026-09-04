@@ -259,6 +259,14 @@ if [ -f ui/serie.py ]; then
     fi
 fi
 
+if [ -f ui/preparar-drivers.sh ] && [ -f src/comum-pkcs11.sh ]; then
+    if python3 tests/prova-remoteid.py; then
+        ok "o socket do RemoteID atravessa as instâncias do sandbox"
+    else
+        falha "o socket do RemoteID atravessa as instâncias do sandbox"
+    fi
+fi
+
 if [ -f ui/adv-br-aplicativo ]; then
     if python3 tests/prova-atalho.py; then
         ok "o atalho de menu dos componentes com aplicativo"

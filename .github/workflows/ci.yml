@@ -32,7 +32,8 @@ jobs:
           # listá-los aqui, a única parte do pacote que roda em toda abertura
           # ficaria fora do lint.
           shellcheck -S warning -x \
-              ui/adv-br-pkcs11 ui/adv-br-assinador ui/preparar-drivers.sh
+              ui/adv-br-pkcs11 ui/adv-br-assinador ui/adv-br-remoteid \
+              ui/preparar-drivers.sh
 
       - name: Python compila
         run: |
@@ -46,6 +47,7 @@ jobs:
           python3 tests/prova-serie.py
           python3 tests/prova-registro.py
           python3 tests/prova-sanitizacao.py
+          python3 tests/prova-remoteid.py
 
       - name: Manifestos
         run: |
