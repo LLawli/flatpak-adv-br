@@ -203,8 +203,13 @@ titulo "p11-kit"
 # trazem a série 0.25 contra a 0.26 do runtime. Quando divergem, compilamos
 # aqui um p11-kit da série do host, isolado em /app/lib/p11kit-compat, e só o
 # processo da ponte o usa. O resto do pacote continua com o do runtime.
+# Sem --user: o garantir_runtime aceita o runtime instalado no SISTEMA, e
+# aceitar lá e exigir --user aqui derruba o instalador antes de construir
+# qualquer coisa, com "app/org.gnome.Platform/x86_64/50 não instalado" engolido
+# pelo 2>/dev/null. Quem escolhe a instalação é o próprio flatpak, pela mesma
+# regra que o resto do script usa.
 serie_p11kit_runtime() {
-    flatpak run --user --command=sh "$RUNTIME//$VERSAO_RUNTIME" -c '
+    flatpak run --command=sh "$RUNTIME//$VERSAO_RUNTIME" -c '
         for c in /usr/lib/*/pkcs11/p11-kit-trust.so /usr/lib/pkcs11/p11-kit-trust.so; do
             [ -e "$c" ] || continue
             printf "module: %s\ncritical: no\n" "$c" > /etc/pkcs11/modules/zz-serie.module
@@ -259,8 +264,12 @@ sources:
 FIM
 }
 
-SERIE_HOST=$(serie_p11kit_host)
-SERIE_RUNTIME=$(serie_p11kit_runtime)
+# O '|| true' é o que torna alcançável o aviso logo abaixo. Sem ele, uma sonda
+# que FALHA (e não uma que devolve vazio) mata o instalador aqui, por causa do
+# set -e, e o ramo que existe justamente para "não consegui comparar as séries"
+# nunca roda. O sintoma é o script terminar no título "p11-kit" sem dizer nada.
+SERIE_HOST=$(serie_p11kit_host || true)
+SERIE_RUNTIME=$(serie_p11kit_runtime || true)
 
 if [ -z "$SERIE_HOST" ] || [ -z "$SERIE_RUNTIME" ]; then
     aviso "não consegui comparar as séries do p11-kit (host: '${SERIE_HOST:-?}',

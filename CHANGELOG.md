@@ -82,6 +82,16 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **O `./instalar.sh` morria em silêncio quando o runtime estava instalado no
+  sistema.** A sonda que compara as séries do p11-kit chamava
+  `flatpak run --user` num runtime que o `garantir_runtime` já tinha aceitado
+  fora do escopo de usuário; o erro (`app/org.gnome.Platform/x86_64/50 não
+  instalado`) era engolido por um `2>/dev/null`, e o `set -e` derrubava o script
+  na atribuição — antes de construir qualquer coisa e sem imprimir nada além do
+  título `p11-kit`. Duas correções: a sonda não exige mais `--user`, e as duas
+  atribuições toleram falha, que é o que torna alcançável o aviso já escrito
+  para o caso de não dar para comparar as séries.
+
 - **O relato levava o diagnóstico do RemoteID errado.** Na primeira vez em que
   a seção foi exercitada de verdade, ela veio com o diretório de produção,
   cheio de `sessao.inicio` contra a Certisign, enquanto tudo o que interessava
