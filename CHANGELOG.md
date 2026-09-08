@@ -80,6 +80,34 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   `C_SignUpdate`. Medido antes e depois, na mesma JVM que o PJeOffice usa:
   `initSign` → `C_SignUpdate` → `C_SignFinal`, 256 bytes de assinatura.
 
+- **RemoteID v0.2.0, que faz o PJeOffice conseguir AUTENTICAR.** Assinar já
+  funcionava desde a v0.1.2; entrar no PJe com o certificado, não. Eram dois
+  bloqueios em série, e os dois caíram.
+
+  O primeiro era do lado do Java. O PJe pede RSA cru, e a única porta para isso
+  na JCA é o `Cipher.RSA/ECB/PKCS1Padding` do SunPKCS11 — que desde o
+  JDK-8176837 só é registrado se o mecanismo anunciar `CKF_ENCRYPT`. O módulo
+  não anunciava, e a autenticação morria antes de qualquer assinatura, com
+  `InvalidKeyException: Supplied key (P11Key$P11PrivateKey) is not a
+  RSAPrivateKey instance`. Medido na mesma JVM que o PJeOffice embarca, o
+  Zulu 11.0.32: com o módulo v0.1.2 o provedor registra nove serviços e nenhum
+  `Cipher`; com o v0.2.0, registra o `Cipher.RSA/ECB/PKCS1Padding`.
+
+  O segundo era do lado do bloco. O PJe não manda `algoritmoAssinatura`, então
+  o `PjeAuthenticatorTask` cai no padrão dele, que é `MD5withRSA` — e o módulo
+  fixava SHA-256, recusando qualquer outro tamanho com `CKR_DATA_LEN_RANGE`.
+  Agora o `CKM_RSA_PKCS` manda o bloco como está e deixa o servidor só aplicar
+  o padding, que é o que a especificação define.
+
+  Exercitado ponta a ponta contra o servidor de teste: o `DigestInfo(MD5)` de
+  34 bytes saiu assinado, e o PJeOffice registrou os três passos e
+  `Status de sucesso: true`.
+
+- **O diagnóstico do RemoteID diz quem pediu cada assinatura.** O evento
+  `assinatura.pedido` traz o `comm` do processo que chamou o `C_Sign`
+  (`papers`, `firefox`, `java`), o algoritmo e o tamanho do bloco. É a linha
+  que responde, num relato de problema, qual programa disparou a assinatura.
+
 ### Corrigido
 
 - **O `./instalar.sh` morria em silêncio quando o runtime estava instalado no

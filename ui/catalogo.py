@@ -210,8 +210,8 @@ CATALOGO += [
         arquivos={},
         fontes=(
             Fonte(
-                url="https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.2.tar.gz",
-                sha256="e43a809f3ec3de6d64b592b6dede9086981ba88ce550a0f5f68141650c4617df",
+                url="https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.2.0.tar.gz",
+                sha256="37ff20441e5e1136d92832b20b9913ea0defaf91124e0d4551e39a2c2970af3f",
                 arquivos={
                     # O módulo PKCS#11: é por ele que o navegador, o Papers, o
                     # Lacuna, o Softplan e o PJeOffice enxergam o certificado.
