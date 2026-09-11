@@ -26,6 +26,23 @@
   <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.1.0" date="2026-09-11">
+      <description>
+        <p>
+          O certificado em nuvem RemoteID, da Certisign, passa a funcionar no
+          Linux. Ele aparece como token para o navegador, para o Papers, para
+          os assinadores e para o PJeOffice, como qualquer outro; a chave
+          privada continua no HSM da Certisign e nunca esteve na sua máquina.
+        </p>
+        <p>
+          Os assinadores em navegador voltam a enxergar os tokens, e o
+          Assinador Serpro passa a enxergá-los pela primeira vez. O instalador
+          não morre mais em silêncio quando o runtime já está instalado no
+          sistema, e o diagnóstico avisa quando uma leitora travada está
+          cegando os outros programas.
+        </p>
+      </description>
+    </release>
     <release version="1.0.4" date="2026-08-25">
       <description>
         <p>
