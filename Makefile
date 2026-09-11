@@ -2,6 +2,17 @@
 # ./instalar.sh; isto aqui é para quem já conhece o projeto.
 APP_ID = io.github.llawli.AdvBr
 
+# O shellcheck não vem empacotado em toda distribuição, e o `bin/release` não
+# solta versão sem passar por ele. Quem tem o binário usa o binário; quem não
+# tem usa a imagem oficial, que é a mesma ferramenta e não instala nada no
+# sistema. A montagem é só leitura de fato, mas :z é o que faz o SELinux
+# deixar o contêiner ler o diretório.
+SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
+ifeq ($(SHELLCHECK),)
+SHELLCHECK := $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null) \
+	      run --rm -v $(CURDIR):/mnt:z -w /mnt docker.io/koalaman/shellcheck:stable
+endif
+
 .PHONY: ajuda instalar tudo publicar despublicar diagnostico testar lint \
         serproid remoteid pjeoffice desinstalar limpar
 
@@ -37,10 +48,13 @@ testar:
 	./tests/testar.sh
 
 lint:
-	shellcheck -S warning src/*.sh host/*.sh tests/*.sh drivers/*.sh \
+	@command -v $(firstword $(SHELLCHECK)) >/dev/null || { \
+	    echo 'erro: não achei shellcheck nem podman/docker nesta máquina.' >&2; \
+	    exit 1; }
+	$(SHELLCHECK) -S warning src/*.sh host/*.sh tests/*.sh drivers/*.sh \
 	    assinadores/*.sh apps/*.sh packaging/*.sh instalar.sh desinstalar.sh \
 	    diagnostico.sh bin/release bin/compilar-remoteid
-	shellcheck -S warning -x ui/adv-br-pkcs11 ui/adv-br-assinador \
+	$(SHELLCHECK) -S warning -x ui/adv-br-pkcs11 ui/adv-br-assinador \
 	    ui/adv-br-remoteid ui/preparar-drivers.sh
 
 serproid:

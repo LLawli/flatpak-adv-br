@@ -51,13 +51,30 @@ corpo=$(awk -v ver="$VERSAO" '
 [ -n "$(printf '%s' "$corpo" | tr -d '[:space:]')" ] ||
     erro "a seção '## [$VERSAO]' do CHANGELOG.md está vazia."
 
+# Só o manifesto publicado: é o metainfo dele que a loja de aplicativos lê, e
+# uma versão sem entrada aqui chega às pessoas como se nada tivesse mudado.
+log "conferindo a entrada da versão no metainfo"
+grep -q "version=\"$VERSAO\"" dev.lukakuuhaku.AdvBr.metainfo.xml ||
+    erro "dev.lukakuuhaku.AdvBr.metainfo.xml não tem a entrada
+      <release version=\"$VERSAO\">. Escreva-a antes."
+
 log "rodando as verificações estáticas"
 make lint >/dev/null || erro "o lint falhou; corrija antes de soltar a release."
 
 log "conferindo o pacote que está sendo lançado"
-command -v flatpak-builder >/dev/null 2>&1 ||
-    erro "flatpak-builder não encontrado; não dá para conferir o que está sendo lançado."
-flatpak-builder --user --force-clean --disable-rofiles-fuse \
+# Várias distribuições pararam de empacotar o flatpak-builder, e o próprio
+# projeto passou a recomendar o do Flathub. Os dois servem; o do Flathub
+# precisa enxergar este diretório, e por isso o --filesystem.
+if command -v flatpak-builder >/dev/null 2>&1; then
+    CONSTRUTOR=(flatpak-builder)
+elif flatpak info org.flatpak.Builder >/dev/null 2>&1; then
+    CONSTRUTOR=(flatpak run --filesystem="$PWD" org.flatpak.Builder)
+else
+    erro "flatpak-builder não encontrado; não dá para conferir o que está sendo
+      lançado. Instale-o pela sua distribuição ou com
+          flatpak install flathub org.flatpak.Builder"
+fi
+"${CONSTRUTOR[@]}" --user --force-clean --disable-rofiles-fuse \
     build-release io.github.llawli.AdvBr.yml >/dev/null ||
     erro "o pacote base não constrói; não vou marcar uma versão quebrada."
 rm -rf build-release
@@ -65,7 +82,9 @@ rm -rf build-release
 log "gravando a versão"
 printf '%s\n' "$VERSAO" > VERSAO
 git add VERSAO CHANGELOG.md
-git commit -q -m "chore: versão $VERSAO"
+# Assinado, como todo commit deste repositório: um commit sem assinatura no
+# meio da história é um buraco que não se tapa depois.
+git commit -q -S -m "Marca a versão $VERSAO"
 
 log "criando a tag $TAG"
 git tag -s -a "$TAG" -m "$VERSAO
