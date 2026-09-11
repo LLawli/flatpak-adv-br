@@ -157,12 +157,20 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   em `~/.signer/drivers.properties`, e fora dela existe só o que o Serpro
   embutiu de fábrica. O sintoma é o de sempre e por isso engana, porque ele
   abre, não acha certificado nenhum e manda atualizar o driver da leitora.
-  Agora o `./host/publicar.sh` escreve nessa lista o `p11-kit-proxy` do host,
-  que já responde por todos os drivers instalados aqui, inclusive os que forem
-  instalados depois. Só escreve quando o Assinador Serpro está mesmo na
+  Agora publicar escreve nessa lista o `p11-kit-proxy` do host, que já responde
+  por todos os drivers instalados aqui, inclusive os que forem instalados
+  depois. Vale pelas duas portas, o botão do aplicativo e o
+  `./host/publicar.sh`. Só escreve quando o Assinador Serpro está mesmo na
   máquina, e mexe só na chave dele (`advbr-p11-kit`), deixando intacta
-  qualquer linha posta à mão. O `./diagnostico.sh` passa a conferir, e o
-  `--remover` a desfazer. Ver `docs/ARMADILHAS.md`.
+  qualquer linha posta à mão. O diagnóstico passa a dizer o que há nessa lista,
+  e despublicar a desfazer. Ver `docs/ARMADILHAS.md`.
+
+  O aplicativo pede uma permissão nova para isso, `--filesystem=~/.signer`, e
+  **sem** o `:create` das outras: o `:create` criaria esse diretório em toda
+  máquina, logo na primeira abertura, e é justamente a existência dele que
+  prova que o Assinador Serpro está instalado. O preço é que o aplicativo só
+  escreve a lista se você já tiver aberto o Assinador Serpro uma vez; o
+  `./host/publicar.sh`, que roda fora do sandbox, não depende disso.
 
   Quem não quiser esperar por uma versão nova resolve à mão, com uma linha:
 

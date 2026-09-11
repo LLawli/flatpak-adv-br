@@ -199,6 +199,22 @@ def coletar():
     escrever("componentes: %s" % (", ".join(instalados) or "nenhum"))
 
     escrever("publicado: %s" % ("sim" if publicador.publicado() else "não"))
+
+    # O Assinador Serpro não lê banco NSS nem os .module do p11-kit: tem lista
+    # própria, e sem a nossa linha nela ele não acha certificado nenhum. A
+    # queixa que chega é "o certificado não aparece no Serpro", e sem esta
+    # linha o relato não tem como distinguir isso de um token ausente.
+    try:
+        if not publicador.assinador_serpro_presente():
+            escrever("assinador serpro: não instalado")
+        else:
+            linha = [l for l in publicador._linhas_da_lista_serpro()
+                     if l.startswith(publicador.CHAVE_SERPRO + "=")]
+            escrever("assinador serpro: %s" % (
+                linha[0].split("=", 1)[1] if linha else "SEM A NOSSA LINHA"))
+    except Exception as erro:  # noqa: BLE001
+        registro.falha("diagnóstico: lista do Assinador Serpro", erro)
+
     faltando = [argumento for _, _, argumento in permissoes.faltando()]
     escrever("permissões faltando: %s" % (", ".join(faltando) or "nenhuma"))
 

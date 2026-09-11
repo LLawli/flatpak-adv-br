@@ -255,6 +255,32 @@ programa está mesmo aqui, pela mesma razão que não se cria `~/.config/vivaldi
 numa máquina sem Vivaldi. Ele lê a lista ao abrir, então é preciso fechá-lo e
 reabri-lo.
 
+A chave é a mesma nas duas portas, e isso é deliberado, ao contrário do
+prefixo dos `.module` (`adv-br-` na de linha de comando, `advbr-` na do
+aplicativo). O que a linha nomeia é o proxy do host, e não o que cada porta
+instalou: duas linhas apontando para a mesma biblioteca fariam cada token
+aparecer duas vezes na tela do Serpro, que é o mesmo motivo pelo qual
+`proxy_do_host()` devolve um caminho e não todos.
+
+## `--filesystem=<caminho>:create` cria o caminho, e às vezes é isso que quebra
+
+O `:create` manda o Flatpak criar o diretório no host a cada abertura do
+aplicativo, e não só quando alguém escreve nele. Para `~/.pki` ou
+`xdg-config/pkcs11` isso é o que se quer. Para `~/.signer`, seria um tiro no
+pé: é justamente a existência desse diretório que prova que o Assinador Serpro
+está instalado, e a permissão mais conveniente destruiria a prova, em toda
+máquina, logo na primeira abertura.
+
+Por isso a permissão dele é `--filesystem=~/.signer`, sem `:create`. Medido
+com um caminho de mentira e o `org.flatpak.Builder`: com `:create` o diretório
+aparece no host depois de um `flatpak run`; sem, não aparece.
+
+O efeito colateral é que o aplicativo **não consegue criar** `~/.signer`: sem o
+diretório, o Flatpak não monta nada ali. Daí a detecção dele ser uma pergunta
+só, `os.path.isdir`, que responde ao mesmo tempo "o programa está aqui" e
+"temos onde escrever". A versão de linha de comando roda fora do sandbox, cria
+o diretório se precisar, e por isso também procura o atalho de menu do Serpro.
+
 ## `pkcs11Modules` vai na raiz da mensagem
 
 Na conversa de native messaging com o Lacuna, o campo `pkcs11Modules` vai na

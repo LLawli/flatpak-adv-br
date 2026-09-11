@@ -38,8 +38,99 @@ APP_ID = catalogo.APP_ID
 PREFIXO = "advbr-"
 
 
+# O Assinador Serpro é a terceira maneira de um programa achar um token nesta
+# máquina, e não se parece com as outras duas: ele não lê banco NSS e não fala
+# com o p11-kit. Tem uma lista própria de bibliotecas PKCS#11, uma por linha,
+# no formato <apelido>=<caminho da biblioteca>. Fora dela existe só o que o
+# Serpro embutiu de fábrica, e é por isso que um token publicado aqui não
+# aparecia na tela dele por mais que se republicasse.
+#
+# O que se escreve ali é o p11-kit-proxy do host, e não um driver: o proxy já
+# lê os .module escritos acima, então esta linha responde por todos os drivers
+# instalados aqui, inclusive os que forem instalados depois.
+LISTA_SERPRO = os.path.expanduser("~/.signer/drivers.properties")
+
+# A chave é a mesma que a versão de linha de comando usa, e aqui isso é de
+# propósito, ao contrário do PREFIXO. As duas escreveriam exatamente a mesma
+# linha, porque o que ela nomeia é o proxy do host, e não o que cada uma
+# instalou; duas linhas apontando para a mesma biblioteca fariam cada token
+# aparecer duas vezes na tela do Assinador Serpro. O preço é que despublicar
+# por aqui tira a linha também de quem publicou por lá, e republicar de lá a
+# devolve.
+CHAVE_SERPRO = "advbr-p11-kit"
+
 def _config():
     return os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+
+
+def assinador_serpro_presente():
+    """O Assinador Serpro está aqui, e dá para escrever a lista dele?
+
+    Uma pergunta só responde as duas, e é por isso que não há mais nada aqui.
+    O diretório ~/.signer é criado pelo Assinador Serpro na primeira vez em que
+    é aberto, e o Flatpak monta esse caminho dentro deste sandbox apenas se ele
+    existir no host. Logo: se dá para vê-lo daqui, ele existe lá e temos
+    permissão de escrever; se não dá, ou o programa nunca rodou nesta máquina
+    ou a permissão foi tirada, e nos dois casos não há o que fazer.
+
+    A versão de linha de comando roda fora do sandbox e por isso procura também
+    o atalho de menu do Serpro, que este aplicativo não tem como aproveitar: de
+    dentro daqui, achar o atalho não daria a permissão de criar o diretório.
+    """
+    return os.path.isdir(os.path.dirname(LISTA_SERPRO))
+
+
+def _gravar_lista_serpro(linhas):
+    """Grava a lista inteira, de uma vez, sem deixá-la pela metade.
+
+    O arquivo é de outro programa: uma escrita interrompida no meio deixaria a
+    configuração dele corrompida, e não a nossa.
+    """
+    pasta = os.path.dirname(LISTA_SERPRO)
+    os.makedirs(pasta, exist_ok=True)
+    temporario = LISTA_SERPRO + ".novo"
+    with open(temporario, "w", encoding="utf-8") as f:
+        for linha in linhas:
+            f.write(linha + "\n")
+    os.replace(temporario, LISTA_SERPRO)
+
+
+def _linhas_da_lista_serpro():
+    try:
+        with open(LISTA_SERPRO, encoding="utf-8", errors="replace") as f:
+            return f.read().splitlines()
+    except OSError:
+        return []
+
+
+def escrever_na_lista_serpro(proxy):
+    """Põe a nossa linha na lista, sem tocar nas outras. True se mudou algo."""
+    nossa = "%s=%s" % (CHAVE_SERPRO, proxy)
+    linhas = _linhas_da_lista_serpro()
+    if nossa in linhas:
+        return False
+    _gravar_lista_serpro(
+        [l for l in linhas if not l.startswith(CHAVE_SERPRO + "=")] + [nossa])
+    return True
+
+
+def remover_da_lista_serpro():
+    """Tira só a nossa linha. True se havia o que tirar."""
+    linhas = _linhas_da_lista_serpro()
+    restantes = [l for l in linhas if not l.startswith(CHAVE_SERPRO + "=")]
+    if len(restantes) == len(linhas):
+        return False
+    if any(linha.strip() for linha in restantes):
+        _gravar_lista_serpro(restantes)
+        return True
+    # Um arquivo que só tinha a nossa linha era nosso, e some junto. O
+    # diretório também, se ficou vazio: aí o Assinador Serpro não estava ali.
+    os.unlink(LISTA_SERPRO)
+    try:
+        os.rmdir(os.path.dirname(LISTA_SERPRO))
+    except OSError:
+        pass
+    return True
 
 
 def modulos_do_host():
@@ -77,7 +168,7 @@ def publicar():
     # cada caso exige do lado deles. Ver permissoes.comandos_de_navegador: o
     # aplicativo não pode conceder essas permissões, e sem elas o navegador em
     # sandbox não enxerga nada do que foi publicado aqui.
-    feito = {"modulos": [], "bancos": [], "erros": [],
+    feito = {"modulos": [], "bancos": [], "erros": [], "serpro": False,
              "sandbox_client": set(), "sandbox_assinador": set()}
 
     destino = modulos_do_host()
@@ -119,6 +210,15 @@ def publicar():
             "não encontrei o p11-kit do sistema; os navegadores que rodam fora "
             "de sandbox podem não enxergar o token.")
 
+    # O Assinador Serpro tem lista própria, e é o único programa conhecido que
+    # a tem. Sem o proxy do host não há o que escrever nela: o que vai ali é
+    # justamente o caminho dele.
+    if proxy and assinador_serpro_presente():
+        try:
+            feito["serpro"] = escrever_na_lista_serpro(proxy)
+        except OSError as erro:
+            feito["erros"].append("Assinador Serpro: %s" % erro)
+
     try:
         _publicar_assinadores(feito)
     except OSError as erro:
@@ -158,8 +258,13 @@ def despublicar():
     # cada caso exige do lado deles. Ver permissoes.comandos_de_navegador: o
     # aplicativo não pode conceder essas permissões, e sem elas o navegador em
     # sandbox não enxerga nada do que foi publicado aqui.
-    feito = {"modulos": [], "bancos": [], "erros": [],
+    feito = {"modulos": [], "bancos": [], "erros": [], "serpro": False,
              "sandbox_client": set(), "sandbox_assinador": set()}
+    try:
+        feito["serpro"] = remover_da_lista_serpro()
+    except OSError as erro:
+        feito["erros"].append("Assinador Serpro: %s" % erro)
+
     for arquivo in glob.glob(os.path.join(modulos_do_host(), PREFIXO + "*.module")):
         try:
             os.unlink(arquivo)

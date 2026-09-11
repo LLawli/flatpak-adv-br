@@ -329,6 +329,14 @@ if [ -f ui/publicador.py ]; then
     fi
 fi
 
+if [ -f ui/publicador.py ]; then
+    if python3 tests/prova-serpro.py; then
+        ok "a lista de drivers do Assinador Serpro, pela interface"
+    else
+        falha "a lista de drivers do Assinador Serpro, pela interface"
+    fi
+fi
+
 if [ -f ui/sanitizar.py ]; then
     if python3 tests/prova-sanitizacao.py; then
         ok "a sanitização de dado pessoal"

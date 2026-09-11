@@ -379,19 +379,25 @@ própria de drivers, em `~/.signer/drivers.properties`, e fora dela conhece só 
 que veio de fábrica. Por isso ele abria sem achar certificado nenhum, mesmo com
 tudo publicado, e mandava atualizar o driver da leitora.
 
-O `./host/publicar.sh` resolve isso sozinho, desde que o Assinador Serpro já
-esteja instalado quando você publicar. Instalou depois? Rode de novo:
+Publicar resolve isso sozinho, desde que o Assinador Serpro já esteja
+instalado e tenha sido aberto ao menos uma vez antes. Instalou depois? Publique
+de novo: pelo botão do aplicativo, ou, para quem clonou o repositório,
 
 ```bash
 ./host/publicar.sh
 ```
 
-A linha que ele escreve aponta para o `p11-kit-proxy` do seu sistema, que
-responde por todos os drivers instalados aqui, inclusive os que você instalar
-depois. **Feche e reabra o Assinador Serpro**: ele lê essa lista ao abrir.
+A linha escrita aponta para o `p11-kit-proxy` do seu sistema, que responde por
+todos os drivers instalados aqui, inclusive os que você instalar depois.
+**Feche e reabra o Assinador Serpro**: ele lê essa lista ao abrir.
 
-Para conferir o que ficou lá, `./host/publicar.sh --listar` ou
-`./diagnostico.sh`.
+O "aberto ao menos uma vez" não é capricho: o `~/.signer` é criado pelo próprio
+Assinador Serpro, e o aplicativo em Flatpak só enxerga esse diretório se ele já
+existir. Quem usa o `./host/publicar.sh` não depende disso, porque ele roda
+fora do sandbox.
+
+Para conferir o que ficou lá, o relatório do aplicativo, o
+`./host/publicar.sh --listar` ou o `./diagnostico.sh`.
 
 ## Conferindo
 

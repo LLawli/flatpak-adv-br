@@ -374,8 +374,11 @@ class Janela(Adw.ApplicationWindow):
             self._pedir_permissao_de_navegador(pedidos)
             return
 
+        # O Assinador Serpro lê a lista de drivers ao abrir, como o navegador
+        # lê o módulo: quem estava com ele aberto precisa fechá-lo também.
         self.toasts.add_toast(Adw.Toast(
-            title="Publicado. Feche e reabra os navegadores."))
+            title="Publicado. Feche e reabra os navegadores%s."
+                  % (" e o Assinador Serpro" if resultado.get("serpro") else "")))
 
     def _dialogo_de_comandos(self, titulo, paragrafos, comandos, rodape=(),
                              confirmar="Copiar comando"):

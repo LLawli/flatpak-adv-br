@@ -82,6 +82,18 @@ finish-args:
   - --filesystem=~/.var/app
   # Os atalhos no menu de aplicativos.
   - --filesystem=xdg-data/applications:create
+  # A lista de drivers do Assinador Serpro, que não lê banco NSS nem p11-kit:
+  # sem uma linha nossa ali ele não enxerga token nenhum publicado aqui.
+  # Escrevemos uma chave só dentro dela, e o resto do arquivo é de quem o
+  # instalou.
+  #
+  # SEM :create, ao contrário das outras, e isto é o que faz a regra funcionar.
+  # O :create manda o Flatpak criar o diretório no host em toda abertura deste
+  # aplicativo, e aí ~/.signer passaria a existir em máquina que nunca viu o
+  # Assinador Serpro. Como é justamente a existência desse diretório que prova
+  # que ele está instalado, a permissão que parecia mais conveniente destruiria
+  # a prova. Medido: com :create o diretório aparece; sem, não.
+  - --filesystem=~/.signer
   # Atalhos dos assinadores, que o navegador executa.
   - --filesystem=~/.local/bin:create
   # Somente leitura do /usr do host, para descobrir onde está o p11-kit-proxy
