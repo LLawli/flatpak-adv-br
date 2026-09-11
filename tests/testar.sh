@@ -114,6 +114,100 @@ fi
 rm -rf "$BANCO"
 
 # ---------------------------------------------------------------------------
+titulo "A lista do Assinador Serpro"
+
+# O arquivo é de quem instalou o Assinador Serpro e pode ter linha posta à mão:
+# o que estes testes guardam é que só a nossa chave seja tocada.
+#
+# As funções moram em host/comum.sh, que define ok() e falha() com outro
+# significado. Por isso elas rodam num bash à parte, com HOME falso, e o que se
+# confere aqui é o arquivo que ficou.
+CASA=$(mktemp -d)
+serpro() { HOME="$CASA" bash -euo pipefail -c ". host/comum.sh; $*"; }
+LISTA="$CASA/.signer/drivers.properties"
+DELES='outro-driver=/opt/outro/libqualquer.so'
+
+mkdir -p "$CASA/.signer"
+printf '%s\n' "$DELES" > "$LISTA"
+
+if serpro 'escrever_na_lista_serpro /usr/lib/p11-kit-proxy.so' &&
+    grep -qxF 'advbr-p11-kit=/usr/lib/p11-kit-proxy.so' "$LISTA" &&
+    grep -qxF "$DELES" "$LISTA"; then
+    ok "escreve a nossa linha e deixa a de outro driver onde estava"
+else
+    falha "escrever na lista do Assinador Serpro"
+fi
+
+# Publicar é idempotente: rodar de novo não pode duplicar a chave, e a função
+# avisa, devolvendo 1, que não havia o que fazer.
+if serpro 'escrever_na_lista_serpro /usr/lib/p11-kit-proxy.so'; then
+    falha "a segunda escrita não disse que o arquivo já estava certo"
+elif [ "$(grep -c '^advbr-p11-kit=' "$LISTA")" = 1 ]; then
+    ok "escrever de novo não duplica a chave"
+else
+    falha "escrever de novo duplicou a chave"
+fi
+
+# O proxy do host muda de lugar entre distribuições, e uma máquina que mudou de
+# distribuição tem de trocar o valor, não ganhar uma segunda linha.
+if serpro 'escrever_na_lista_serpro /usr/lib64/p11-kit-proxy.so' &&
+    [ "$(grep -c '^advbr-p11-kit=' "$LISTA")" = 1 ] &&
+    grep -qxF 'advbr-p11-kit=/usr/lib64/p11-kit-proxy.so' "$LISTA"; then
+    ok "um caminho novo substitui o antigo"
+else
+    falha "um caminho novo devia substituir o antigo"
+fi
+
+if serpro 'remover_da_lista_serpro' &&
+    ! grep -q '^advbr-p11-kit=' "$LISTA" && grep -qxF "$DELES" "$LISTA"; then
+    ok "remover tira só a nossa linha"
+else
+    falha "remover mexeu no que não era nosso"
+fi
+
+if serpro 'remover_da_lista_serpro'; then
+    falha "remover disse ter removido o que já não estava lá"
+else
+    ok "remover não inventa o que não há"
+fi
+
+# Um arquivo que só tinha a nossa linha era nosso, e some junto. O diretório
+# também, se ele ficou vazio: aí o Assinador Serpro não estava ali.
+printf 'advbr-p11-kit=/usr/lib/p11-kit-proxy.so\n' > "$LISTA"
+if serpro 'remover_da_lista_serpro' && [ ! -e "$LISTA" ] && [ ! -d "$CASA/.signer" ]; then
+    ok "o arquivo que só tinha a nossa linha some, e o diretório vazio junto"
+else
+    falha "sobrou arquivo ou diretório vazio depois de remover"
+fi
+
+# A detecção também olha os atalhos de menu do sistema, que não são de mentira:
+# numa máquina que tenha mesmo o Assinador Serpro instalado, "não achou nada" é
+# a resposta errada, e o caso não se testa aqui.
+if grep -rlis 'assinador[ ._-]*serpro' /usr/share/applications \
+        /usr/local/share/applications >/dev/null 2>&1; then
+    ok "o Assinador Serpro está instalado nesta máquina (caso 'sem rastro' pulado)"
+elif serpro 'assinador_serpro_presente'; then
+    falha "achou o Assinador Serpro num HOME onde ele não existe"
+else
+    ok "sem rastro do Assinador Serpro, não se escreve lista nenhuma"
+fi
+mkdir -p "$CASA/.signer"
+if serpro 'assinador_serpro_presente'; then
+    ok "o diretório de configuração dele basta para reconhecê-lo"
+else
+    falha "não reconheceu o Assinador Serpro pelo diretório de configuração"
+fi
+
+# O SerproID é outro programa, e é nosso. O atalho dele fala em "serpro" e em
+# "assinatura", e um padrão frouxo o confundiria com o Assinador Serpro.
+if grep -qis 'assinador[ ._-]*serpro' drivers/serproid.desktop; then
+    falha "o padrão de detecção confunde o SerproID com o Assinador Serpro"
+else
+    ok "o padrão de detecção não confunde o SerproID com o Assinador Serpro"
+fi
+rm -rf "$CASA"
+
+# ---------------------------------------------------------------------------
 titulo "O pacote instalado"
 
 APP_ID=io.github.llawli.AdvBr

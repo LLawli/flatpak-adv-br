@@ -221,6 +221,40 @@ Medido dos dois lados, com a mesma mensagem: sem registrar, 0 certificados; com
 O lançador do PJeOffice já registrava, no corpo dele, no catálogo. O SerproID e
 o RemoteID não precisam: eles SERVEM o token em vez de lê-lo.
 
+## O Assinador Serpro não pergunta ao p11-kit: ele tem lista própria
+
+Há três maneiras de um programa achar um token nesta máquina, e o projeto só
+conhecia duas: o banco NSS (navegador, Papers, LibreOffice) e os `.module` do
+p11-kit (quem carrega o `p11-kit-proxy`). A terceira é um arquivo de texto que
+o próprio programa mantém, com os drivers que ele aceita, e o Assinador Serpro
+é o caso: `~/.signer/drivers.properties`, uma linha por driver, no formato
+`<apelido>=<caminho da biblioteca>`. Fora dessa lista existe só o que o Serpro
+embutiu de fábrica, e nada do que este projeto publica está lá.
+
+O sintoma é o de sempre, e por isso engana: ele abre, não acha certificado
+nenhum e manda instalar o driver da leitora. Publicar de novo não muda nada,
+porque não é do p11-kit que ele lê.
+
+O que se escreve nessa lista é o **proxy do host**, e não um driver:
+
+```
+advbr-p11-kit=/usr/lib64/p11-kit-proxy.so
+```
+
+O proxy já lê os `.module` que o `./host/publicar.sh` escreve, então uma linha
+só responde por todos os drivers instalados aqui, inclusive os que forem
+instalados depois: a lista dele nunca precisa ser mexida de novo. O caminho
+muda de distribuição para distribuição (`/usr/lib64` no Fedora e no openSUSE,
+`/usr/lib/<triplet>` no Debian e no Arch) e por isso sai do `proxy_do_host()`,
+não de uma constante.
+
+O arquivo é de quem instalou o Assinador Serpro e pode ter linha posta à mão.
+Por isso tudo o que se faz nele é por chave: escrevemos e removemos
+`advbr-p11-kit`, e o que não for dela fica onde está. E só se escreve quando o
+programa está mesmo aqui, pela mesma razão que não se cria `~/.config/vivaldi`
+numa máquina sem Vivaldi. Ele lê a lista ao abrir, então é preciso fechá-lo e
+reabri-lo.
+
 ## `pkcs11Modules` vai na raiz da mensagem
 
 Na conversa de native messaging com o Lacuna, o campo `pkcs11Modules` vai na

@@ -210,6 +210,24 @@ else
     aviso "nenhum atalho de assinador. Sem eles não se assina em navegador."
 fi
 
+# O Assinador Serpro não lê banco NSS nem os .module do p11-kit: ele tem a sua
+# própria lista de bibliotecas. Sem a linha deste projeto lá, nenhum token
+# daqui aparece na tela dele, e a mensagem que ele dá é a de sempre, a de que
+# não encontrou certificado. Ver host/comum.sh.
+if assinador_serpro_presente; then
+    linha=$(sed -n "s/^$CHAVE_LISTA=//p" "$LISTA_SERPRO" 2>/dev/null | head -1)
+    if [ -z "$linha" ]; then
+        falha_conta "o Assinador Serpro está instalado e não conhece nenhum driver
+      daqui: falta a linha $CHAVE_LISTA em
+      $(printf '%s' "$LISTA_SERPRO" | sed "s|^$HOME|~|").  ./host/publicar.sh"
+    elif [ ! -e "$linha" ]; then
+        falha_conta "a lista do Assinador Serpro aponta para $linha, que não existe
+      nesta máquina.  ./host/publicar.sh"
+    else
+        ok "Assinador Serpro conhece $linha"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 titulo "4 · Bancos NSS"
 

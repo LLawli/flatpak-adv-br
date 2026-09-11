@@ -123,6 +123,14 @@ if [ "$ACAO" = listar ]; then
     }
     para_cada_navegador listar_nss
 
+    titulo "Programas do host com lista própria de drivers"
+    if [ -e "$LISTA_SERPRO" ] && grep -q "^$CHAVE_LISTA=" "$LISTA_SERPRO"; then
+        ok "Assinador Serpro: $(sed -n "s/^$CHAVE_LISTA=//p" "$LISTA_SERPRO")
+      em $(printf '%s' "$LISTA_SERPRO" | sed "s|^$HOME|~|")"
+    else
+        log "nenhum."
+    fi
+
     titulo "Assinadores publicados (assinatura)"
     listar_manifestos() {
         local id=$1 familia=$2 perfis=$3 manifestos=$4
@@ -186,6 +194,10 @@ if [ "$ACAO" = remover ]; then
     }
     para_cada_navegador remover_de
 
+    if remover_da_lista_serpro; then
+        ok "linha $CHAVE_LISTA removida da lista do Assinador Serpro"
+    fi
+
     rm -f "$BIN_HOST/$PREFIXO_WRAPPER"* 2>/dev/null || true
     find "$HOME/.var/app" -maxdepth 5 \
         \( -path "*/$SUBDIR_ATALHO_FLATPAK/$PREFIXO_WRAPPER*" \
@@ -227,7 +239,7 @@ PROXY=$(proxy_do_host) ||
           Arch:   sudo pacman -S p11-kit"
 
 # ---------------------------------------------------------------------------
-titulo "1/4 · Drivers do token (autenticação por certificado)"
+titulo "1/5 · Drivers do token (autenticação por certificado)"
 
 mkdir -p "$MODULOS_HOST"
 
@@ -259,7 +271,7 @@ while read -r modulo; do
 done < <(modulos_publicados)
 
 # ---------------------------------------------------------------------------
-titulo "2/4 · Bancos NSS"
+titulo "2/5 · Bancos NSS"
 
 # Dois registros diferentes, porque são dois problemas:
 #
@@ -327,7 +339,27 @@ for consumidor in "${CONSUMIDORES[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
-titulo "3/4 · Assinadores (assinatura em navegador)"
+titulo "3/5 · Programas do host com lista própria de drivers"
+
+# Quem não lê banco NSS nem fala com o p11-kit precisa ser avisado à mão. O
+# Assinador Serpro é o caso: a lista dele é um arquivo de texto, e o que se
+# escreve lá é o proxy do host, que já responde por tudo o que o passo 1
+# publicou. Ver host/comum.sh.
+if assinador_serpro_presente; then
+    if escrever_na_lista_serpro "$PROXY"; then
+        ok "Assinador Serpro: $CHAVE_LISTA=$PROXY"
+        printf '      Ele lê essa lista ao abrir: feche e reabra o Assinador Serpro.\n'
+    else
+        ok "Assinador Serpro: já estava na lista."
+    fi
+else
+    log "o Assinador Serpro não está instalado aqui.
+      Se instalar depois, rode este script de novo: a lista é dele, e só
+      se escreve nela quando ele existe."
+fi
+
+# ---------------------------------------------------------------------------
+titulo "4/5 · Assinadores (assinatura em navegador)"
 
 ASSINADORES=$(flatpak run --command=adv-br-assinadores "$APP_ID" 2>/dev/null) || true
 
@@ -449,7 +481,7 @@ with open(sys.argv[3], "w", encoding="utf-8") as f:
 fi
 
 # ---------------------------------------------------------------------------
-titulo "4/4 · Atalhos de aplicativo"
+titulo "5/5 · Atalhos de aplicativo"
 
 # Algumas extensões trazem aplicativo, não só biblioteca. O SerproID é o caso:
 # sem abrir o aplicativo uma vez para associar o certificado, não há o que

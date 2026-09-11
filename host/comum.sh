@@ -129,6 +129,81 @@ flatpak_instalado() {
     flatpak info --user "$1" >/dev/null 2>&1 || flatpak info "$1" >/dev/null 2>&1
 }
 
+# O Assinador Serpro é a terceira maneira de um programa procurar um token, e
+# não se parece com nenhuma das outras duas: ele não lê banco NSS e não fala
+# com o p11-kit. Ele tem uma lista própria de bibliotecas PKCS#11, em
+# ~/.signer/drivers.properties, uma por linha, no formato <apelido>=<caminho>.
+# Fora dessa lista há só o que o Serpro embutiu de fábrica, e por isso um token
+# publicado por este projeto não aparecia na tela dele.
+#
+# O que se escreve ali é o p11-kit-proxy do host, e não um driver. O proxy já
+# lê os .module escritos pelo ./host/publicar.sh, então esta linha só responde
+# por todos os drivers instalados aqui, inclusive os que forem instalados
+# depois: a lista do Serpro nunca precisa ser mexida de novo.
+LISTA_SERPRO="$HOME/.signer/drivers.properties"
+CHAVE_LISTA=advbr-p11-kit
+
+# O arquivo é de quem instalou o Assinador Serpro, não nosso: pode ter linha de
+# outro driver, posta à mão. Por isso tudo o que se faz nele é por chave, e a
+# chave é esta. O que não for dela fica onde está.
+#
+# Devolve 0 se mexeu no arquivo, 1 se ele já estava como devia.
+escrever_na_lista_serpro() { # <caminho-da-biblioteca>
+    local valor=$1 tmp
+    if [ -e "$LISTA_SERPRO" ] && grep -qxF "$CHAVE_LISTA=$valor" "$LISTA_SERPRO"; then
+        return 1
+    fi
+    mkdir -p "$(dirname "$LISTA_SERPRO")"
+    tmp=$(mktemp "$LISTA_SERPRO.XXXXXX")
+    if [ -e "$LISTA_SERPRO" ]; then
+        # O grep devolve 1 quando não sobra linha nenhuma, que é o caso de um
+        # arquivo que só tinha a nossa. Com 'set -e' ligado, isso derrubaria o
+        # script aqui em vez de escrever o arquivo.
+        { grep -v "^$CHAVE_LISTA=" "$LISTA_SERPRO" || true; } > "$tmp"
+    fi
+    printf '%s=%s\n' "$CHAVE_LISTA" "$valor" >> "$tmp"
+    mv "$tmp" "$LISTA_SERPRO"
+}
+
+# Devolve 0 se removeu, 1 se não havia o que remover.
+remover_da_lista_serpro() {
+    local tmp
+    [ -e "$LISTA_SERPRO" ] || return 1
+    grep -q "^$CHAVE_LISTA=" "$LISTA_SERPRO" || return 1
+    tmp=$(mktemp "$LISTA_SERPRO.XXXXXX")
+    { grep -v "^$CHAVE_LISTA=" "$LISTA_SERPRO" || true; } > "$tmp"
+    mv "$tmp" "$LISTA_SERPRO"
+    # Um arquivo que ficou vazio era só nosso: quem desinstalou não tem por que
+    # continuar com um arquivo de configuração de outro programa, escrito por
+    # nós, sem nada dentro. O rmdir só apaga o diretório se ele também tiver
+    # ficado vazio, o que quer dizer que o Assinador Serpro não está ali.
+    [ -s "$LISTA_SERPRO" ] || rm -f "$LISTA_SERPRO"
+    rmdir "$(dirname "$LISTA_SERPRO")" 2>/dev/null || true
+    return 0
+}
+
+# O Assinador Serpro está nesta máquina?
+#
+# Escrever a lista sem ele instalado seria inventar programa, do mesmo jeito
+# que criar ~/.config/vivaldi numa máquina sem Vivaldi. Mas o pacote do Serpro
+# não é Flatpak, não está no Flathub e não deixa nome de comando que se possa
+# assumir, então se pergunta pelos dois rastros que ele deixa: o diretório de
+# configuração, que ele cria ao ser aberto, e o atalho de menu, que o pacote
+# instala. Um dos dois basta.
+assinador_serpro_presente() {
+    local dir
+    [ -d "$(dirname "$LISTA_SERPRO")" ] && return 0
+    for dir in "${XDG_DATA_HOME:-$HOME/.local/share}/applications" \
+               /usr/local/share/applications /usr/share/applications; do
+        [ -d "$dir" ] || continue
+        # O padrão é apertado de propósito: casa o "Assinador Serpro" do
+        # atalho dele e não casa o "assinatura;serpro" das Keywords do atalho
+        # do SerproID, que é outro programa e é nosso.
+        grep -rlis 'assinador[ ._-]*serpro' "$dir" >/dev/null 2>&1 && return 0
+    done
+    return 1
+}
+
 # Atalhos de menu vindos das extensões. O .desktop leva o prefixo do
 # aplicativo porque é assim que se reconhece, mais tarde, o que este projeto
 # escreveu; o ícone vai para um diretório próprio e é referenciado por caminho

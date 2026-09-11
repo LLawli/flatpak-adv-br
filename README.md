@@ -372,6 +372,27 @@ flatpak override --user --filesystem=xdg-run/p11-kit/pkcs11 org.gnome.Papers
 que o `--conceder` também faz. Depois disso o token aparece na lista de
 certificados do Papers na hora de assinar.
 
+## Assinar no Assinador Serpro
+
+O Assinador Serpro não usa banco NSS nem pergunta ao p11-kit: ele tem uma lista
+própria de drivers, em `~/.signer/drivers.properties`, e fora dela conhece só o
+que veio de fábrica. Por isso ele abria sem achar certificado nenhum, mesmo com
+tudo publicado, e mandava atualizar o driver da leitora.
+
+O `./host/publicar.sh` resolve isso sozinho, desde que o Assinador Serpro já
+esteja instalado quando você publicar. Instalou depois? Rode de novo:
+
+```bash
+./host/publicar.sh
+```
+
+A linha que ele escreve aponta para o `p11-kit-proxy` do seu sistema, que
+responde por todos os drivers instalados aqui, inclusive os que você instalar
+depois. **Feche e reabra o Assinador Serpro**: ele lê essa lista ao abrir.
+
+Para conferir o que ficou lá, `./host/publicar.sh --listar` ou
+`./diagnostico.sh`.
+
 ## Conferindo
 
 ```bash
@@ -420,7 +441,9 @@ existe a cada abertura de navegador.
 ### O que a desinstalação não apaga
 
 `~/.pjeoffice-pro` e `~/.config/serproid` são seus: foram feitos por você
-usando os programas, e continuam lá para quando reinstalar. O código em
+usando os programas, e continuam lá para quando reinstalar. Da lista do
+Assinador Serpro sai só a linha `advbr-p11-kit`, que é a que este projeto
+escreveu; qualquer outra que você tenha posto ali fica onde está. O código em
 `~/.local/share/flatpak-adv-br` sai na desinstalação completa por curl; com o
 repositório clonado, o script diz o comando e deixa a escolha com você.
 

@@ -152,6 +152,25 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   certificados voltava vazia, como se não houvesse token. Sumia tudo, não só o
   driver novo. Ver `docs/ARMADILHAS.md`.
 
+- **O Assinador Serpro não via nenhum token publicado aqui.** Ele não lê banco
+  NSS e não fala com o p11-kit: tem uma lista própria de bibliotecas PKCS#11,
+  em `~/.signer/drivers.properties`, e fora dela existe só o que o Serpro
+  embutiu de fábrica. O sintoma é o de sempre e por isso engana, porque ele
+  abre, não acha certificado nenhum e manda atualizar o driver da leitora.
+  Agora o `./host/publicar.sh` escreve nessa lista o `p11-kit-proxy` do host,
+  que já responde por todos os drivers instalados aqui, inclusive os que forem
+  instalados depois. Só escreve quando o Assinador Serpro está mesmo na
+  máquina, e mexe só na chave dele (`advbr-p11-kit`), deixando intacta
+  qualquer linha posta à mão. O `./diagnostico.sh` passa a conferir, e o
+  `--remover` a desfazer. Ver `docs/ARMADILHAS.md`.
+
+  Quem não quiser esperar por uma versão nova resolve à mão, com uma linha:
+
+  ```sh
+  mkdir -p ~/.signer
+  echo "advbr-p11-kit=$(ls /usr/lib64/p11-kit-proxy.so /usr/lib/*/p11-kit-proxy.so 2>/dev/null | head -1)" >> ~/.signer/drivers.properties
+  ```
+
 ### Notas para quem for mexer
 
 - O socket entre o módulo PKCS#11 do RemoteID e o aplicativo dele **não** pode

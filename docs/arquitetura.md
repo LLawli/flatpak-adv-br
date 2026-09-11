@@ -66,6 +66,7 @@ Nada é instalado no sistema. Tudo mora na home de quem usa:
 | atalhos dos assinadores, para navegador em Flatpak | `~/.var/app/<id>/data/adv-br/` |
 | manifestos de native messaging | o diretório de cada navegador |
 | registro nos bancos NSS | o `pkcs11.txt` de cada perfil |
+| a linha `advbr-p11-kit` | `~/.signer/drivers.properties`, se o Assinador Serpro estiver instalado |
 | atalhos de menu | `~/.local/share/applications/io.github.llawli.AdvBr.*.desktop` |
 
 `./host/publicar.sh --remover` desfaz exatamente isso, e nada além disso.
