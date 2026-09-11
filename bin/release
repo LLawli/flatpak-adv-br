@@ -37,7 +37,9 @@ git rev-parse --git-dir >/dev/null 2>&1 || erro "não é um repositório git."
 # O corpo do GitHub Release sai daqui. Uma seção ausente produziria uma release
 # vazia, que é exatamente o que este script existe para impedir.
 log "conferindo a seção [$VERSAO] no CHANGELOG.md"
-printf '%s\n' "$(cat CHANGELOG.md)" | grep -q "^## \[$VERSAO\]" ||
+# Sem cano: o grep lê o arquivo. Ver docs/ARMADILHAS.md, sobre por que
+# 'produtor | grep -q' não serve num script com pipefail.
+grep -q "^## \[$VERSAO\]" CHANGELOG.md ||
     erro "CHANGELOG.md não tem a seção '## [$VERSAO]'. Escreva-a antes."
 
 corpo=$(awk -v ver="$VERSAO" '

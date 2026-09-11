@@ -598,11 +598,29 @@ por último, o produtor termina antes do grep sair e tudo passa. Aqui um teste
 que procurava duas ferramentas encontrou a que aparecia por último e "não
 encontrou" a que aparecia primeiro, no mesmo comando e com a mesma saída.
 
-A correção é capturar antes de filtrar:
+Quando o que se procura está num arquivo, a correção é não ter cano nenhum:
+
+```sh
+grep -q padrao arquivo
+```
+
+Quando a origem é um comando, capturar antes de filtrar resolve **até certo
+tamanho**:
 
 ```sh
 printf '%s\n' "$(cmd)" | grep -q padrao
 ```
+
+Mas isso só **encurta** a corrida, não a elimina, e a diferença aparece quando
+a saída é grande. O `printf` do bash escreve por stdio, em blocos de alguns KB:
+21 KB de CHANGELOG saem em várias chamadas de `write`, não numa. Se o `grep -q`
+achar no primeiro bloco e sair, as escritas seguintes levam SIGPIPE do mesmo
+jeito. Quem ganha a corrida depende da carga da máquina, e é por isso que o
+sintoma é intermitente.
+
+Aconteceu no `bin/release`: o `grep -q "^## \[$VERSAO\]"` casava na linha 7 do
+CHANGELOG, e a conferência recusou uma seção que estava lá, na segunda execução,
+com o mesmo arquivo e o mesmo script que tinham passado na primeira.
 
 Vale para todo `| head`, `| grep -q`, `| head -1` num script com `pipefail`.
 
