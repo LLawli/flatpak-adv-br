@@ -74,9 +74,18 @@ else
       lançado. Instale-o pela sua distribuição ou com
           flatpak install flathub org.flatpak.Builder"
 fi
+# O manifesto conferido é o PUBLICADO, e não o que o ./instalar.sh constrói.
+# São dois pacotes com runtimes diferentes, e quem recebe uma versão nova pelo
+# repositório é este: uma tag que produzisse um pacote quebrado aqui chegaria a
+# todo mundo de uma vez, enquanto quem clona e constrói vê o erro na própria
+# máquina, antes de instalar coisa nenhuma.
+#
+# O que fica descoberto: o io.github.llawli.AdvBr.yml não é construído por
+# ninguém antes da tag. O CI confere os manifestos por fora (id, tabulação,
+# fontes citadas) e não constrói nenhum dos dois.
 "${CONSTRUTOR[@]}" --user --force-clean --disable-rofiles-fuse \
-    build-release io.github.llawli.AdvBr.yml >/dev/null ||
-    erro "o pacote base não constrói; não vou marcar uma versão quebrada."
+    build-release dev.lukakuuhaku.AdvBr.yml >/dev/null ||
+    erro "o pacote publicado não constrói; não vou marcar uma versão quebrada."
 rm -rf build-release
 
 log "gravando a versão"
