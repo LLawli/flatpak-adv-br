@@ -48,7 +48,7 @@ done
 if command -v flatpak-builder >/dev/null; then
     construtor=(flatpak-builder)
 elif flatpak info org.flatpak.Builder >/dev/null 2>&1; then
-    construtor=(flatpak run org.flatpak.Builder)
+    construtor=(flatpak run --filesystem="$TRABALHO" org.flatpak.Builder)
 else
     erro "falta o flatpak-builder. Instale-o:
       Fedora: sudo dnf install flatpak-builder
@@ -99,7 +99,11 @@ impressao_usada=$(gpg --list-keys --with-colons "$CHAVE" 2>/dev/null |
 # ---------------------------------------------------------------------------
 passo "Construindo o $APP_ID"
 mkdir -p "$TRABALHO"
+# O estado mora junto do build: o flatpak-builder recusa os dois em sistemas de
+# arquivos diferentes, e o .flatpak-builder do diretório atual pode ser um
+# symlink para outro disco.
 "${construtor[@]}" --force-clean --disable-rofiles-fuse \
+    --state-dir "$TRABALHO/estado" \
     --repo="$REPO" \
     --default-branch="$RAMO" \
     "$TRABALHO/base" "$MANIFESTO" >/dev/null

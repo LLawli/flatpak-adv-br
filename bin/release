@@ -67,10 +67,16 @@ log "conferindo o pacote que está sendo lançado"
 # Várias distribuições pararam de empacotar o flatpak-builder, e o próprio
 # projeto passou a recomendar o do Flathub. Os dois servem; o do Flathub
 # precisa enxergar este diretório, e por isso o --filesystem.
+#
+# O estado e o build moram juntos em $TRABALHO, e não no .flatpak-builder do
+# repositório: o flatpak-builder recusa estado e build em sistemas de arquivos
+# diferentes, e o .flatpak-builder pode ser um symlink para outro disco.
+TRABALHO=${ADV_BR_TRABALHO:-${XDG_CACHE_HOME:-$HOME/.cache}/adv-br-publicacao}
+mkdir -p "$TRABALHO"
 if command -v flatpak-builder >/dev/null 2>&1; then
     CONSTRUTOR=(flatpak-builder)
 elif flatpak info org.flatpak.Builder >/dev/null 2>&1; then
-    CONSTRUTOR=(flatpak run --filesystem="$PWD" org.flatpak.Builder)
+    CONSTRUTOR=(flatpak run --filesystem="$PWD" --filesystem="$TRABALHO" org.flatpak.Builder)
 else
     erro "flatpak-builder não encontrado; não dá para conferir o que está sendo
       lançado. Instale-o pela sua distribuição ou com
@@ -86,9 +92,10 @@ fi
 # ninguém antes da tag. O CI confere os manifestos por fora (id, tabulação,
 # fontes citadas) e não constrói nenhum dos dois.
 "${CONSTRUTOR[@]}" --user --force-clean --disable-rofiles-fuse \
-    build-release dev.lukakuuhaku.AdvBr.yml >/dev/null ||
+    --state-dir "$TRABALHO/estado" \
+    "$TRABALHO/conferencia" dev.lukakuuhaku.AdvBr.yml >/dev/null ||
     erro "o pacote publicado não constrói; não vou marcar uma versão quebrada."
-rm -rf build-release
+rm -rf "$TRABALHO/conferencia"
 
 log "gravando a versão"
 printf '%s\n' "$VERSAO" > VERSAO
