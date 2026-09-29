@@ -26,6 +26,23 @@
   <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.1.1" date="2026-09-29">
+      <description>
+        <p>
+          O RemoteID passa a enviar a cadeia de autoridades junto da
+          assinatura, que era o que o Projudi do TJPR recusava. Quem já estava
+          com o RemoteID configurado não precisa refazer nada: a cadeia é
+          buscada na primeira vez que o aplicativo do RemoteID abre depois da
+          atualização.
+        </p>
+        <p>
+          Um PIN recusado pelo servidor não volta mais preenchido no diálogo, e
+          a recusa aparece na hora, dentro da mesma assinatura. Antes, um PIN
+          digitado errado uma vez era reenviado sem aviso nas assinaturas
+          seguintes, gastando tentativas que podem bloquear o certificado.
+        </p>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-09-11">
       <description>
         <p>
