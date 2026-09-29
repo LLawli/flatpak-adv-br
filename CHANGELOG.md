@@ -4,6 +4,41 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.1] - 2026-09-29
+
+### Corrigido
+
+- **RemoteID v0.3.0: a assinatura leva a cadeia de autoridades.** O token do
+  RemoteID tinha só o certificado do titular, sem as ACs acima dele. Isso
+  bastava para quem monta a cadeia sozinho, mas não para o assinador do
+  Projudi do TJPR: ele completa a cadeia por um caminho quebrado do lado dele,
+  mandava a assinatura só com o certificado final, e o servidor recusava com
+  "Trust anchor for certification path not found". Agora o aplicativo do
+  RemoteID baixa as ACs do próprio certificado e o token as publica ao lado
+  dele. Quem já estava com o RemoteID configurado não precisa refazer nada: a
+  cadeia é buscada na primeira vez que o aplicativo abre depois da
+  atualização.
+
+  No assinador do Projudi, o campo "Caminho PKCS11" deve apontar para o
+  `p11-kit-proxy.so` do sistema (no Ubuntu e no Pop!_OS,
+  `/usr/lib/x86_64-linux-gnu/p11-kit-proxy.so`), e não para o arquivo do
+  RemoteID dentro de `~/.var/app`.
+
+- **RemoteID v0.3.0: PIN recusado não volta mais preenchido.** O diálogo
+  guardava o PIN antes de o servidor aceitá-lo, então um PIN errado reaparecia
+  preenchido, com o cursor já no campo do código, em cada assinatura dos cinco
+  minutos seguintes. Quem errava o PIN uma vez via o diálogo pedir "só o
+  código" e continuava enviando o PIN errado, gastando tentativas que podem
+  bloquear o certificado. Agora o PIN só fica guardado depois de aceito, e uma
+  recusa reabre o diálogo na mesma assinatura, com a mensagem do servidor e o
+  PIN vazio. Esgotadas as tentativas, o PJeOffice recebe "PIN incorreto" em
+  vez de um erro genérico que ele mostrava como stack trace.
+
+### Segurança
+
+- **RemoteID v0.3.0 traz o rustls 0.23.45**, que corrige o RUSTSEC-2026-0285,
+  no transporte até o servidor da Certisign.
+
 ## [1.1.0] - 2026-09-11
 
 ### Adicionado

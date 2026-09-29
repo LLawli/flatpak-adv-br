@@ -23,4 +23,4 @@
 # a tag ainda não.
 #
 # versão  tag     commit
-0.2.0  v0.2.0  f0dfcd438236cf358a8fbf6b8d881dab5cc40ce5
+0.3.0  v0.3.0  e767c297b9b79ab285e61b5bc70a1523f819923b
