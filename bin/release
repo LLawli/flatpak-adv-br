@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
-# Solta uma release: confere, versiona, commita e cria a tag.
+# Solta uma release: confere, versiona, commita, empurra e cria a tag.
 #
-#   bin/release 0.2.0
+#   bin/release 0.2.0          pergunta antes de empurrar
+#   bin/release 0.2.0 --sim    empurra sem perguntar
 #
 # O que acontece depois de a tag chegar ao GitHub é com o workflow de release,
 # que extrai a seção desta versão do CHANGELOG.md e a usa como corpo do GitHub
 # Release. Por isso a seção precisa existir ANTES da tag: escrevê-la é a parte
 # que este script se recusa a fazer por você.
+#
+# O controle de versão é o jj, colocado sobre o git, e é por isso que este
+# script empurra, coisa que antes ficava para quem o chamava. Os commits locais
+# não são assinados (signing.behavior = "drop"): quem assina é o
+# git.sign-on-push, na saída, e assinar REESCREVE o commit. Uma tag criada
+# antes do push apontaria para o commit sem assinatura, que nunca chega ao
+# GitHub. Então a ordem é: commit, push, e só então a tag, sobre o commit que o
+# remoto recebeu.
+#
+# A tag continua sendo do git (o jj não cria tag assinada nem a empurra), e o
+# CHANGELOG.md pode chegar aqui com a seção recém-renomeada: ele entra no mesmo
+# commit da versão, como sempre entrou.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -18,8 +31,17 @@ fi
 log()  { printf '%s==>%s %s\n' "$verde" "$normal" "$1"; }
 erro() { printf '%serro:%s %s\n' "$vermelho" "$normal" "$1" >&2; exit 1; }
 
-[ $# -eq 1 ] || erro "uso: bin/release <versão>   (exemplo: bin/release 0.2.0)"
-VERSAO=$1
+USO="uso: bin/release <versão> [--sim]   (exemplo: bin/release 0.2.0)"
+VERSAO=''
+SEM_PERGUNTAR=nao
+for argumento in "$@"; do
+    case $argumento in
+        --sim) SEM_PERGUNTAR=sim ;;
+        -*) erro "$USO" ;;
+        *) [ -z "$VERSAO" ] || erro "$USO"; VERSAO=$argumento ;;
+    esac
+done
+[ -n "$VERSAO" ] || erro "$USO"
 
 # Sem o "v". A tag ganha o prefixo; o arquivo VERSAO e o CHANGELOG não têm.
 [[ $VERSAO =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
@@ -28,11 +50,24 @@ VERSAO=$1
 TAG="v$VERSAO"
 
 log "conferindo o estado do repositório"
-git rev-parse --git-dir >/dev/null 2>&1 || erro "não é um repositório git."
-[ -z "$(git status --porcelain)" ] ||
-    erro "há alterações não commitadas. Commite ou guarde antes de soltar a release."
+command -v jj >/dev/null 2>&1 || erro "falta o jj, que é o controle de versão deste repositório."
+jj root >/dev/null 2>&1 || erro "não é um repositório jj."
+# Sem staging no jj: o que estiver no working copy entra no commit da versão.
+# Só o CHANGELOG.md pode estar lá, e é o que o commit da versão sempre levou.
+alheios=$(jj diff --name-only -r @ | grep -vx 'CHANGELOG.md' || true)
+[ -z "$alheios" ] ||
+    erro "o working copy tem mudanças além do CHANGELOG.md:
+$alheios
+      Feche-as num commit (jj commit) antes de soltar a release."
 ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null ||
-    erro "a tag $TAG já existe."
+    erro "a tag $TAG já existe aqui."
+[ -z "$(git ls-remote --tags origin "refs/tags/$TAG")" ] ||
+    erro "a tag $TAG já existe no GitHub."
+# A main do remoto tem de estar na história do que vai sair: senão o push
+# não é avanço, e o jj recusaria lá no fim, depois do build inteiro.
+[ -n "$(jj log --no-graph -r 'main@origin & ::@' -T 'commit_id')" ] ||
+    erro "a main do GitHub não está na história deste working copy.
+      Rode jj git fetch e refaça os commits sobre ela."
 
 # O corpo do GitHub Release sai daqui. Uma seção ausente produziria uma release
 # vazia, que é exatamente o que este script existe para impedir.
@@ -97,17 +132,61 @@ fi
     erro "o pacote publicado não constrói; não vou marcar uma versão quebrada."
 rm -rf "$TRABALHO/conferencia"
 
-log "gravando a versão"
-printf '%s\n' "$VERSAO" > VERSAO
-git add VERSAO CHANGELOG.md
-# Assinado, como todo commit deste repositório: um commit sem assinatura no
-# meio da história é um buraco que não se tapa depois.
-git commit -q -S -m "Marca a versão $VERSAO"
+# Uma execução que parou depois do commit (sem terminal para a pergunta, ou um
+# toque que não veio) deixa o commit da versão como pai do working copy. Rodar
+# de novo retoma dali: commitar outra vez criaria um segundo "Marca a versão",
+# vazio, e é ele que levaria a tag.
+if [ "$(jj log --no-graph -r @- -T 'description.first_line()')" = "Marca a versão $VERSAO" ] &&
+    [ "$(git show "$(jj log --no-graph -r @- -T 'commit_id')":VERSAO)" = "$VERSAO" ] &&
+    [ -z "$(jj diff --name-only -r @)" ]; then
+    log "o commit da versão já existe, de uma execução anterior; seguindo dele"
+else
+    log "gravando a versão"
+    printf '%s\n' "$VERSAO" > VERSAO
+    jj commit -m "Marca a versão $VERSAO" VERSAO CHANGELOG.md >/dev/null
+fi
+jj bookmark set main -r @- >/dev/null
+
+# Cada commit que sai é assinado na YubiKey, um toque por commit. A contagem
+# vai antes, para a espera pelo toque não parecer travamento; o
+# ssh-keygen-avisando numera as notificações com ela.
+TOQUE_TOTAL=$(jj log --no-graph -r 'main@origin..main' -T 'commit_id ++ "\n"' | grep -c .)
+[ "$TOQUE_TOTAL" -ge 1 ] || erro "nada novo para empurrar, e a versão acabou de ser commitada?"
+export TOQUE_TOTAL
+printf '\n'
+jj log -r 'main@origin..main' --no-graph \
+    -T 'change_id.short() ++ "  " ++ description.first_line() ++ "\n"'
+printf '\n%s commit(s) para assinar no push, e mais um toque para a tag.\n' "$TOQUE_TOTAL"
+if [ "$SEM_PERGUNTAR" != sim ]; then
+    # Um comando lançado por outro programa, ou por um cano, não tem terminal
+    # no stdin. Rodar de novo com --sim retoma do commit da versão, sem
+    # refazê-lo.
+    [ -t 0 ] || erro "sem terminal para perguntar. Confira a lista acima e rode de novo
+      com --sim: o script retoma do commit da versão, sem refazê-lo.
+      Para desistir, jj undo desfaz o commit."
+    read -r -p "Empurrar a main e criar a tag $TAG? [s/N] " resposta
+    [ "$resposta" = s ] || [ "$resposta" = S ] ||
+        erro "nada foi empurrado. O commit da versão ficou local: jj undo desfaz."
+fi
+
+log "empurrando a main"
+jj git push --bookmark main ||
+    erro "o push falhou (toque não recebido a tempo?), e a tag não foi criada.
+      Empurre de novo com jj git push --bookmark main e crie a tag à mão."
+
+# A tag vai no commit que o GitHub recebeu, já assinado, e não no que este
+# working copy tinha antes do push. As duas conferências são o motivo da ordem.
+publicado=$(jj log --no-graph -r 'main@origin' -T 'commit_id')
+[ "$(git show "$publicado:VERSAO")" = "$VERSAO" ] ||
+    erro "o commit da main no GitHub ($publicado) não tem a versão $VERSAO."
+git cat-file -p "$publicado" | grep -q '^gpgsig ' ||
+    erro "o commit $publicado chegou ao GitHub sem assinatura; não vou marcá-lo."
 
 log "criando a tag $TAG"
 git tag -s -a "$TAG" -m "$VERSAO
 
-$corpo"
+$corpo" "$publicado"
+git push origin "$TAG"
 
-printf '\n%s==>%s pronto. Falta empurrar:\n\n    git push && git push origin %s\n\n' \
+printf '\n%s==>%s pronto: %s está no GitHub, e o workflow de release segue dali.\n\n' \
     "$verde" "$normal" "$TAG"

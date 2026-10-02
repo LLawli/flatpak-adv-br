@@ -58,5 +58,11 @@ Conventional commits, em português. A mensagem registra a decisão e o porquê;
 não repita o diff.
 
 Uma release é `bin/release X.Y.Z`, que confere o repositório, exige a seção da
-versão no `CHANGELOG.md`, versiona, commita e cria a tag. O workflow de release
-extrai essa seção do changelog e a usa como corpo do GitHub Release.
+versão no `CHANGELOG.md`, versiona, commita, empurra a `main` e cria a tag. O
+workflow de release extrai essa seção do changelog e a usa como corpo do GitHub
+Release.
+
+O script empurra antes de criar a tag, e a ordem não é estilo. O repositório
+é jj sobre git, os commits locais não são assinados, e o `git.sign-on-push`
+assina na saída, reescrevendo cada commit. Uma tag criada antes do push
+apontaria para um commit que nunca chega ao GitHub.
