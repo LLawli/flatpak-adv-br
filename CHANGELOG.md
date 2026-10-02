@@ -22,6 +22,12 @@ segue o [SemVer](https://semver.org/lang/pt-BR/).
   serviço, e um "Reautorizar" na janela antiga não valia para a assinatura
   seguinte.
 
+- **O relato leva o diagnóstico do módulo do RemoteID.** Quando um pedido de
+  assinatura não consegue chegar ao aplicativo do RemoteID, o módulo agora
+  registra isso, e o "Relatar um problema" passa a enviar as últimas linhas
+  desse registro junto das execuções do aplicativo. Antes essa falha não
+  aparecia em lugar nenhum e parecia um problema entre o PJe e o RemoteID.
+
 ## [1.1.1] - 2026-09-29
 
 ### Corrigido

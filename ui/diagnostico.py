@@ -30,6 +30,14 @@ LINHAS_DE_LOG = 60
 RUNS_DO_REMOTEID = 3
 BYTES_DO_REMOTEID = 20 * 1024
 
+# O módulo PKCS#11 do RemoteID tem um arquivo FIXO, e não um por execução: ele
+# vive dentro de cada hospedeiro (PJeOffice, Papers, navegador) e só escreve
+# quando não consegue falar com o aplicativo. É o que responde "o pedido chegou
+# ao aplicativo?", a pergunta que o relato 12 deixou sem resposta. Como só
+# cresce, entra o fim dele, e não o arquivo inteiro.
+DIAG_DO_MODULO = "modulo-pkcs11.jsonl"
+LINHAS_DO_MODULO = 20
+
 
 def versao():
     for caminho in ("/app/share/adv-br-ui/VERSAO",):
@@ -116,6 +124,19 @@ def _diag_do_remoteid():
     return existentes[0] if existentes else ""
 
 
+def _fim_do_modulo(caminho):
+    """As últimas linhas do diagnóstico do módulo PKCS#11, ou "" se não houver."""
+    try:
+        with open(caminho, encoding="utf-8", errors="replace") as arquivo:
+            linhas = arquivo.read().splitlines()
+    except FileNotFoundError:
+        return ""
+    except OSError as erro:
+        registro.falha("diagnóstico: o módulo do RemoteID", erro)
+        return ""
+    return "\n".join(l for l in linhas[-LINHAS_DO_MODULO:] if l.strip())
+
+
 def _remoteid():
     """O diagnóstico que o próprio RemoteID grava, das últimas execuções.
 
@@ -140,17 +161,22 @@ def _remoteid():
     if not raiz:
         return ""
 
+    # Só as execuções do aplicativo disputam as vagas: o arquivo do módulo é
+    # modificado a cada falha e tomaria o lugar da execução que se quer ver.
     try:
-        arquivos = sorted(glob.glob(os.path.join(raiz, "*.jsonl")),
+        arquivos = sorted(glob.glob(os.path.join(raiz, "run-*.jsonl")),
                           key=os.path.getmtime, reverse=True)
     except OSError as erro:
         registro.falha("diagnóstico: execuções do RemoteID", erro)
-        return ""
-    if not arquivos:
-        return ""
+        arquivos = []
 
     partes = []
     total = 0
+    modulo = _fim_do_modulo(os.path.join(raiz, DIAG_DO_MODULO))
+    if modulo:
+        total += len(modulo)
+        partes.append("--- remoteid/%s (últimas %d linhas)\n%s"
+                      % (DIAG_DO_MODULO, LINHAS_DO_MODULO, modulo))
     for caminho in arquivos[:RUNS_DO_REMOTEID]:
         try:
             with open(caminho, encoding="utf-8", errors="replace") as arquivo:

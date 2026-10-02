@@ -118,6 +118,26 @@ def conferir():
         limpo = sanitizar.sanitizar(diagnostico._remoteid())
         if "12345678901" in limpo:
             problemas.append("o CPF do titular sobreviveu à sanitização")
+
+        # 6. O diag do módulo entra, e entra o FIM dele. Foi o que faltou no
+        #    relato 12: os pedidos que falharam não chegaram ao aplicativo, e
+        #    só o módulo sabe disso. Ele é um arquivo fixo, o mais recente da
+        #    pasta a cada falha, e não pode tirar a vaga de uma execução.
+        pasta = _diag(os.path.join(raiz, "modulo"), [
+            json.dumps({"evento": "execucao-%d" % i}) + "\n" for i in range(3)])
+        with open(os.path.join(pasta, diagnostico.DIAG_DO_MODULO), "w",
+                  encoding="utf-8") as arquivo:
+            for i in range(diagnostico.LINHAS_DO_MODULO + 30):
+                arquivo.write(json.dumps({"evento": "assinatura.sem_app",
+                                          "n": "linha-%03d" % i}) + "\n")
+        texto = diagnostico._remoteid()
+        ultima = "linha-%03d" % (diagnostico.LINHAS_DO_MODULO + 29)
+        if ultima not in texto:
+            problemas.append("o diag do módulo não entrou no relato")
+        if "linha-000" in texto:
+            problemas.append("o diag do módulo entrou inteiro, e não o fim")
+        if not all("execucao-%d" % i in texto for i in range(3)):
+            problemas.append("o diag do módulo tirou a vaga de uma execução")
     finally:
         if salvo is None:
             os.environ.pop("REMOTEID_DIAG_DIR", None)
