@@ -26,6 +26,23 @@
   <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.1.2" date="2026-10-02">
+      <description>
+        <p>
+          Fechar a janela do RemoteID não desliga mais o assinador. Antes, o
+          certificado continuava aparecendo no PJe, mas toda assinatura falhava
+          até o RemoteID ser aberto de novo. Agora a janela só se esconde, e o
+          RemoteID segue atendendo as assinaturas. Para encerrá-lo de verdade,
+          use Sair no menu da janela.
+        </p>
+        <p>
+          Abrir o RemoteID com ele já aberto traz de volta a mesma janela, em
+          vez de criar uma segunda. E o "Relatar um problema" passa a enviar
+          também os pedidos de assinatura que não chegaram ao RemoteID, que
+          antes não ficavam registrados em lugar nenhum.
+        </p>
+      </description>
+    </release>
     <release version="1.1.1" date="2026-09-29">
       <description>
         <p>
