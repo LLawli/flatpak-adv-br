@@ -4,6 +4,24 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não publicado]
+
+### Corrigido
+
+- **RemoteID v0.3.1: fechar a janela do RemoteID não desliga mais o
+  assinador.** Fechada a janela, o aplicativo terminava. O certificado
+  continuava aparecendo no PJeOffice e no navegador, mas toda assinatura
+  falhava, e apertar "Reautorizar" só resolvia porque, para apertar, era
+  preciso abrir o aplicativo de novo. Agora fechar a janela só a esconde: o
+  RemoteID continua atendendo as assinaturas e avisa isso numa notificação na
+  primeira vez. Para encerrar de verdade, use **Sair** no menu da janela
+  (Ctrl+Q).
+
+- **RemoteID v0.3.1: abrir o RemoteID de novo traz a mesma janela.** Com ele
+  já aberto, uma nova abertura criava uma segunda janela ligada a outro
+  serviço, e um "Reautorizar" na janela antiga não valia para a assinatura
+  seguinte.
+
 ## [1.1.1] - 2026-09-29
 
 ### Corrigido
