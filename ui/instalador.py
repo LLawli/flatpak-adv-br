@@ -9,6 +9,7 @@ aplicativo. Instalar é escrever ali; desinstalar é apagar.
 import glob
 import hashlib
 import io
+import json
 import os
 import shutil
 import ssl
@@ -47,6 +48,45 @@ def instalado(componente):
     if componente.lancador:
         esperados.append(os.path.join("bin", componente.chave))
     return all(os.path.exists(os.path.join(destino, alvo)) for alvo in esperados)
+
+
+# O que foi instalado, gravado dentro do diretório do componente. É o que
+# responde "este componente é o que o catálogo pede hoje?": sem isto, um sha256
+# novo no catálogo não alcançava quem já tinha o componente, que ficava na
+# versão antiga sem aviso e sem botão (relato 13, o RemoteID 0.3.0 debaixo do
+# aplicativo 1.1.2). Ver desatualizado().
+REGISTRO = ".instalado.json"
+
+
+def _esperados(componente):
+    return [fonte.sha256 for fonte in _fontes(componente)]
+
+
+def desatualizado(componente):
+    """Instalado, mas não com o que o catálogo pede hoje.
+
+    Sem registro conta como desatualizado. É o caso de tudo o que foi
+    instalado antes de o registro existir, e não há como saber o que é: o
+    sha256 é do pacote baixado, e o pacote não fica guardado. Mostrar
+    "Atualizar" uma vez a quem talvez já esteja em dia custa um download;
+    calar custa uma correção que nunca chega.
+    """
+    if not instalado(componente):
+        return False
+    try:
+        with open(os.path.join(diretorio(componente), REGISTRO),
+                  encoding="utf-8") as arquivo:
+            gravado = json.load(arquivo)
+    except (OSError, ValueError):
+        return True
+    return not isinstance(gravado, dict) or \
+        gravado.get("sha256") != _esperados(componente)
+
+
+def _gravar_registro(componente, destino):
+    with open(os.path.join(destino, REGISTRO), "w", encoding="utf-8") as arquivo:
+        json.dump({"sha256": _esperados(componente)}, arquivo)
+        arquivo.write("\n")
 
 
 def _contexto(componente):
@@ -212,6 +252,9 @@ def instalar(componente, progresso=None):
 
         _aplicar_trocas(componente, temporario)
         _escrever_lancador(componente, temporario)
+        # Por último, dentro do temporário: o registro só existe se tudo o
+        # mais deu certo, e chega ao destino na mesma troca que os arquivos.
+        _gravar_registro(componente, temporario)
         shutil.rmtree(destino, ignore_errors=True)
         os.replace(temporario, destino)
     finally:

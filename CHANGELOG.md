@@ -4,6 +4,23 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não publicado]
+
+### Corrigido
+
+- **Um componente instalado agora recebe atualização.** Até aqui, a versão
+  nova de um componente só chegava a quem o instalava pela primeira vez: quem
+  já tinha o RemoteID continuava na versão de antes, sem aviso. Foi o que
+  aconteceu com a 1.1.2, cuja correção do RemoteID não chegou a quem já o
+  usava, e também com a 1.1.1. Agora, quando o instalado não é o que o
+  aplicativo traz, a linha dele mostra "atualização disponível" e um botão
+  **Atualizar**. Componentes instalados antes desta versão aparecem como
+  desatualizados uma vez, porque não há registro do que foi instalado; depois
+  de atualizar, o registro passa a existir. Se a atualização falhar no meio, a
+  versão anterior continua funcionando.
+
+- **O relato diz quais componentes estão desatualizados.**
+
 ## [1.1.2] - 2026-10-02
 
 ### Corrigido

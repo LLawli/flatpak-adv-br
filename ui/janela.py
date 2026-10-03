@@ -212,6 +212,13 @@ class Janela(Adw.ApplicationWindow):
         abrir.connect("clicked", self._abrir, componente)
         linha.add_suffix(abrir)
 
+        # Só quando o instalado não é o que o catálogo pede hoje. Ver
+        # instalador.desatualizado().
+        atualizar = Gtk.Button(label="Atualizar", valign=Gtk.Align.CENTER,
+                               visible=False, css_classes=["suggested-action"])
+        atualizar.connect("clicked", self._clicou_atualizar, componente)
+        linha.add_suffix(atualizar)
+
         progresso = Gtk.ProgressBar(valign=Gtk.Align.CENTER, visible=False,
                                     show_text=True, width_request=140)
 
@@ -220,7 +227,7 @@ class Janela(Adw.ApplicationWindow):
         # "posto" guarda o que o botão mostra, para o clique poder comparar
         # com o que o disco diz na hora. Ver decidir().
         return {"linha": linha, "botao": botao, "progresso": progresso,
-                "abrir": abrir, "posto": None}
+                "abrir": abrir, "atualizar": atualizar, "posto": None}
 
     def atualizar_componentes(self):
         for componente in catalogo.CATALOGO:
@@ -233,10 +240,16 @@ class Janela(Adw.ApplicationWindow):
             partes["botao"].set_sensitive(True)
             partes["botao"].set_css_classes(["destructive-action"] if posto
                                             else ["suggested-action"])
+            velho = posto and instalador.desatualizado(componente)
+            partes["atualizar"].set_visible(velho)
+            partes["atualizar"].set_label("Atualizar")
+            partes["atualizar"].set_sensitive(True)
             # O tamanho é o do download, não o do que fica em disco: o
             # SafeNet baixa 91 MB e instala 3. Quem está numa conexão medida
             # precisa saber do primeiro número antes de tocar no botão.
-            if posto:
+            if velho:
+                sufixo = " · atualização disponível"
+            elif posto:
                 sufixo = " · instalado"
             elif componente.tamanho:
                 sufixo = " · %d MB para baixar" % (
@@ -744,7 +757,26 @@ class Janela(Adw.ApplicationWindow):
         threading.Thread(target=self._instalar, args=(componente,),
                          daemon=True).start()
 
-    def _instalar(self, componente):
+    def _clicou_atualizar(self, botao, componente):
+        partes = self.linhas[componente.chave]
+        # Removido por fora desde que a janela desenhou o botão: atualizar
+        # seria instalar algo que a pessoa acabou de tirar.
+        if not instalador.instalado(componente):
+            self.atualizar_componentes()
+            self.toasts.add_toast(Adw.Toast(
+                title="O %s mudou por fora desta janela. Confira e clique de "
+                      "novo." % componente.nome))
+            return
+
+        botao.set_sensitive(False)
+        botao.set_label("Atualizando…")
+        partes["botao"].set_sensitive(False)
+        partes["progresso"].set_visible(True)
+        partes["progresso"].set_fraction(0)
+        threading.Thread(target=self._instalar, args=(componente, True),
+                         daemon=True).start()
+
+    def _instalar(self, componente, atualizando=False):
         partes = self.linhas[componente.chave]
 
         def progresso(recebido, total):
@@ -756,9 +788,9 @@ class Janela(Adw.ApplicationWindow):
         try:
             instalador.instalar(componente, progresso)
         except Exception as erro:  # noqa: BLE001
-            GLib.idle_add(self._falhou, componente, str(erro))
+            GLib.idle_add(self._falhou, componente, str(erro), atualizando)
             return
-        GLib.idle_add(self._terminou, componente)
+        GLib.idle_add(self._terminou, componente, atualizando)
 
     def _republicar(self):
         """Reescreve o que já estava publicado, depois de o catálogo mudar.
@@ -775,13 +807,23 @@ class Janela(Adw.ApplicationWindow):
         if publicador.publicado():
             publicador.publicar()
 
-    def _terminou(self, componente):
+    def _terminou(self, componente, atualizando=False):
         self.linhas[componente.chave]["progresso"].set_visible(False)
         self.atualizar_componentes()
         self._republicar()
         self.atualizar_publicacao()
         self.atualizar_tokens()
         self.atualizar_serie()
+        if atualizando:
+            # Um aplicativo aberto continua sendo o de antes até reabrir, e o
+            # RemoteID não fecha com a janela: sem este aviso, a versão nova
+            # está no disco e a velha segue atendendo.
+            titulo = "%s atualizado" % componente.nome
+            if componente.lancador:
+                titulo += ". Se ele estiver aberto, feche-o e abra de novo."
+            self.toasts.add_toast(Adw.Toast(title=titulo, timeout=8))
+            # Permissão e caminho do driver já foram oferecidos na instalação.
+            return
         self.toasts.add_toast(Adw.Toast(title="%s instalado" % componente.nome))
         # Um diálogo por vez: dois Adw.MessageDialog presentes ao mesmo tempo se
         # sobrepõem, e o de baixo só aparece quando o de cima sai, o que faz o
@@ -813,14 +855,20 @@ class Janela(Adw.ApplicationWindow):
             (pkcs11.ATALHO_DOS_ASSINADORES,),
             confirmar="Copiar caminho")
 
-    def _falhou(self, componente, mensagem):
+    def _falhou(self, componente, mensagem, atualizando=False):
         partes = self.linhas[componente.chave]
         partes["progresso"].set_visible(False)
         self.atualizar_componentes()
 
+        if atualizando:
+            # O instalador só troca o diretório no fim, com tudo conferido.
+            heading = "Não consegui atualizar o %s" % componente.nome
+            mensagem += "\n\nA versão que já estava instalada continua funcionando."
+        else:
+            heading = "Não consegui instalar o %s" % componente.nome
         dialogo = Adw.MessageDialog(
             transient_for=self,
-            heading="Não consegui instalar o %s" % componente.nome,
+            heading=heading,
             body=mensagem)
         dialogo.add_response("fechar", "Fechar")
         dialogo.present()

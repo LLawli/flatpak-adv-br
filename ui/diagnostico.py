@@ -221,7 +221,11 @@ def coletar():
         registro.falha("diagnóstico: séries do p11-kit", erro)
         escrever("p11-kit: não consegui comparar")
 
-    instalados = [c.chave for c in catalogo.CATALOGO if instalador.instalado(c)]
+    # O desatualizado vem marcado: o relato 13 chegou com o RemoteID 0.3.0
+    # debaixo do aplicativo 1.1.2, e só o diag do próprio RemoteID dizia isso.
+    instalados = ["%s (desatualizado)" % c.chave if instalador.desatualizado(c)
+                  else c.chave
+                  for c in catalogo.CATALOGO if instalador.instalado(c)]
     escrever("componentes: %s" % (", ".join(instalados) or "nenhum"))
 
     escrever("publicado: %s" % ("sim" if publicador.publicado() else "não"))

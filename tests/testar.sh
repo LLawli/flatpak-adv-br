@@ -369,6 +369,14 @@ if [ -f ui/diagnostico.py ]; then
     fi
 fi
 
+if [ -f ui/instalador.py ]; then
+    if python3 tests/prova-atualizacao.py; then
+        ok "o componente instalado sabe se está desatualizado"
+    else
+        falha "o componente instalado não sabe se está desatualizado"
+    fi
+fi
+
 if [ -f ui/adv-br-assinador ]; then
     if python3 tests/prova-assinador.py; then
         ok "todo consumidor de módulo registra antes de subir"
