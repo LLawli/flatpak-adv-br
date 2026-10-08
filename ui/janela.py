@@ -156,6 +156,8 @@ class Janela(Adw.ApplicationWindow):
         self.relato_cancelado = False
         self.relato_texto = None
         self.relato_diagnostico = None
+        self.relato_contato = None
+        self.relato_pronto = False
 
         rolagem = Gtk.ScrolledWindow(vexpand=True)
         rolagem.set_child(pagina)
@@ -577,6 +579,7 @@ class Janela(Adw.ApplicationWindow):
         self.relato_desafio = None
         self.relato_nonce = None
         self.relato_cancelado = False
+        self.relato_pronto = False
 
         caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         caixa.set_size_request(620, -1)
@@ -593,6 +596,19 @@ class Janela(Adw.ApplicationWindow):
         moldura.add_css_class("view")
         moldura.set_child(rolagem)
         caixa.append(moldura)
+
+        # Opcional: o relato sem contato continua valendo pelo diagnóstico, e
+        # exigir um e-mail afastaria justamente quem não quer se identificar.
+        # É o único campo que vai sem sanitização, e o grupo diz isso.
+        self.relato_contato = Adw.EntryRow(
+            title="E-mail para contato (opcional)",
+            input_purpose=Gtk.InputPurpose.EMAIL)
+        self.relato_contato.connect("changed", lambda *_: self._atualizar_envio())
+        grupo_contato = Adw.PreferencesGroup(
+            description="Para pedir mais detalhes e avisar quando estiver "
+                        "resolvido. Só quem mantém o aplicativo vê.")
+        grupo_contato.add(self.relato_contato)
+        caixa.append(grupo_contato)
 
         # A prévia mostra o texto EXATO que vai ser enviado, e é editável: quem
         # quiser tirar mais alguma coisa, tira. Fica recolhida porque é longa,
@@ -663,10 +679,26 @@ class Janela(Adw.ApplicationWindow):
     def _prova_pronta(self, desafio, nonce):
         self.relato_desafio = desafio
         self.relato_nonce = nonce
+        self.relato_pronto = True
         if self.relato_dialogo is not None:
             self.relato_dialogo.set_response_label("enviar", "Enviar")
-            self.relato_dialogo.set_response_enabled("enviar", True)
+        self._atualizar_envio()
         return False
+
+    def _atualizar_envio(self):
+        """Enviar só com a prova pronta e o contato vazio ou com cara de e-mail.
+
+        Um contato malformado chegaria ao serviço e seria recusado lá, depois
+        da espera; aqui a pessoa vê o campo vermelho e corrige antes.
+        """
+        valido = relator.contato_valido(self.relato_contato.get_text())
+        if valido:
+            self.relato_contato.remove_css_class("error")
+        else:
+            self.relato_contato.add_css_class("error")
+        if self.relato_dialogo is not None:
+            self.relato_dialogo.set_response_enabled(
+                "enviar", self.relato_pronto and valido)
 
     def _relato_sem_servidor(self):
         if self.relato_dialogo is not None:
@@ -692,18 +724,19 @@ class Janela(Adw.ApplicationWindow):
         # O título sai da primeira linha do que a pessoa escreveu: pedir um
         # título à parte é pedir que ela resuma antes de contar.
         titulo = (mensagem.strip().splitlines() or ["Relato sem descrição"])[0]
+        contato = self.relato_contato.get_text().strip()
 
         threading.Thread(
             target=self._enviar_relato,
-            args=(titulo, mensagem, sanitizar.sanitizar(texto)),
+            args=(titulo, mensagem, sanitizar.sanitizar(texto), contato),
             daemon=True).start()
         self.toasts.add_toast(Adw.Toast(title="Enviando o relato…"))
 
-    def _enviar_relato(self, titulo, mensagem, texto):
+    def _enviar_relato(self, titulo, mensagem, texto, contato):
         situacao, detalhe = relator.enviar(
             self.relato_desafio, self.relato_nonce,
             sanitizar.sanitizar(titulo), sanitizar.sanitizar(mensagem), texto,
-            diagnostico.versao())
+            diagnostico.versao(), contato)
         GLib.idle_add(self._relato_enviado, situacao, detalhe)
 
     def _relato_enviado(self, situacao, detalhe):

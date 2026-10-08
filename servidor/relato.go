@@ -18,6 +18,9 @@ type Relato struct {
 	Mensagem    string  `json:"mensagem"`
 	Diagnostico string  `json:"diagnostico"`
 	Versao      string  `json:"versao"`
+	// Opcional. Ver contato.go: é o único campo que não passa pela
+	// sanitização, e por isso só entra com forma de e-mail.
+	Contato string `json:"contato"`
 }
 
 // Limites de tamanho. O corpo de uma issue do GitHub para em 65536 caracteres,
@@ -34,9 +37,12 @@ const (
 // o corpo carrega a hora de recebimento, então dois relatos idênticos enviados
 // em segundos diferentes teriam impressões diferentes e a deduplicação nunca
 // pegaria nada. Foi assim na primeira versão, e o teste é que mostrou.
+//
+// O contato entra: quem reenvia o mesmo relato só para acrescentar o e-mail
+// teria o segundo envio descartado como repetido, e o e-mail se perderia.
 func Impressao(r Relato) string {
 	return Sanitizar(r.Titulo) + "\x00" + Sanitizar(r.Mensagem) + "\x00" +
-		Sanitizar(r.Diagnostico)
+		Sanitizar(r.Diagnostico) + "\x00" + strings.TrimSpace(r.Contato)
 }
 
 // Issue é o que se manda ao GitHub.
@@ -47,7 +53,9 @@ type Issue struct {
 }
 
 // Montar transforma um relato em issue, já sanitizada. Nada do que sai daqui
-// pode conter dado pessoal: é o último ponto antes de o texto sair da máquina.
+// pode conter dado pessoal, é o último ponto antes de o texto sair da máquina,
+// com uma exceção: o e-mail de contato, que a pessoa informou num campo
+// próprio para ser procurada. Ele entra só se tiver forma de e-mail.
 func Montar(r Relato, quando time.Time) Issue {
 	titulo := strings.TrimSpace(Sanitizar(r.Titulo))
 	if titulo == "" {
@@ -62,6 +70,10 @@ func Montar(r Relato, quando time.Time) Issue {
 	fmt.Fprintf(&corpo, "Recebido em %s.\n\n", quando.UTC().Format(time.RFC3339))
 	if r.Versao != "" {
 		fmt.Fprintf(&corpo, "Versão: `%s`\n\n", Sanitizar(r.Versao))
+	}
+	if contato, err := ValidarContato(r.Contato); err == nil && contato != "" {
+		fmt.Fprintf(&corpo, "Contato: `%s` (informado por quem relatou, para "+
+			"pedir mais informações e avisar quando estiver resolvido)\n\n", contato)
 	}
 
 	diagnostico := Sanitizar(r.Diagnostico)

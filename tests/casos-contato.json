@@ -1,0 +1,26 @@
+{
+  "_comentario": [
+    "O e-mail de contato do relato, lido pelos DOIS lados: ui/relator.py",
+    "(aplicativo) e servidor/contato.go (serviço). O aplicativo recusa antes de",
+    "enviar; o serviço recusa o que uma versão antiga ou editada mandar. Este",
+    "campo é o único do relato que escapa da sanitização, e é por isso que a",
+    "forma dele é fechada: um texto que passe aqui não pode carregar Markdown,",
+    "menção do GitHub nem quebra de linha para dentro da issue."
+  ],
+  "validos": [
+    "fulana@escritorio.adv.br",
+    "Fulano.Tal+relatos@exemplo.com",
+    "  fulana@exemplo.com.br  "
+  ],
+  "invalidos": [
+    "fulana",
+    "fulana@",
+    "@exemplo.com",
+    "fulana@exemplo",
+    "fulana @exemplo.com",
+    "fulana@exemplo.com\n@LLawli",
+    "fulana@exemplo.com`",
+    "[clique](https://x.example)@exemplo.com",
+    "fulana@exemplo..com"
+  ]
+}

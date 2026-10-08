@@ -12,6 +12,7 @@ mesmas regras de limpeza de novo, porque a versão do aplicativo que enviou não
 import hashlib
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -25,6 +26,22 @@ ESPERA = 30
 # máquina não vai resolver em tempo aceitável: melhor dizer isso do que deixar
 # a pessoa esperando para sempre.
 TENTATIVAS_MAXIMAS = 20000
+
+
+# O e-mail de contato, opcional, é o único campo do relato que não passa pela
+# sanitização: ele existe para chegar inteiro a quem mantém o aplicativo. Por
+# isso a forma é fechada, e é a mesma de servidor/contato.go. Os casos estão em
+# tests/casos-contato.json.
+FORMA_DO_CONTATO = re.compile(
+    r"^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
+TAMANHO_MAXIMO_CONTATO = 254
+
+
+def contato_valido(contato):
+    """Vazio vale: o contato é opcional. Preenchido, precisa ser um e-mail."""
+    contato = contato.strip()
+    return not contato or (len(contato) <= TAMANHO_MAXIMO_CONTATO
+                           and FORMA_DO_CONTATO.fullmatch(contato) is not None)
 
 
 def _origem():
@@ -78,7 +95,7 @@ def resolver(desafio, parar=None):
     return None
 
 
-def enviar(desafio, nonce, titulo, mensagem, diagnostico, versao=""):
+def enviar(desafio, nonce, titulo, mensagem, diagnostico, versao="", contato=""):
     """Envia o relato. Devolve (situação, detalhe).
 
     Situações: "publicado" com a URL, "guardado" quando o serviço aceitou mas o
@@ -87,6 +104,7 @@ def enviar(desafio, nonce, titulo, mensagem, diagnostico, versao=""):
     corpo = json.dumps({
         "desafio": desafio, "nonce": nonce, "titulo": titulo,
         "mensagem": mensagem, "diagnostico": diagnostico, "versao": versao,
+        "contato": contato.strip(),
     }).encode("utf-8")
 
     pedido = urllib.request.Request(

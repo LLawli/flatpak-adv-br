@@ -128,6 +128,13 @@ func (s *Servico) relato(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Antes da prova, que é o passo caro: um contato malformado se recusa de
+	// graça, e a pessoa corrige e reenvia.
+	if _, err := ValidarContato(pedido.Contato); err != nil {
+		responder(w, http.StatusBadRequest, mapa{"erro": err.Error()})
+		return
+	}
+
 	// A verificação é o único ponto caro daqui, em memória e em CPU. Quem
 	// chega além do limite espera; quem espera demais recebe um "tente de
 	// novo", que é melhor que o serviço inteiro cair.

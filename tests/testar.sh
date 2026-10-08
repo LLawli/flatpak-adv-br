@@ -329,6 +329,14 @@ if [ -f ui/publicador.py ]; then
     fi
 fi
 
+if [ -f ui/relator.py ]; then
+    if python3 tests/prova-contato.py; then
+        ok "o e-mail de contato do relato, igual ao do serviço"
+    else
+        falha "o e-mail de contato do relato, igual ao do serviço"
+    fi
+fi
+
 if [ -f ui/publicador.py ]; then
     if python3 tests/prova-modulos.py; then
         ok "os .module ficam de fora dos serviços da sessão gráfica"
