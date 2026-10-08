@@ -330,6 +330,14 @@ if [ -f ui/publicador.py ]; then
 fi
 
 if [ -f ui/publicador.py ]; then
+    if python3 tests/prova-modulos.py; then
+        ok "os .module ficam de fora dos serviços da sessão gráfica"
+    else
+        falha "os .module ficam de fora dos serviços da sessão gráfica"
+    fi
+fi
+
+if [ -f ui/publicador.py ]; then
     if python3 tests/prova-serpro.py; then
         ok "a lista de drivers do Assinador Serpro, pela interface"
     else

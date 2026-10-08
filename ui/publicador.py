@@ -59,6 +59,107 @@ LISTA_SERPRO = os.path.expanduser("~/.signer/drivers.properties")
 # devolve.
 CHAVE_SERPRO = "advbr-p11-kit"
 
+
+# Os programas que nunca carregam os drivers publicados aqui.
+#
+# Um .module em ~/.config/pkcs11/modules não vale só para o navegador: vale
+# para todo processo da sessão que passe pelo p11-kit, e os serviços do
+# ambiente gráfico passam. Ao carregar um módulo nosso, cada um deles dispara
+# um "flatpak run", e isso derrubou duas máquinas de jeitos diferentes:
+#
+#   Fedora 44, GNOME   o login travava depois da senha. O gsd-smartcard sobe
+#                      junto da sessão e espera o "flatpak run", que depende
+#                      do xdg-desktop-portal, que depende da sessão estar de
+#                      pé. A sessão nunca terminava de subir.
+#   Ubuntu 26.04       o gsd-smartcard caía com segfault a cada 8 segundos,
+#                      durante horas, abrindo cinco sandboxes por vez.
+#
+# A lista é de quem fica de fora, e não de quem entra, de propósito. Quem
+# precisa enxergar o token é um conjunto aberto: cada navegador e cada fork,
+# o Assinador Serpro (que roda como java), LibreOffice, Okular, o próprio
+# p11-kit. Uma lista de entrada deixaria de fora, em silêncio, o navegador que
+# ninguém previu, e é o mesmo erro que navegadores() existe para não cometer.
+# Quem fica de fora são os serviços que carregam os módulos sem que ninguém
+# peça. Os três primeiros foram medidos numa sessão GNOME do Fedora 44 (ver
+# docs/ARMADILHAS.md); o csd-smartcard é o mesmo código no Cinnamon, e o
+# gnome-shell e o gnome-keyring-daemon não carregaram na medição, mas são os
+# que o relato apontou e não têm por que enxergar token nenhum.
+#
+# O p11-kit compara cada nome com o nome do executável do processo, e o
+# módulo de quem casar nem chega a ser iniciado.
+FORA_DA_SESSAO = (
+    "gsd-smartcard",
+    "gnome-software",
+    "gvfsd-http",
+    "csd-smartcard",
+    "gnome-shell",
+    "gnome-keyring-daemon",
+)
+
+# O comentário que marca a linha disable-in como nossa. Uma linha enable-in ou
+# disable-in sem ele foi escrita por quem usa, e sobrevive à republicação: quem
+# editou o arquivo para salvar o próprio login não pode ter a edição desfeita
+# em silêncio da próxima vez que instalar um componente.
+MARCA_RESTRICAO = "# Os serviços da sessão gráfica não carregam este driver."
+
+
+def _restricoes(arquivo):
+    """As linhas enable-in/disable-in que o .module deve levar.
+
+    As de quem usa, se ele tiver editado o arquivo; senão, a nossa.
+    """
+    try:
+        with open(arquivo, encoding="utf-8") as f:
+            linhas = f.read().splitlines()
+    except OSError:
+        linhas = []
+    proprias = [linha for i, linha in enumerate(linhas)
+                if linha.startswith(("enable-in:", "disable-in:"))
+                and (i == 0 or linhas[i - 1] != MARCA_RESTRICAO)]
+    if proprias:
+        return proprias
+    return [MARCA_RESTRICAO, "disable-in: " + ", ".join(FORA_DA_SESSAO)]
+
+
+def escrever_modulos(feito):
+    """Escreve um .module por driver instalado e apaga o dos que saíram."""
+    destino = modulos_do_host()
+    try:
+        os.makedirs(destino, exist_ok=True)
+    except OSError as erro:
+        feito["erros"].append("não consegui criar %s: %s" % (destino, erro))
+        return False
+
+    # Um .module por driver, e não um só para todos: um driver que derrube o
+    # processo que o carregou leva junto apenas a si mesmo. E cada um vira um
+    # processo separado, iniciado sob demanda pelo p11-kit do host.
+    vivos = set()
+    for caminho in pkcs11.modulos_instalados():
+        nome = PREFIXO + os.path.splitext(os.path.basename(caminho))[0]
+        arquivo = os.path.join(destino, nome + ".module")
+        restricoes = _restricoes(arquivo)
+        try:
+            with open(arquivo, "w", encoding="utf-8") as f:
+                f.write(
+                    "# Escrito pelo %s.\n"
+                    "# O p11-kit inicia este comando sob demanda e conversa com ele\n"
+                    "# pelo pipe; do outro lado está o driver, dentro do Flatpak.\n"
+                    "remote: |flatpak run --command=adv-br-pkcs11 %s %s\n"
+                    % (APP_ID, APP_ID, caminho))
+                f.write("\n".join(restricoes) + "\n")
+            feito["modulos"].append(nome)
+            vivos.add(nome + ".module")
+        except OSError as erro:
+            feito["erros"].append("não consegui escrever %s: %s" % (arquivo, erro))
+
+    # Um .module de driver que já não existe faria o p11-kit tentar abri-lo a
+    # cada abertura de navegador, e falhar.
+    for arquivo in glob.glob(os.path.join(destino, PREFIXO + "*.module")):
+        if os.path.basename(arquivo) not in vivos:
+            os.unlink(arquivo)
+    return True
+
+
 def _config():
     return os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
 
@@ -171,38 +272,8 @@ def publicar():
     feito = {"modulos": [], "bancos": [], "erros": [], "serpro": False,
              "sandbox_client": set(), "sandbox_assinador": set()}
 
-    destino = modulos_do_host()
-    try:
-        os.makedirs(destino, exist_ok=True)
-    except OSError as erro:
-        feito["erros"].append("não consegui criar %s: %s" % (destino, erro))
+    if not escrever_modulos(feito):
         return feito
-
-    # Um .module por driver, e não um só para todos: um driver que derrube o
-    # processo que o carregou leva junto apenas a si mesmo. E cada um vira um
-    # processo separado, iniciado sob demanda pelo p11-kit do host.
-    vivos = set()
-    for caminho in pkcs11.modulos_instalados():
-        nome = PREFIXO + os.path.splitext(os.path.basename(caminho))[0]
-        arquivo = os.path.join(destino, nome + ".module")
-        try:
-            with open(arquivo, "w", encoding="utf-8") as f:
-                f.write(
-                    "# Escrito pelo %s.\n"
-                    "# O p11-kit inicia este comando sob demanda e conversa com ele\n"
-                    "# pelo pipe; do outro lado está o driver, dentro do Flatpak.\n"
-                    "remote: |flatpak run --command=adv-br-pkcs11 %s %s\n"
-                    % (APP_ID, APP_ID, caminho))
-            feito["modulos"].append(nome)
-            vivos.add(nome + ".module")
-        except OSError as erro:
-            feito["erros"].append("não consegui escrever %s: %s" % (arquivo, erro))
-
-    # Um .module de driver que já não existe faria o p11-kit tentar abri-lo a
-    # cada abertura de navegador, e falhar.
-    for arquivo in glob.glob(os.path.join(destino, PREFIXO + "*.module")):
-        if os.path.basename(arquivo) not in vivos:
-            os.unlink(arquivo)
 
     proxy = pkcs11.proxy_do_host()
     if not proxy:

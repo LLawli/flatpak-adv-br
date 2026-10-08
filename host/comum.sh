@@ -20,6 +20,31 @@ erro()   { printf '\033[1;31m ✗\033[0m %s\n' "$*" >&2; exit 1; }
 MODULOS_HOST="${XDG_CONFIG_HOME:-$HOME/.config}/pkcs11/modules"
 PREFIXO_MODULO=adv-br-
 
+# Os programas que nunca carregam os drivers publicados. Os serviços da sessão
+# gráfica carregam todo .module do usuário na subida, e cada módulo nosso vira
+# um "flatpak run" que depende da sessão já estar de pé: no GNOME isso travou o
+# login. A lista é a mesma de FORA_DA_SESSAO em ui/publicador.py, e o
+# tests/testar.sh confere que as duas não divergem.
+FORA_DA_SESSAO="gsd-smartcard, gnome-software, gvfsd-http, csd-smartcard, gnome-shell, gnome-keyring-daemon"
+MARCA_RESTRICAO="# Os serviços da sessão gráfica não carregam este driver."
+
+# As linhas enable-in/disable-in que um .module deve levar: as que a pessoa
+# escreveu, se editou o arquivo, ou a nossa. A nossa é a que vem logo depois
+# da MARCA_RESTRICAO; qualquer outra é dela, e sobrevive à republicação.
+restricoes_do_modulo() {
+    local arquivo=$1 proprias=""
+    if [ -f "$arquivo" ]; then
+        proprias=$(awk -v marca="$MARCA_RESTRICAO" '
+            /^(enable|disable)-in:/ && anterior != marca { print }
+            { anterior = $0 }' "$arquivo")
+    fi
+    if [ -n "$proprias" ]; then
+        printf '%s\n' "$proprias"
+    else
+        printf '%s\ndisable-in: %s\n' "$MARCA_RESTRICAO" "$FORA_DA_SESSAO"
+    fi
+}
+
 # Wrappers de native messaging, e o nome com que os módulos aparecem no banco
 # NSS de cada navegador.
 BIN_HOST="$HOME/.local/bin"

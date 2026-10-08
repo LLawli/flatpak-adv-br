@@ -165,6 +165,17 @@ class Janela(Adw.ApplicationWindow):
         self.toasts.set_child(caixa)
         self.set_content(self.toasts)
 
+        # Quem atualizou o aplicativo continua com os .module da versão de
+        # antes até alguém publicar de novo, e os de antes da 1.1.4 deixam os
+        # serviços da sessão carregarem os drivers, o que trava o login do
+        # GNOME. Reescrevê-los ao abrir não decide nada por quem usa: só toca
+        # no que já estava publicado, e mantém o que a pessoa editou.
+        if publicador.publicado():
+            feito = {"modulos": [], "erros": []}
+            publicador.escrever_modulos(feito)
+            for erro in feito["erros"]:
+                registro.registrar("ao reescrever os módulos: %s", erro)
+
         self.atualizar_componentes()
         self.atualizar_publicacao()
         self.atualizar_tokens()

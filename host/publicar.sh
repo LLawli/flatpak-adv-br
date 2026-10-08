@@ -253,12 +253,16 @@ declare -A VIVOS=()
 while IFS=$'\t' read -r rotulo biblioteca; do
     [ -n "$rotulo" ] || continue
     VIVOS[$PREFIXO_MODULO$rotulo.module]=1
+    arquivo="$MODULOS_HOST/$PREFIXO_MODULO$rotulo.module"
+    # Lidas antes de abrir o arquivo para escrita, que o esvazia.
+    restricoes=$(restricoes_do_modulo "$arquivo")
     {
         printf '# Escrito por %s (host/publicar.sh).\n' "$APP_ID"
         printf '# O p11-kit inicia este comando sob demanda e conversa com ele pelo\n'
         printf '# pipe; do outro lado está o driver, dentro do Flatpak.\n'
         printf 'remote: |flatpak run --command=adv-br-pkcs11 %s %s\n' "$APP_ID" "$biblioteca"
-    } > "$MODULOS_HOST/$PREFIXO_MODULO$rotulo.module"
+        printf '%s\n' "$restricoes"
+    } > "$arquivo"
     ok "$rotulo"
 done <<<"$MODULOS"
 

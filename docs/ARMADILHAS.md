@@ -672,3 +672,39 @@ O p11-kit imprime isso quando um driver diz que o cartão presente na leitora n�
 que o token tem. Um token com a flag `user-pin-final-try` é bloqueado pela
 tentativa seguinte. Listar tokens não exige login: pare aí. É por isso que as
 provas deste repositório nunca autenticam.
+
+## Um `.module` do usuário vale para a sessão inteira, não só para o navegador
+
+Medido em 08/10/2026 numa VM Fedora 44 Workstation (gnome-shell 50.5, p11-kit
+0.26.5), depois de dois relatos: no Fedora o login do GNOME travou depois da
+senha, e no Ubuntu 26.04 o `gsd-smartcard` caiu com segfault a cada 8 segundos
+durante horas. Com um espião no `remote:` anotando o executável do processo pai,
+estes carregaram os drivers publicados sem que ninguém pedisse:
+
+| processo | quando |
+|---|---|
+| `gsd-smartcard` | no login, e mantém a ponte aberta a sessão toda |
+| `gnome-software` | no login, como serviço em segundo plano |
+| `gvfsd-http` | quando qualquer programa abre um `https://` pelo GIO |
+| `firefox` | seis processos por abertura, pelo banco NSS do sistema |
+
+Cada carga é um `flatpak run`, e o primeiro, o do `gsd-smartcard`, é o que faz
+o `xdg-desktop-portal` subir. Na VM isso se resolveu em dois segundos; na
+máquina do relato, a sessão ficou esperando. O `gsd-smartcard` ainda registra
+`escape_object_path: assertion 'unescaped_string != NULL' failed` com os nossos
+slots, e no Ubuntu é esse nome nulo que vira o segfault em `libgio`.
+
+**O que engana:** o relato apontava o `gnome-shell` e o `gnome-keyring-daemon`,
+e nenhum dos dois carregou. O caminho largo é o GnuTLS do glib-networking: o
+`gnome-software` tem `libgiognutls.so`, `libgnutls` e `libp11-kit` mapeados, e
+todo programa GTK que fala HTTPS passa por ali.
+
+**O que resolveu:** `disable-in:` com os nomes dos executáveis. O p11-kit nem
+inicia o módulo para quem casar (vírgula ou espaço separam os nomes), e na VM
+só o Firefox continuou carregando. A lista é de quem fica de fora, e não de
+quem entra, porque quem precisa do token é um conjunto aberto de navegadores e
+forks; o preço é que um serviço novo que fale TLS pelo GIO só aparece quando
+alguém relata. Uma linha `enable-in`/`disable-in` escrita à mão é preservada na
+republicação, e a nossa é a que vem depois do comentário-marca. Ver
+`tests/prova-modulos.py`, que roda o p11-kit de verdade por um symlink com o
+nome de cada serviço.
