@@ -53,8 +53,8 @@ megabytes, e o servidor não precisa baixar o SDK do Go nem gastar os núcleos
 que tem:
 
 ```sh
-docker build -t adv-br-servico:0.2.0 servidor/
-docker save adv-br-servico:0.2.0 | ssh vps 'docker load'
+docker build -t adv-br-servico:0.3.0 servidor/
+docker save adv-br-servico:0.3.0 | ssh vps 'docker load'
 ```
 
 ## 4. O compose
@@ -152,6 +152,34 @@ segundo com o primeiro passando diz exatamente onde olhar.
 Vale também fazer o caminho que **precisa** falhar: publicar assinando com
 outra chave e confirmar que o cliente recusa. A mensagem que ele dá nesse caso
 engana, e está registrada em `docs/ui.md`.
+
+## Atualizar o serviço
+
+Quando o aplicativo passa a mandar um campo novo no relato, o serviço sobe
+**antes** do aplicativo. O serviço antigo ignora em silêncio o campo que não
+conhece, e quem atualizasse primeiro perderia o que preencheu sem aviso. Foi o
+caso do e-mail de contato, na 0.3.0 do serviço e na 1.1.4 do aplicativo.
+
+```sh
+docker build -t adv-br-servico:0.3.0 servidor/
+docker save adv-br-servico:0.3.0 | ssh vps 'docker load'
+ssh vps 'cd ~/totalidade/apps/adv-br &&
+    cp compose.yaml compose.yaml.antes-0.3.0 &&
+    sed -i "s/adv-br-servico:0.2.0/adv-br-servico:0.3.0/" compose.yaml &&
+    docker compose up -d && docker compose logs --tail=8'
+```
+
+A cópia do compose é a volta: `cp compose.yaml.antes-0.3.0 compose.yaml` e
+`docker compose up -d` trazem a imagem anterior, que continua carregada. Nos
+logs, de novo, procure pelo aviso da fila. Para provar que é a versão nova sem
+criar issue, mande um pedido que só ela recusa: na 0.3.0, um contato malformado
+volta 400 antes da prova de trabalho.
+
+```sh
+curl -s -H 'Content-Type: application/json' \
+    -d '{"titulo":"x","contato":"isto não é e-mail"}' \
+    https://flatpak.lukakuuhaku.dev/api/relato
+```
 
 ## O que este deploy não protege
 

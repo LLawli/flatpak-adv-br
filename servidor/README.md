@@ -64,7 +64,7 @@ cada serviço pelo nome do container. Este segue o mesmo padrão, em
 ```yaml
 services:
   adv-br:
-    image: adv-br-servico:0.2.0
+    image: adv-br-servico:0.3.0
     user: "1001:1001"
     networks: [proxy_net]
     expose: ["8080"]
@@ -110,8 +110,8 @@ A imagem é construída na máquina de quem desenvolve e vai pronta, porque a VP
 tem dois núcleos e nada a ganhar baixando o SDK do Go:
 
 ```sh
-docker build -t adv-br-servico:0.2.0 servidor/
-docker save adv-br-servico:0.2.0 | ssh vps 'docker load'
+docker build -t adv-br-servico:0.3.0 servidor/
+docker save adv-br-servico:0.3.0 | ssh vps 'docker load'
 ```
 
 O token do GitHub fica em `secrets/github`, com permissão 600, e entra por
