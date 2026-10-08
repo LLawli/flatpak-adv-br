@@ -26,6 +26,28 @@
   <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.1.4" date="2026-10-08">
+      <description>
+        <p>
+          Corrige o login do GNOME que travava depois da senha, e o serviço de
+          smartcard do GNOME que caía sem parar. Os serviços da sessão gráfica
+          carregavam os drivers do aplicativo sem que ninguém pedisse. Agora
+          só os navegadores e os programas que você usa para assinar os
+          carregam. Abra o aplicativo uma vez depois de atualizar: é nesse
+          momento que a correção é aplicada.
+        </p>
+        <p>
+          Quem usa o RemoteID deve atualizá-lo pelo botão Atualizar. A versão
+          nova não guarda mais no computador os dados pessoais do certificado,
+          como nome, RG e data de nascimento.
+        </p>
+        <p>
+          Ao relatar um problema, você pode deixar um e-mail para contato,
+          para receber pedidos de mais detalhes e o aviso de quando estiver
+          resolvido.
+        </p>
+      </description>
+    </release>
     <release version="1.1.3" date="2026-10-03">
       <description>
         <p>
