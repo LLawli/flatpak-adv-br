@@ -19,6 +19,20 @@ import re
 # A ordem importa: o rótulo inteiro vem antes da regra de CPF, senão sobra o
 # nome sozinho, que continua identificando a pessoa.
 LIMPEZAS = [
+    # O diagnóstico do RemoteID grava a resposta da Certisign inteira, e ela
+    # traz os dados do certificado em campos com nome: titular, RG, data de
+    # nascimento, serial. Nenhum deles tem forma própria que uma regra abaixo
+    # reconheça (o serial tem 32 dígitos hexadecimais, curto para a da
+    # impressão digital), e foi assim que um relato chegou com o nome, o RG e
+    # o nascimento de quem o enviou. Aqui o que se reconhece é o NOME do campo,
+    # e o valor some inteiro. O nome do campo fica: ele diz ao diagnóstico que
+    # o dado veio, sem dizer qual era.
+    ("campo", re.compile(
+        r'"(titular|rg|dataNascimento|numeroSerie|serialNumber|cert_key|'
+        r'tituloEleitor|pisPasep|cei|responsavelCnpj|nomeEmpresarial|upn|'
+        r'municipioEleitoral|zonaEleitoral|secaoEleitoral|desktopCode|'
+        r'signatureBase64)"\s*:\s*("(?:[^"\\]|\\.)*"|-?\d+)'),
+     r'"\1":"[REDIGIDO]"'),
     ("titular", re.compile(r"[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ\s.'-]{4,}:\d{11}"),
      "[TITULAR]"),
     ("cpf", re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b"), "[CPF]"),

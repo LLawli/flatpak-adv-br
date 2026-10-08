@@ -19,7 +19,16 @@ var limpezas = []struct {
 	achar *regexp.Regexp
 	por   string
 }{
-	// Primeiro o rótulo inteiro: NOME DA PESSOA:12345678901. Precisa vir antes
+	// O diagnóstico do RemoteID grava a resposta da Certisign inteira, com os
+	// dados do certificado em campos com nome: titular, RG, data de
+	// nascimento, serial. Nenhum tem forma própria que uma regra abaixo
+	// reconheça, então o que se reconhece é o nome do campo, e o valor some
+	// inteiro. A lista é a mesma de ui/sanitizar.py.
+	{"campo", regexp.MustCompile(`"(titular|rg|dataNascimento|numeroSerie|serialNumber|cert_key|` +
+		`tituloEleitor|pisPasep|cei|responsavelCnpj|nomeEmpresarial|upn|` +
+		`municipioEleitoral|zonaEleitoral|secaoEleitoral|desktopCode|` +
+		`signatureBase64)"\s*:\s*("(?:[^"\\]|\\.)*"|-?\d+)`), `"${1}":"[REDIGIDO]"`},
+	// Depois o rótulo inteiro: NOME DA PESSOA:12345678901. Precisa vir antes
 	// da regra de CPF, senão sobra o nome sozinho, que continua identificando.
 	{"titular", regexp.MustCompile(`[\p{Lu}][\p{Lu}\s.'-]{4,}:\d{11}`), "[TITULAR]"},
 	{"cpf", regexp.MustCompile(`\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b`), "[CPF]"},

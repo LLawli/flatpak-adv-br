@@ -59,6 +59,18 @@
       "fica": ["serial", "do token"]
     },
     {
+      "nome": "certificado na resposta do RemoteID",
+      "entrada": "{\"body\":{\"certificate\":{\"cpf\":\"98765432100\",\"dataNascimento\":631152000000,\"emissor\":\"AC OAB G3\",\"numeroSerie\":\"0A1B2C3D4E5F60718293A4B5C6D7E8F9\",\"orgaoExpedidor\":\"SSP\",\"rg\":\"11223344\",\"titular\":\"FULANA DE TAL\",\"tituloEleitor\":\"123456789012\",\"ufExpedidor\":\"SP\",\"validoAte\":1819994667000},\"idArray\":[{\"id\":\"0\",\"signatureBase64\":\"QUJDREVGR0hJSktM\",\"status\":true}]},\"evento\":\"http.response\",\"status\":200}",
+      "some": ["98765432100", "631152000000", "0A1B2C3D4E5F60718293A4B5C6D7E8F9", "11223344", "FULANA", "123456789012", "QUJDREVGR0hJSktM"],
+      "fica": ["AC OAB G3", "http.response", "\"status\":200", "validoAte", "\"titular\":", "\"rg\":"]
+    },
+    {
+      "nome": "serial do certificado no pedido e na chave da sessao",
+      "entrada": "{\"body\":{\"desktopCode\":\"00000000-1111-2222-3333-444444444444\",\"issue\":\"CN=AC OAB G3, O=ICP-Brasil, C=BR\",\"serialNumber\":\"0A1B2C3D4E5F60718293A4B5C6D7E8F9\"},\"cert_key\":\"0A1B2C3D4E5F60718293A4B5C6D7E8F9;CN=AC OAB G3\",\"evento\":\"assinatura.sessao_nova\"}",
+      "some": ["0A1B2C3D4E5F60718293A4B5C6D7E8F9", "00000000-1111-2222-3333-444444444444"],
+      "fica": ["CN=AC OAB G3, O=ICP-Brasil, C=BR", "assinatura.sessao_nova", "\"serialNumber\":"]
+    },
+    {
       "nome": "o diagnostico util sobrevive inteiro",
       "entrada": "18:20:45 pkcs11: C_GetSlotList devolveu 0x30; serie do host 0.25, do pacote 0.26",
       "some": [],
