@@ -4,6 +4,50 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.4] - 2026-10-08
+
+### Corrigido
+
+- **O login do GNOME não trava mais, e o serviço de smartcard não cai.** Os
+  drivers publicados para os navegadores ficam em `~/.config/pkcs11/modules`,
+  e tudo o que ali está vale para todo programa da sessão, não só para o
+  navegador. Os serviços do GNOME carregavam os drivers sozinhos no login,
+  cada um abrindo o aplicativo por trás. No Fedora 44 isso deixou o login
+  parado depois da senha; no Ubuntu 26.04, o `gsd-smartcard` caiu a cada 8
+  segundos durante horas.
+
+  Medido numa máquina virtual com o GNOME 50: carregavam os drivers o
+  `gsd-smartcard`, o `gnome-software` e o `gvfsd-http`. Agora cada driver
+  publicado fica de fora desses serviços, do `csd-smartcard` do Cinnamon, do
+  `gnome-shell` e do `gnome-keyring-daemon`. Os navegadores continuam
+  enxergando o certificado como antes.
+
+  **Abra o aplicativo uma vez depois de atualizar.** É ao abrir que os
+  arquivos de quem já tinha publicado são reescritos. Se você editou um desses
+  arquivos à mão para acrescentar `enable-in` ou `disable-in`, a sua linha é
+  mantida.
+
+- **RemoteID v0.3.2.** A tela de configurações do RemoteID deixa de encher o
+  log com um aviso do GTK. Atualize pelo botão **Atualizar** na linha do
+  RemoteID.
+
+### Segurança
+
+- **O diagnóstico do RemoteID não guarda mais os dados pessoais do
+  certificado.** Até a v0.3.1 ele gravava no computador a resposta inteira da
+  Certisign, com nome, RG, data de nascimento e serial do certificado, e um
+  relato chegou com tudo isso. A v0.3.2 redige esses dados já no disco.
+- **O relato tira esses dados mesmo de quem ainda não atualizou o RemoteID.**
+  A limpeza do aplicativo e a do serviço de relatos passam a reconhecer os
+  campos do certificado pelo nome.
+
+### Adicionado
+
+- **E-mail para contato no relato, opcional.** Serve para quem mantém o
+  aplicativo pedir mais detalhes e avisar quando o problema estiver resolvido,
+  e só essas pessoas o veem. É o único campo do relato que não passa pela
+  limpeza de dados pessoais, e por isso só é aceito com forma de e-mail.
+
 ## [1.1.3] - 2026-10-03
 
 ### Corrigido
