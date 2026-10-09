@@ -290,10 +290,7 @@ def publicar():
         except OSError as erro:
             feito["erros"].append("Assinador Serpro: %s" % erro)
 
-    try:
-        _publicar_assinadores(feito)
-    except OSError as erro:
-        feito["erros"].append("assinadores: %s" % erro)
+    escrever_assinadores(feito)
 
     for banco in nssdb.bancos(_raizes_de_banco()):
         try:
@@ -579,6 +576,20 @@ def _atalho(chave, casa, id_flatpak):
         arquivo.write("#!/bin/sh\n# Escrito pelo %s.\n%s" % (APP_ID, comando))
     os.chmod(caminho, 0o755)
     return caminho
+
+
+def escrever_assinadores(feito):
+    """Manifestos e atalhos dos assinadores instalados, nos navegadores achados.
+
+    Separado de publicar() pelo mesmo motivo de escrever_modulos(): a janela
+    reescreve isto ao abrir, para quem já tinha publicado, e é assim que uma
+    correção de onde o manifesto mora chega a quem atualizou.
+    """
+    feito.setdefault("sandbox_assinador", set())
+    try:
+        _publicar_assinadores(feito)
+    except OSError as erro:
+        feito["erros"].append("assinadores: %s" % erro)
 
 
 def _publicar_assinadores(feito):

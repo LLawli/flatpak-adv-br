@@ -12,6 +12,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, "ui")
+import instalador  # noqa: E402
 import publicador  # noqa: E402
 
 
@@ -164,5 +165,70 @@ def main():
         shutil.rmtree(casa, ignore_errors=True)
 
 
+def migracao():
+    """Quem atualiza tem o manifesto no .config, e abrir a janela o leva ao lugar.
+
+    É o caminho do relato 16: Firefox de instalação nova no Fedora 44, perfil
+    em ~/.config/mozilla/firefox, manifesto do adv-br em
+    ~/.config/mozilla/native-messaging-hosts, e o Firefox executando o
+    WebSigner do sistema. A janela chama escrever_assinadores() ao abrir.
+    """
+    casa = tempfile.mkdtemp(prefix="prova-migracao.")
+    antes = {v: os.environ.get(v) for v in ("HOME", "XDG_DATA_HOME")}
+    originais = (instalador.instalado, instalador.diretorio)
+    falhas = 0
+    try:
+        os.environ["HOME"] = casa
+        os.environ["XDG_DATA_HOME"] = os.path.join(casa, ".local/share")
+        montar(casa, ".config/mozilla/firefox", "firefox")
+
+        componente = os.path.join(casa, "componente")
+        os.makedirs(os.path.join(componente, "native-messaging"))
+        with open(os.path.join(componente, "native-messaging",
+                               "br.com.softplan.webpki.firefox.json"), "w") as f:
+            json.dump({"name": "br.com.softplan.webpki", "path": "/opt/x"}, f)
+        instalador.instalado = lambda c: c.chave == "websigner"
+        instalador.diretorio = lambda c: componente
+
+        velho = os.path.join(casa, ".config/mozilla/native-messaging-hosts")
+        os.makedirs(velho)
+        with open(os.path.join(velho, "br.com.softplan.webpki.json"), "w") as f:
+            f.write('{"path": "%s/.local/bin/%swebsigner"}' % (casa, publicador.PREFIXO))
+        # De outro programa: não é nosso, e fica.
+        with open(os.path.join(velho, "outro.json"), "w") as f:
+            f.write('{"path": "/usr/bin/outro"}')
+
+        feito = {"modulos": [], "erros": []}
+        publicador.escrever_assinadores(feito)
+
+        novo = os.path.join(casa, ".mozilla/native-messaging-hosts/br.com.softplan.webpki.json")
+        checagens = [
+            (os.path.isfile(novo), "o manifesto foi para ~/.mozilla/native-messaging-hosts"),
+            (not os.path.exists(os.path.join(velho, "br.com.softplan.webpki.json")),
+             "o manifesto antigo, no .config, foi apagado"),
+            (os.path.exists(os.path.join(velho, "outro.json")),
+             "o manifesto de outro programa ficou onde estava"),
+            (not feito["erros"], "sem erros: %s" % feito["erros"]),
+        ]
+        if os.path.isfile(novo):
+            with open(novo, encoding="utf-8") as f:
+                caminho = json.load(f).get("path", "")
+            checagens.append((os.access(caminho, os.X_OK),
+                              "o manifesto aponta para um atalho executável"))
+        for certo, mensagem in checagens:
+            print(("  ok  " if certo else "  ERRO ") + mensagem)
+            falhas += 0 if certo else 1
+    finally:
+        instalador.instalado, instalador.diretorio = originais
+        for variavel, valor in antes.items():
+            if valor is None:
+                os.environ.pop(variavel, None)
+            else:
+                os.environ[variavel] = valor
+        shutil.rmtree(casa, ignore_errors=True)
+    return falhas
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    falhou = [main(), migracao()]
+    sys.exit(1 if any(falhou) else 0)

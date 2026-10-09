@@ -172,11 +172,15 @@ class Janela(Adw.ApplicationWindow):
         # serviços da sessão carregarem os drivers, o que trava o login do
         # GNOME. Reescrevê-los ao abrir não decide nada por quem usa: só toca
         # no que já estava publicado, e mantém o que a pessoa editou.
+        #
+        # Os manifestos dos assinadores, pelo mesmo motivo: até a 1.1.4, com o
+        # perfil do Firefox no .config, eles iam para onde o Firefox não lê.
         if publicador.publicado():
             feito = {"modulos": [], "erros": []}
             publicador.escrever_modulos(feito)
+            publicador.escrever_assinadores(feito)
             for erro in feito["erros"]:
-                registro.registrar("ao reescrever os módulos: %s", erro)
+                registro.registrar("ao reescrever o que foi publicado: %s", erro)
 
         self.atualizar_componentes()
         self.atualizar_publicacao()
