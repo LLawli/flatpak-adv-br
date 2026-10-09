@@ -347,8 +347,10 @@ def despublicar():
     # lista de vivos vazia.
     for casa, id_flatpak in _casas():
         for caminho, familia in navegadores(casa):
-            destino = native_messaging(caminho, familia)
-            for arquivo in glob.glob(os.path.join(destino, "*.json")):
+            pastas = (native_messaging(caminho, familia, casa),
+                      _onde_ficava(caminho, familia, casa))
+            for arquivo in [a for p in pastas if p
+                            for a in glob.glob(os.path.join(p, "*.json"))]:
                 try:
                     with open(arquivo, encoding="utf-8") as f:
                         if PREFIXO not in f.read():
@@ -477,7 +479,7 @@ def _tem_perfis(local_state):
     return isinstance(dados, dict) and "info_cache" in dados.get("profile", {})
 
 
-def native_messaging(caminho, familia):
+def native_messaging(caminho, familia, casa):
     """Onde este navegador procura manifesto de native messaging.
 
     O Chromium procura ao lado do perfil. O Firefox procura no diretório do
@@ -485,12 +487,43 @@ def native_messaging(caminho, familia):
     em ~/.mozilla/firefox) — mas só ele: os forks usam um diretório só, com o
     profiles.ini e os manifestos lado a lado. Daí a regra ser sobre o nome
     "firefox", e não sobre a estrutura.
+
+    Perfil sob o .config é outra história. O Firefox 147 passou a criar o
+    perfil em $XDG_CONFIG_HOME/mozilla/firefox quando não acha ~/.mozilla, mas
+    continuou lendo os manifestos só em ~/.mozilla/native-messaging-hosts
+    (bugzilla 2005167, aberto). Seguir o perfil escrevia o manifesto em
+    ~/.config/mozilla/native-messaging-hosts, onde ninguém lê, e o Firefox
+    caía no manifesto do sistema: num Fedora com o WebSigner instalado à parte,
+    o assinador de fora do sandbox, para quem /pkcs11/adv-br.so não existe. É a
+    mesma regra da tabela de host/comum.sh: o manifesto fica em ~/.<nome>, com o
+    nome do primeiro diretório sob o .config.
     """
     if familia == "chromium":
         return os.path.join(caminho, "NativeMessagingHosts")
+    for config in (".config", "config"):
+        relativo = os.path.relpath(caminho, os.path.join(casa, config))
+        nome = relativo.split(os.sep)[0]
+        if nome not in (os.curdir, os.pardir):
+            return os.path.join(casa, "." + nome, "native-messaging-hosts")
     if os.path.basename(caminho) == "firefox":
         return os.path.join(os.path.dirname(caminho), "native-messaging-hosts")
     return os.path.join(caminho, "native-messaging-hosts")
+
+
+def _onde_ficava(caminho, familia, casa):
+    """Onde a 1.1.4 e anteriores escreviam o manifesto, quando não era o lugar.
+
+    O que ficou lá aponta para um atalho que pode já não existir, e passa a
+    valer no dia em que o Firefox ler o .config. Por isso é varrido, e não
+    esquecido.
+    """
+    if familia == "chromium":
+        return None
+    if os.path.basename(caminho) == "firefox":
+        antigo = os.path.join(os.path.dirname(caminho), "native-messaging-hosts")
+    else:
+        antigo = os.path.join(caminho, "native-messaging-hosts")
+    return None if antigo == native_messaging(caminho, familia, casa) else antigo
 
 
 # Onde o atalho de um navegador em Flatpak precisa morar.
@@ -555,7 +588,7 @@ def _publicar_assinadores(feito):
     vivos = set()
     for casa, id_flatpak in _casas():
         for caminho, familia in navegadores(casa):
-            destino = native_messaging(caminho, familia)
+            destino = native_messaging(caminho, familia, casa)
 
             for componente in instalados:
                 origem = os.path.join(instalador.diretorio(componente),
@@ -581,8 +614,11 @@ def _publicar_assinadores(feito):
                     vivos.add(alvo)
 
             # O manifesto de um assinador que saiu aponta para um atalho que já
-            # não existe, e o navegador diz que ele não está instalado.
-            for arquivo in glob.glob(os.path.join(destino, "*.json")):
+            # não existe, e o navegador diz que ele não está instalado. O mesmo
+            # vale para o que ficou onde o navegador não lê. Ver _onde_ficava.
+            antigo = _onde_ficava(caminho, familia, casa)
+            for arquivo in [a for p in (destino, antigo) if p
+                            for a in glob.glob(os.path.join(p, "*.json"))]:
                 if arquivo in vivos:
                     continue
                 try:

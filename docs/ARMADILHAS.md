@@ -439,6 +439,29 @@ que ficaria gravado é `libp11-kit.so.0.4.10`, e a primeira atualização de
 runtime que mude esse número tira o driver do usuário sem dizer nada. O shim é
 arquivo regular, e o caminho real dele é ele mesmo.
 
+## O Firefox moveu o perfil para o `.config`, e os manifestos não
+
+Desde o 147, o Firefox cria o perfil em `$XDG_CONFIG_HOME/mozilla/firefox`
+quando não acha `~/.mozilla`, o que é o caso de uma instalação nova. Os
+manifestos de native messaging continuam lidos só em
+`~/.mozilla/native-messaging-hosts` (bugzilla 2005167, ainda aberto). Deduzir o
+diretório de manifestos a partir do perfil escreve em
+`~/.config/mozilla/native-messaging-hosts`, onde ninguém lê.
+
+O sintoma engana porque **algum** assinador responde. Num Fedora 44 com o
+WebSigner da Softplan instalado também pelo `.rpm` da Softplan, o Firefox
+achou o manifesto do sistema, em `/usr/lib64/mozilla/native-messaging-hosts`,
+e executou o assinador do host. A extensão conectava, aceitava o
+`/pkcs11/adv-br.so` digitado na aba "Cripto Dispositivos" e não listava
+certificado nenhum: esse caminho só existe dentro do sandbox (ver a seção
+anterior). O `WebPkiCore.log` do host diz qual manifesto foi usado, na linha
+`Started:`, e é por ali que se separa um caso do outro.
+
+A regra vale para os forks também: perfil sob o `.config`, manifesto em
+`~/.<nome>`, com o nome do primeiro diretório sob o `.config`. É a mesma da
+tabela de `host/comum.sh`. Ver `native_messaging()` em `ui/publicador.py` e
+`tests/prova-navegadores.py`.
+
 ## A leitora é disputada, e o teste sofre mais que o uso real
 
 O `p11-kit` do host inicia um `adv-br-pkcs11` por módulo, **sob demanda e por

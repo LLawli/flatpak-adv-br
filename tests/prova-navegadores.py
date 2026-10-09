@@ -43,6 +43,11 @@ def main():
             (".librewolf", "firefox", ".librewolf/native-messaging-hosts"),
             (".zen", "firefox", ".zen/native-messaging-hosts"),
             (".floorp", "firefox", ".floorp/native-messaging-hosts"),
+            # Firefox 147 e forks com o perfil no XDG: o manifesto continua
+            # lido só no lugar antigo (bugzilla 2005167). Seguir o perfil fez o
+            # Firefox de um Fedora 44 executar o WebSigner de fora do sandbox.
+            (".config/mozilla/firefox", "firefox", ".mozilla/native-messaging-hosts"),
+            (".config/librewolf", "firefox", ".librewolf/native-messaging-hosts"),
             (".config/chromium", "chromium", ".config/chromium/NativeMessagingHosts"),
             (".config/BraveSoftware/Brave-Browser", "chromium",
              ".config/BraveSoftware/Brave-Browser/NativeMessagingHosts"),
@@ -90,7 +95,7 @@ def main():
                 falhas += 1
                 continue
             obtido = os.path.relpath(
-                publicador.native_messaging(os.path.join(casa, caminho), familia),
+                publicador.native_messaging(os.path.join(casa, caminho), familia, casa),
                 casa)
             if obtido != manifestos:
                 print("  ERRO %s: manifestos em %s, esperado %s"
@@ -98,6 +103,29 @@ def main():
                 falhas += 1
                 continue
             print("  ok  %-38s %-9s -> %s" % (caminho, familia, manifestos))
+
+        # O Firefox em Flatpak tem o .config dele em ~/.var/app/<id>/config, e
+        # o ~/.mozilla em ~/.var/app/<id>/.mozilla.
+        flatpak = os.path.join(casa, ".var", "app", "org.mozilla.firefox")
+        obtido = os.path.relpath(publicador.native_messaging(
+            os.path.join(flatpak, "config/mozilla/firefox"), "firefox", flatpak), flatpak)
+        if obtido != ".mozilla/native-messaging-hosts":
+            print("  ERRO Firefox em Flatpak com perfil no XDG: manifestos em %s" % obtido)
+            falhas += 1
+        else:
+            print("  ok  Firefox em Flatpak com perfil no XDG -> %s" % obtido)
+
+        # O que as versões anteriores deixaram em ~/.config/mozilla precisa
+        # ser achado para ser varrido, e o lugar certo nunca entra na varredura.
+        antigo = publicador._onde_ficava(
+            os.path.join(casa, ".config/mozilla/firefox"), "firefox", casa)
+        certo = publicador._onde_ficava(
+            os.path.join(casa, ".mozilla/firefox"), "firefox", casa)
+        if antigo != os.path.join(casa, ".config/mozilla/native-messaging-hosts") or certo:
+            print("  ERRO lugar antigo dos manifestos: %s, %s" % (antigo, certo))
+            falhas += 1
+        else:
+            print("  ok  varre ~/.config/mozilla/native-messaging-hosts, e só ele")
 
         # O mesmo caminho não pode ser descoberto duas vezes: a casa e o
         # .config se cruzam na varredura, e o navegador aparecia repetido no
