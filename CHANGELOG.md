@@ -4,6 +4,28 @@ Todas as mudanças relevantes deste projeto. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e a numeração
 segue o [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.5] - 2026-10-09
+
+### Corrigido
+
+- **Os assinadores no Firefox de instalações novas voltam a enxergar o
+  certificado.** Desde a versão 147, numa instalação nova, o Firefox guarda o
+  perfil em `~/.config/mozilla/firefox`, mas continua procurando os
+  assinadores só em `~/.mozilla/native-messaging-hosts` (bugzilla 2005167). O
+  aplicativo seguia o perfil e registrava os assinadores no `.config`, onde o
+  Firefox não olha.
+
+  No Fedora 44, com o WebSigner da Softplan instalado também pelo pacote da
+  Softplan, o Firefox abria esse outro, de fora do aplicativo. A extensão
+  conectava, aceitava o `/pkcs11/adv-br.so` na aba "Cripto Dispositivos" e
+  não achava o arquivo, que só existe dentro do aplicativo. Sem o assinador de
+  fora, a extensão diria que o assinador não está instalado.
+
+  Agora o registro vai para `~/.mozilla`, inclusive no Firefox em Flatpak e
+  nos derivados com o perfil no `.config`, e o que ficou no lugar antigo é
+  apagado. **Abra o aplicativo uma vez depois de atualizar e reinicie o
+  Firefox.** Ver `docs/ARMADILHAS.md`.
+
 ## [1.1.4] - 2026-10-08
 
 ### Corrigido
