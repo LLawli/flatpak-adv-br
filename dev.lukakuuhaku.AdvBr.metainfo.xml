@@ -26,6 +26,17 @@
   <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.1.5" date="2026-10-09">
+      <description>
+        <p>
+          Corrige os assinadores no Firefox de instalações novas, como a do
+          Fedora 44. A extensão do assinador não encontrava o certificado,
+          porque o Firefox não achava o assinador do aplicativo e abria outro,
+          instalado fora dele. Abra o aplicativo uma vez depois de atualizar e
+          reinicie o Firefox: é nesse momento que a correção é aplicada.
+        </p>
+      </description>
+    </release>
     <release version="1.1.4" date="2026-10-08">
       <description>
         <p>
