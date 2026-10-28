@@ -58,8 +58,10 @@ unidade ao limite.
 
 A VPS usa Docker, e o padrão dela é um `compose.yaml` por serviço, ligado à
 rede externa `proxy_net`, sem publicar porta nenhuma no host: o Caddy alcança
-cada serviço pelo nome do container. Este segue o mesmo padrão, em
-`~/totalidade/apps/adv-br/compose.yaml`:
+cada serviço pelo nome do container. Este segue o mesmo padrão. O compose
+mora em `/srv/stacks/adv-br/compose.yaml`, mas quem o escreve é o Ansible, a
+partir de `stacks/adv-br/compose.yaml` do repositório `vps`: é lá que se muda
+(veja `docs/deploy.md`).
 
 ```yaml
 services:
@@ -79,8 +81,8 @@ services:
       ADVBR_REPOSITORIO: /repo
       ADVBR_TOKEN_GITHUB_FILE: /run/secrets/github
     volumes:
-      - ./repo:/repo:ro
-      - ./fila:/var/lib/adv-br/fila
+      - /srv/data/adv-br/repo:/repo:ro
+      - /srv/data/adv-br/fila:/var/lib/adv-br/fila
       - ./secrets/github:/run/secrets/github:ro
 
 networks:
@@ -96,9 +98,10 @@ localhost de lá é só dele, e o proxy bate numa porta fechada. O sintoma é um
 502 do Caddy com o serviço subindo normalmente nos logs.
 
 **`user: "1001:1001"`.** O Dockerfile roda como 10001, um uid sem dono no host.
-A fila precisa ser gravável, e `chown` para outro uid pede root, que nesta VPS
-pede senha. Rodar com o uid de quem é dono do diretório resolve sem privilégio
-e sem afrouxar permissão. O serviço avisa na subida se errar isso:
+A fila precisa ser gravável, e 1001 é o `luka`, dono de `/srv/data/adv-br/repo`
+e de `/srv/data/adv-br/fila`: o `rsync` da publicação chega como esse dono e o
+container grava a fila com o mesmo uid, sem `chown` e sem afrouxar permissão.
+O serviço avisa na subida se errar isso:
 
     AVISO: não consigo escrever em /var/lib/adv-br/fila (read-only file system).
     Relatos serão PERDIDOS se o GitHub recusar. Monte um volume gravável ali.
@@ -111,36 +114,40 @@ tem dois núcleos e nada a ganhar baixando o SDK do Go:
 
 ```sh
 docker build -t adv-br-servico:0.3.0 servidor/
-docker save adv-br-servico:0.3.0 | ssh vps 'docker load'
+docker save adv-br-servico:0.3.0 | gzip | ssh vps 'gunzip | docker load'
 ```
 
-O token do GitHub fica em `secrets/github`, com permissão 600, e entra por
-arquivo e não por variável de ambiente. Veja "Configuração".
+O nome carregado tem que bater exatamente com o `image:` do compose.
+
+O token do GitHub fica em `/srv/stacks/adv-br/secrets/github`, posto lá pelo
+Ansible, e entra por arquivo e não por variável de ambiente. Veja
+"Configuração".
 
 ## Caddy na frente
 
-O proxy da VPS é um Caddy em container (`proxy-caddy-1`), com o Caddyfile em
-`~/totalidade/edge/proxy/Caddyfile`. Um site novo são quatro linhas, no padrão
-que os outros já usam:
+O proxy da VPS é um Caddy em container (`caddy-caddy-1`), com o Caddyfile em
+`/etc/caddy/Caddyfile`. O site segue o padrão que os outros já usam:
 
 ```caddy
 flatpak.lukakuuhaku.dev {
   import crowdsec_only
   import access_log
-  reverse_proxy adv-br:8080
+  reverse_proxy adv-br:8080 {
+    import segurar
+  }
 }
 ```
 
-`crowdsec_only` e `access_log` são snippets que já existem lá; o bloco global
-já configura o CrowdSec, então não há credencial nenhuma a acrescentar. O
-certificado sai sozinho por ACME.
+`crowdsec_only`, `access_log` e `segurar` são snippets que já existem lá; o
+bloco global já configura o CrowdSec, então não há credencial nenhuma a
+acrescentar. O certificado sai sozinho por ACME.
 
 Validar antes de recarregar, com o binário que roda lá e não com a sintaxe que
 a memória lembra:
 
 ```sh
-docker exec proxy-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-docker exec proxy-caddy-1 caddy reload  --config /etc/caddy/Caddyfile --adapter caddyfile
+docker exec caddy-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+docker exec caddy-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 ```
 
 O Caddy manda o `X-Forwarded-For` por conta própria em todo `reverse_proxy`,
@@ -164,7 +171,7 @@ O repositório é construído e assinado na máquina de quem publica; a chave
 privada nunca chega aqui. O que sobe é o resultado:
 
 ```sh
-rsync -a --delete ~/.local/share/adv-br-repo/ vps:/home/luka/totalidade/apps/adv-br/repo/
+rsync -a --delete ~/.local/share/adv-br-repo/ vps:/srv/data/adv-br/repo/
 ```
 
 Só os objetos novos atravessam. Não é preciso reiniciar o serviço: ele lê do

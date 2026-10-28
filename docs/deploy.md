@@ -8,45 +8,46 @@ O serviço faz duas coisas: serve o repositório Flatpak (arquivos que chegam po
 chave de assinatura do Flatpak nunca chega ao servidor: ele guarda arquivos já
 assinados e não sabe assinar nada.
 
-## O que o servidor precisa ter
+## O servidor
 
-- Docker, e permissão de usar sem root (grupo `docker`).
-- Um proxy na frente terminando TLS. Aqui é Caddy em container, com o bouncer
-  do CrowdSec compilado junto, servindo também os outros sites da máquina.
-- Um nome apontado para ele. O nosso é `flatpak.lukakuuhaku.dev`, e ele vai
-  dentro do `.flatpakrepo`: mudar depois obriga todo mundo a reconfigurar o
-  remoto.
+- **Host:** `vps.lukakuuhaku.dev`, usuário `luka` (uid 1001), alcançado pelo
+  alias `vps` do `~/.ssh/config`. O acesso é só pela chave FIDO da YubiKey, um
+  toque por conexão. Não existe chave comum, então **nenhum CI consegue fazer
+  deploy**: todo passo daqui roda na frente da chave.
+- **Um proxy na frente terminando TLS:** Caddy em container (`caddy-caddy-1`),
+  com o bouncer do CrowdSec compilado junto, servindo também os outros sites da
+  máquina.
+- **Um nome apontado para ele:** `flatpak.lukakuuhaku.dev`. Ele vai dentro do
+  `.flatpakrepo`: mudar depois obriga todo mundo a reconfigurar o remoto.
 
-**Assuma que você não tem root.** Todo o deploy cabe no espaço de um usuário
-comum, e é assim de propósito: um serviço exposto à internet que guarda um
-token do GitHub não deveria precisar de privilégio para subir.
+### Onde mora cada coisa
 
-## 1. Estrutura
+| Caminho no servidor | O que é | Quem mexe |
+|---|---|---|
+| `/srv/stacks/adv-br/compose.yaml` | o compose | Ansible, repositório `vps`, `stacks/adv-br/` |
+| `/srv/stacks/adv-br/secrets/github` | o token do GitHub | Ansible |
+| `/srv/data/adv-br/repo` | o repositório Flatpak, montado somente leitura | `bin/publicar --enviar` |
+| `/srv/data/adv-br/fila` | os relatos que o GitHub recusou na hora | o container |
 
-```sh
-mkdir -p ~/totalidade/apps/adv-br/{repo,fila,secrets}
-chmod 700 ~/totalidade/apps/adv-br/secrets
-```
-
-`repo` recebe o repositório Flatpak por `rsync` e é montado somente leitura.
-`fila` guarda os relatos que o GitHub recusou na hora, e precisa ser gravável
-pelo uid que roda o container. `secrets` guarda o token.
-
-## 2. O token do GitHub
-
-Um token com permissão de criar issues no repositório privado dos relatos, e
-nada além disso:
+`/srv/stacks/` é de root e é o Ansible quem escreve lá. **Não edite nem faça
+`scp` para esse diretório**: a próxima passada do playbook sobrescreve, e a
+mudança some sem aviso. Tudo que é compose ou segredo muda no repositório `vps`
+e se aplica com o playbook:
 
 ```sh
-install -m 600 /dev/null ~/totalidade/apps/adv-br/secrets/github
-# escreva o token nesse arquivo com o seu editor
+ansible-playbook playbooks/stacks.yml -e '{"stacks_only": ["adv-br"]}'
 ```
 
-Ele entra por arquivo (`ADVBR_TOKEN_GITHUB_FILE`) e não por variável de
+`/srv/data/` entra no backup. `repo` e `fila` são do `luka`, que é o mesmo uid
+1001 com que o container roda: o `rsync` chega como dono e o serviço grava a
+fila sem precisar de `chown`.
+
+O token entra por arquivo (`ADVBR_TOKEN_GITHUB_FILE`) e não por variável de
 ambiente: o conteúdo de uma variável aparece em `docker inspect`, no `ps` e em
-qualquer despejo de ambiente.
+qualquer despejo de ambiente. Ele precisa de permissão para criar issues no
+repositório privado dos relatos, e nada além disso.
 
-## 3. A imagem
+## 1. A imagem
 
 Construída na máquina de quem desenvolve e enviada pronta. São poucos
 megabytes, e o servidor não precisa baixar o SDK do Go nem gastar os núcleos
@@ -54,58 +55,58 @@ que tem:
 
 ```sh
 docker build -t adv-br-servico:0.3.0 servidor/
-docker save adv-br-servico:0.3.0 | ssh vps 'docker load'
+docker save adv-br-servico:0.3.0 | gzip | ssh vps 'gunzip | docker load'
 ```
 
-## 4. O compose
+O nome carregado tem que bater exatamente com o `image:` do compose. Se não
+bater, o compose tenta baixar a imagem de um registro, não acha e não sobe.
 
-O `compose.yaml` completo está em `servidor/README.md`, com o porquê de cada
-linha. Ele vai em `~/totalidade/apps/adv-br/`, liga-se à rede externa do proxy
-e não publica porta nenhuma no host: o proxy alcança o serviço pelo nome do
-container.
+## 2. O compose
+
+O `compose.yaml` completo, com o porquê de cada linha, está em
+`servidor/README.md`; o que vale é a cópia em `stacks/adv-br/compose.yaml` do
+repositório `vps`. Ele se liga à rede externa do proxy e não publica porta
+nenhuma no host: o proxy alcança o serviço pelo nome do container.
+
+Depois do playbook, confira a subida:
 
 ```sh
-cd ~/totalidade/apps/adv-br && docker compose up -d
-docker compose logs --tail=20
+ssh vps 'cd /srv/stacks/adv-br && docker compose ps && docker compose logs --tail=20'
 ```
 
-Nos logs da subida, procure pelo aviso da fila. Se ele aparecer, o uid está
-errado e todo relato recusado pelo GitHub será perdido, o que só se descobre
-quando já se perdeu.
+Nos logs, procure pelo aviso da fila. Se ele aparecer, o uid está errado e todo
+relato recusado pelo GitHub será perdido, o que só se descobre quando já se
+perdeu.
 
-## 5. O proxy
+## 3. O proxy
 
-Antes de editar, uma cópia, que é a convenção do servidor:
-
-```sh
-cd ~/totalidade/edge/proxy
-cp Caddyfile Caddyfile.bak-advbr-$(date +%Y%m%d)
-```
-
-Quatro linhas no fim do arquivo:
+O bloco do site, no Caddyfile (`/etc/caddy/Caddyfile` dentro do
+`caddy-caddy-1`):
 
 ```caddy
 flatpak.lukakuuhaku.dev {
   import crowdsec_only
   import access_log
-  reverse_proxy adv-br:8080
+  reverse_proxy adv-br:8080 {
+    import segurar
+  }
 }
 ```
 
-Os dois `import` são snippets que já existem, e o CrowdSec já está configurado
-no bloco global: **não há credencial nenhuma a acrescentar** para pôr o serviço
-no ar. Valide com o binário que está rodando, e não com a sintaxe que a memória
-lembra:
+Os `import` são snippets que já existem, e o CrowdSec já está configurado no
+bloco global: **não há credencial nenhuma a acrescentar** para pôr o serviço no
+ar. Valide com o binário que está rodando, e não com a sintaxe que a memória
+lembra, e recarregue sem queda:
 
 ```sh
-docker exec proxy-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-docker exec proxy-caddy-1 caddy reload  --config /etc/caddy/Caddyfile --adapter caddyfile
+ssh vps 'docker exec caddy-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile &&
+    docker exec caddy-caddy-1 caddy reload --config /etc/caddy/Caddyfile'
 ```
 
 O certificado sai sozinho por ACME, desde que o nome já resolva e a porta 80
 esteja alcançável.
 
-## 6. Publicar a primeira versão
+## 4. Publicar uma versão
 
 Antes, os componentes que este projeto compila e redistribui. Eles não vêm do
 repositório OSTree: são arquivos servidos em `componentes/`, e o `bin/publicar`
@@ -125,18 +126,18 @@ outro conteúdo: as duas falhas só apareceriam na máquina de quem instala, uma
 como 404 e a outra como um download inteiro que o aplicativo recusa no fim.
 
 Quem já publicou uma vez não precisa refazer isto: os arquivos continuam em
-`dist/`, e o empacotamento é reprodutível — recompilar o mesmo commit dá o mesmo
-sha256.
+`dist/`, e o empacotamento é reprodutível (recompilar o mesmo commit dá o mesmo
+sha256).
 
 ```sh
-ADV_BR_CHAVE_GPG=<id da chave> ADV_BR_VPS=vps:/home/luka/totalidade/apps/adv-br/repo \
+ADV_BR_CHAVE_GPG=<id da chave> ADV_BR_VPS=vps:/srv/data/adv-br/repo \
     bin/publicar --enviar
 ```
 
 Só os objetos novos atravessam: o nome de cada um é o hash do conteúdo. Não é
 preciso reiniciar o serviço, que lê do disco a cada pedido.
 
-## 7. Conferir, nesta ordem
+## 5. Conferir, nesta ordem
 
 Cada passo isola uma camada, e é por isso que a ordem importa: falhar no
 segundo com o primeiro passando diz exatamente onde olhar.
@@ -144,7 +145,7 @@ segundo com o primeiro passando diz exatamente onde olhar.
 | Comando | O que prova |
 |---|---|
 | `curl -I https://flatpak.lukakuuhaku.dev/adv-br.flatpakrepo` | proxy, TLS e roteamento |
-| `curl -I https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.1.0.tar.gz` | os componentes que não vêm pelo OSTree chegaram |
+| `curl -I https://flatpak.lukakuuhaku.dev/componentes/remoteid-0.3.2.tar.gz` | os componentes que não vêm pelo OSTree chegaram |
 | `curl https://flatpak.lukakuuhaku.dev/api/saude` | o serviço está de pé |
 | `flatpak remote-add` e `install` numa máquina limpa | o repositório está íntegro e assinado |
 | um relato de teste pelo botão do aplicativo | token, GitHub e a fila |
@@ -160,20 +161,17 @@ Quando o aplicativo passa a mandar um campo novo no relato, o serviço sobe
 conhece, e quem atualizasse primeiro perderia o que preencheu sem aviso. Foi o
 caso do e-mail de contato, na 0.3.0 do serviço e na 1.1.4 do aplicativo.
 
-```sh
-docker build -t adv-br-servico:0.3.0 servidor/
-docker save adv-br-servico:0.3.0 | ssh vps 'docker load'
-ssh vps 'cd ~/totalidade/apps/adv-br &&
-    cp compose.yaml compose.yaml.antes-0.3.0 &&
-    sed -i "s/adv-br-servico:0.2.0/adv-br-servico:0.3.0/" compose.yaml &&
-    docker compose up -d && docker compose logs --tail=8'
-```
+1. Construir e carregar a imagem nova, como no passo 1, com a tag nova.
+2. No repositório `vps`, trocar a tag em `stacks/adv-br/compose.yaml`.
+3. Rodar o playbook com `stacks_only: ["adv-br"]` e conferir os logs, como no
+   passo 2.
 
-A cópia do compose é a volta: `cp compose.yaml.antes-0.3.0 compose.yaml` e
-`docker compose up -d` trazem a imagem anterior, que continua carregada. Nos
-logs, de novo, procure pelo aviso da fila. Para provar que é a versão nova sem
-criar issue, mande um pedido que só ela recusa: na 0.3.0, um contato malformado
-volta 400 antes da prova de trabalho.
+A volta é o mesmo caminho ao contrário: devolver a tag anterior no
+`compose.yaml` e rodar o playbook de novo. A imagem anterior continua carregada,
+então nada precisa ser reenviado. Nos logs, de novo, procure pelo aviso da fila.
+
+Para provar que é a versão nova sem criar issue, mande um pedido que só ela
+recusa: na 0.3.0, um contato malformado volta 400 antes da prova de trabalho.
 
 ```sh
 curl -s -H 'Content-Type: application/json' \
@@ -183,12 +181,13 @@ curl -s -H 'Content-Type: application/json' \
 
 ## O que este deploy não protege
 
-O serviço fica numa rede compartilhada com os outros containers do mesmo host,
-e não numa rede dedicada só com o proxy. A consequência está no comentário de
-`quemChama`, no `servidor/main.go`: o limite por endereço vale contra quem vem
-da internet e não vale contra um vizinho de rede comprometido, que alcança a
-porta sem passar pelo proxy e manda o `X-Forwarded-For` que quiser.
+O serviço fica numa rede compartilhada com os outros containers do mesmo host
+(`proxy_net`), e não numa rede dedicada só com o proxy. A consequência está no
+comentário de `quemChama`, no `servidor/main.go`: o limite por endereço vale
+contra quem vem da internet e não vale contra um vizinho de rede comprometido,
+que alcança a porta sem passar pelo proxy e manda o `X-Forwarded-For` que
+quiser.
 
 Foi decisão consciente, para não mexer no proxy que atende todos os outros
 sites. Trocar de ideia é acrescentar uma rede dedicada ao compose do proxy e ao
-deste serviço; nada no código muda.
+deste serviço, no repositório `vps`; nada no código muda.
