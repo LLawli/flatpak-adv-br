@@ -65,6 +65,19 @@ serviço sonda. Com a listagem de tokens disputando essa trava e sem disputa, o
 login tem de terminar bem e sem ser interrompido, e o driver não pode ser
 reiniciado.
 
+## `assinadores.sh`
+
+```bash
+ANCORA_BANCADA=/mnt/dados/caches/ancora-exp tests/e2e/assinadores.sh
+```
+
+Exige o `org.mozilla.firefox` instalado. Publica um assinador de teste
+(`assinador-teste.py`, que fala native messaging e carrega `libaetpkss.so.3`
+pelo nome) para um Brave nativo e o Firefox Flatpak de uma home falsa, chama-o
+como cada navegador chamaria e confere que ele vê o token uma vez, no sandbox
+do Âncora e no do Firefox, com uma casa própria. Despublicar precisa apagar
+manifestos, lançadores, links e a permissão dada.
+
 ## Isolamento
 
 Os testes isolam a sessão com `HOME` e `XDG_CONFIG_HOME` falsos (o p11-kit acha a

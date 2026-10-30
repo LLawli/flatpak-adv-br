@@ -76,6 +76,14 @@ pub struct Assinador {
     pub manifesto_firefox: Option<PathBuf>,
     pub manifesto_chromium: Option<PathBuf>,
     pub ambiente: BTreeMap<String, String>,
+    /// Os nomes de biblioteca PKCS#11 que a extensão do navegador manda o
+    /// assinador carregar (`libaetpkss.so.3`, a opção "Dispositivos SafeSign
+    /// AET" do Web PKI e do WebSigner). Cada um vira um link para o cliente do
+    /// p11-kit, que entrega os tokens de todos os drivers.
+    pub pkcs11: Vec<String>,
+    /// Desenha só por X11 (Avalonia), e precisa do X11 de verdade mesmo numa
+    /// sessão Wayland.
+    pub x11: bool,
 }
 
 /// Um programa com janela que a pessoa abre: o Token Administration do
@@ -110,6 +118,8 @@ pub enum Erro {
     Formato(String),
     /// O descritor foi feito para um Âncora mais novo.
     ContratoNovo(u32),
+    /// Um nome de biblioteca que não é só um nome.
+    NomeDeBiblioteca(String),
     /// Um caminho absoluto, com `..`, ou com `~/` onde não cabe.
     Caminho {
         campo: &'static str,
@@ -128,6 +138,9 @@ impl fmt::Display for Erro {
                 f,
                 "feita para uma versão mais nova do Âncora (contrato {n}, este entende até {CONTRATO})"
             ),
+            Erro::NomeDeBiblioteca(n) => {
+                write!(f, "assinador.pkcs11 aceita só nomes de arquivo: {n}")
+            }
             Erro::Caminho { campo, valor } => {
                 write!(f, "caminho fora da extensão em {campo}: {valor}")
             }
@@ -258,6 +271,18 @@ pub fn interpretar(
                         .map(|c| r.dentro("assinador.manifesto_chromium", &c))
                         .transpose()?,
                     ambiente: r.ambiente(s.ambiente),
+                    pkcs11: s
+                        .pkcs11
+                        .into_iter()
+                        .map(|n| {
+                            if n.is_empty() || n.contains('/') || n == "." || n == ".." {
+                                Err(Erro::NomeDeBiblioteca(n))
+                            } else {
+                                Ok(n)
+                            }
+                        })
+                        .collect::<Result<_, _>>()?,
+                    x11: s.x11,
                 })
             })
             .collect::<Result<_, Erro>>()?,
@@ -385,6 +410,10 @@ mod arquivo {
         pub manifesto_chromium: Option<String>,
         #[serde(default)]
         pub ambiente: BTreeMap<String, String>,
+        #[serde(default)]
+        pub pkcs11: Vec<String>,
+        #[serde(default)]
+        pub x11: bool,
     }
 
     #[derive(Deserialize)]
@@ -565,6 +594,8 @@ mod tests {
             executavel = "extra/bin/webpki"
             manifesto_firefox = "extra/native-messaging/firefox.json"
             manifesto_chromium = "extra/native-messaging/chromium.json"
+            pkcs11 = ["libaetpkss.so.3"]
+            x11 = true
         "#,
             Path::new("/app/extensoes/assinador/WebPKI"),
             Familia::Assinador,
@@ -573,12 +604,25 @@ mod tests {
         .unwrap();
         let a = &d.assinadores[0];
         assert_eq!(a.host, "com.lacunasoftware.webpki");
+        assert_eq!(a.pkcs11, vec!["libaetpkss.so.3".to_owned()]);
+        assert!(a.x11);
         assert_eq!(
             a.manifesto_firefox,
             Some(PathBuf::from(
                 "/app/extensoes/assinador/WebPKI/extra/native-messaging/firefox.json"
             ))
         );
+    }
+
+    #[test]
+    fn nome_de_biblioteca_do_assinador_nao_pode_ser_caminho() {
+        for nome in ["/usr/lib/libx.so", "../libx.so", "", "lib/x.so"] {
+            let texto = format!(
+                "contrato = 1\nnome = \"X\"\n[[assinador]]\nhost = \"a.b\"\nexecutavel = \"bin/x\"\npkcs11 = [\"{nome}\"]\n"
+            );
+            let r = interpretar(&texto, Path::new(DIR), Familia::Assinador, Path::new(HOME));
+            assert_eq!(r, Err(Erro::NomeDeBiblioteca(nome.into())), "{nome:?}");
+        }
     }
 
     /// Uma raiz de extensões num diretório temporário, apagada ao sair.

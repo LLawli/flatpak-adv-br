@@ -40,6 +40,8 @@ executavel = "extra/bin/webpki"
 manifesto_firefox = "extra/native-messaging/firefox.json"
 manifesto_chromium = "extra/native-messaging/chromium.json"
 ambiente = {}
+pkcs11 = ["libaetpkss.so.3"]      # nomes que a extensão do navegador manda carregar
+x11 = true                        # desenha só por X11 (Avalonia)
 
 [[ferramenta]]                    # aplicativos: uma ou mais; opcional nos outros
 nome = "Token Administration"
@@ -69,8 +71,18 @@ atalho = true                     # ganha atalho no menu do sistema
 
 Os manifestos de native messaging são os do fabricante: o Âncora troca só o
 campo `path` ao publicar. O Firefox e a família Chromium usam formatos
-diferentes (`allowed_extensions` e `allowed_origins`), e um navegador que
-recebe o formato do outro ignora o arquivo sem avisar.
+diferentes (`allowed_extensions` e `allowed_origins`), e um manifesto no
+formato da outra família é recusado na publicação: o navegador o ignoraria
+sem avisar.
+
+O assinador roda no ambiente de quem o chama: no sandbox do navegador, quando
+ele é Flatpak, ou no do Âncora, quando ele é nativo. Nos dois, cada nome em
+`pkcs11` vira um link para o cliente do p11-kit do runtime, que entrega os
+tokens de todos os drivers. É o nome que a extensão do navegador manda o
+assinador carregar (no Web PKI e no WebSigner, `libaetpkss.so.3`, a opção
+"Dispositivos SafeSign AET"), e um só basta: dois nomes marcados na extensão
+fariam cada token aparecer duas vezes. O executável recebe uma `HOME` própria,
+onde guarda os dados dele, e precisa rodar nos runtimes freedesktop e GNOME.
 
 O atalho de menu de uma `[[ferramenta]]` é gerado pelo Âncora a partir de
 `nome` e `icone`, porque o Flatpak não exporta o `.desktop` de uma extensão

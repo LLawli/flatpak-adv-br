@@ -33,3 +33,8 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   dele, que o token aparece exatamente uma vez, e escolhe a forma de registro
   que garante isso. Sem token espetado também: a conferência usa um token de
   verificação próprio, visível só por alguns segundos.
+- `ancora assinadores publicar` leva os assinadores instalados (como o Lacuna
+  Web PKI e o Softplan WebSigner) a todos os navegadores, nativos e Flatpak,
+  com os tokens dos drivers do Âncora. Num navegador Flatpak o assinador roda
+  dentro dele, sem dar ao navegador permissão de sair do sandbox.
+  `ancora assinadores despublicar` tira tudo.

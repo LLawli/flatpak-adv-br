@@ -44,16 +44,16 @@ for m in opensc gnome-keyring; do
     fi
 done
 
-cp "$BANCADA/libsofthsm2.so" "$AQUI/travado.c" "$AQUI/espera.c" "$AQUI/nss.py" "$OBRA/"
+cp "$BANCADA/libsofthsm2.so" "$AQUI/travado.c" "$AQUI/espera.c" "$AQUI/nss.py" "$AQUI/assinador-teste.py" "$OBRA/"
 printf 'contrato = 1\nnome = "SoftHSM de teste"\n[[pkcs11]]\nmodulo = "lib/libsofthsm2.so"\nambiente = { SOFTHSM2_CONF = "%s/softhsm2.conf" }\n' \
     "$BANCADA" >"$OBRA/softhsm.toml"
 printf 'contrato = 1\nnome = "Driver que trava"\n[[pkcs11]]\nmodulo = "lib/libtravado.so"\n' \
     >"$OBRA/travado.toml"
 
 construir() {
-    local nome=$1 comandos=$2 fontes=$3
-    cat >"$OBRA/dev.lukakuuhaku.Ancora.Driver.$nome.yml" <<EOF
-id: dev.lukakuuhaku.Ancora.Driver.$nome
+    local nome=$1 comandos=$2 fontes=$3 familia=${4:-Driver}
+    cat >"$OBRA/dev.lukakuuhaku.Ancora.$familia.$nome.yml" <<EOF
+id: dev.lukakuuhaku.Ancora.$familia.$nome
 runtime: dev.lukakuuhaku.Ancora
 runtime-version: master
 sdk: org.gnome.Sdk//51
@@ -68,7 +68,7 @@ modules:
 EOF
     (cd "$OBRA" && flatpak run org.flatpak.Builder --user --install --force-clean \
         --disable-rofiles-fuse --state-dir="$OBRA/estado" "$OBRA/build-$nome" \
-        "dev.lukakuuhaku.Ancora.Driver.$nome.yml" >"$OBRA/build-$nome.log" 2>&1)
+        "dev.lukakuuhaku.Ancora.$familia.$nome.yml" >"$OBRA/build-$nome.log" 2>&1)
 }
 
 # Instala as extensões de teste pedidas: SoftHSM, Travado, Espera (esta com
@@ -86,6 +86,14 @@ instalar() {
             construir Espera \
             '["install -Dm644 espera.toml ${FLATPAK_DEST}/ancora.toml", "install -d ${FLATPAK_DEST}/lib", "gcc -shared -fPIC -Wall -Werror -I/usr/include/p11-kit-1 espera.c -o ${FLATPAK_DEST}/lib/libespera.so"]' \
             '[{type: file, path: espera.toml}, {type: file, path: espera.c}]' ;;
+        Assinador)
+            printf '{"name": "dev.lukakuuhaku.ancora.teste", "description": "teste", "path": "/opt/teste", "type": "stdio", "allowed_extensions": ["teste@ancora"]}\n' >"$OBRA/firefox.json"
+            printf '{"name": "dev.lukakuuhaku.ancora.teste", "description": "teste", "path": "/opt/teste", "type": "stdio", "allowed_origins": ["chrome-extension://abcdefghijklmnopabcdefghijklmnop/"]}\n' >"$OBRA/chromium.json"
+            printf 'contrato = 1\nnome = "Assinador de teste"\n[[assinador]]\nhost = "dev.lukakuuhaku.ancora.teste"\nexecutavel = "bin/assinador"\nmanifesto_firefox = "nm/firefox.json"\nmanifesto_chromium = "nm/chromium.json"\npkcs11 = ["libaetpkss.so.3"]\n' >"$OBRA/assinador.toml"
+            construir Teste \
+            '["install -Dm644 assinador.toml ${FLATPAK_DEST}/ancora.toml", "install -Dm755 assinador-teste.py ${FLATPAK_DEST}/bin/assinador", "install -Dm644 firefox.json ${FLATPAK_DEST}/nm/firefox.json", "install -Dm644 chromium.json ${FLATPAK_DEST}/nm/chromium.json"]' \
+            '[{type: file, path: assinador.toml}, {type: file, path: assinador-teste.py}, {type: file, path: firefox.json}, {type: file, path: chromium.json}]' \
+            Assinador ;;
         Travado) construir Travado \
             '["install -Dm644 travado.toml ${FLATPAK_DEST}/ancora.toml", "install -d ${FLATPAK_DEST}/lib", "gcc -shared -fPIC -Wall -Werror -I/usr/include/p11-kit-1 travado.c -o ${FLATPAK_DEST}/lib/libtravado.so"]' \
             '[{type: file, path: travado.toml}, {type: file, path: travado.c}]' ;;
@@ -95,7 +103,12 @@ instalar() {
 
 remover() {
     local refs=() nome
-    for nome in "$@"; do refs+=("dev.lukakuuhaku.Ancora.Driver.$nome"); done
+    for nome in "$@"; do
+        case $nome in
+        Assinador) refs+=("dev.lukakuuhaku.Ancora.Assinador.Teste") ;;
+        *) refs+=("dev.lukakuuhaku.Ancora.Driver.$nome") ;;
+        esac
+    done
     flatpak uninstall --user --noninteractive -y "${refs[@]}" >/dev/null
 }
 

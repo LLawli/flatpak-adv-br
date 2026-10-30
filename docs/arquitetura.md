@@ -128,6 +128,34 @@ com o do runtime, e esse caso ainda duplica: ainda não tratado.
 Pelo terminal: `ancora nativos`, e `ancora nativos publicar|despublicar
 firefox|sistema`. `tests/e2e/nativos.sh` confere as duas pontas.
 
+### Assinadores
+
+Os assinadores (Lacuna Web PKI, Softplan WebSigner) são programas que a
+extensão do navegador abre por native messaging. `src/assinadores.rs` os
+publica em todo navegador presente, nativo ou Flatpak, e o assinador roda no
+ambiente de quem o chama, como no Sigillum, testado com token real em
+29/10/2026:
+
+| navegador | onde o assinador roda | o que o Âncora escreve |
+|---|---|---|
+| Flatpak | no sandbox do navegador | o manifesto do fabricante (com o `path` trocado) e um lançador em `~/.var/app/<id>/`, links `libaetpkss.so.3` para o `p11-kit-client.so` do runtime, e no override do navegador: ler a pasta da extensão (`:ro`) e o `x11` |
+| nativo | no sandbox do Âncora (`ancora assinar <host>`) | o manifesto e um lançador em `~/.local/share/ancora/assinadores/` que chama o `flatpak run` |
+
+O navegador Flatpak não ganha permissão de sair do sandbox, ao contrário do
+flatpak-adv-br, que lhe dava o `org.freedesktop.Flatpak`. Os tokens chegam pelo
+`libaetpkss.so.3`, um nome que a extensão do navegador já conhece, ligado ao
+cliente do p11-kit; o navegador Flatpak precisa da permissão do socket do
+sistema, que é a da seção anterior (`ancora configurar <id>`). O programa é
+lido direto da instalação da extensão (o caminho com `active` não muda numa
+atualização), sem cópia.
+
+Publicar sincroniza: escreve o que falta e apaga o que a publicação anterior
+escreveu e não vale mais, inclusive as pastas do Âncora que ficam vazias e as
+permissões que só ele deu. Pelo terminal: `ancora assinadores` e
+`ancora assinadores publicar|despublicar`. `tests/e2e/assinadores.sh` confere,
+com um assinador de teste, que o token aparece uma vez no sandbox do Âncora e
+no do Firefox de verdade.
+
 ### Um token, exatamente uma vez: verificado, não suposto
 
 As receitas acima são o padrão, não a garantia. O que cada consumidor enxerga
@@ -183,8 +211,9 @@ PJeOffice, quando existir, convive com ele.
 1. **Fundação**: este esqueleto, os gates e a CI.
 2. **Contrato de extensão** (feito): o `ancora.toml`, os pontos de extensão
    no manifesto e `ancora extensoes`.
-3. **Núcleo de publicação**: PKCS#11 (feito: socket por driver, com
-   supervisão), aplicativos (permissão e NSS) e native messaging.
+3. **Núcleo de publicação** (feito): PKCS#11 por socket com supervisão,
+   aplicativos Flatpak e navegadores nativos (permissão e NSS, verificados com
+   o token-sentinela) e os assinadores por native messaging.
 4. **Interface base**: o estado do certificado e as extensões instaladas.
 5. **Tela de extensões**: busca, instala e atualiza nos remotes.
 6. **Migração**: as extensões do flatpak-adv-br (SafeSign primeiro), o remote e

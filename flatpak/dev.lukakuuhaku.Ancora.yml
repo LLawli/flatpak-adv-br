@@ -9,7 +9,11 @@ command: ancora
 finish-args:
   - --share=ipc
   - --socket=wayland
-  - --socket=fallback-x11
+  # x11 de verdade, e não fallback-x11: os assinadores Lacuna e Softplan são
+  # Avalonia, que só desenha por X11, e rodam neste sandbox quando o navegador
+  # é nativo. fallback-x11 só entrega o X11 quando não há Wayland, e eles
+  # morrem com "XOpenDisplay failed".
+  - --socket=x11
   - --device=dri
   # As leitoras de smartcard, pelo pcscd do host.
   - --socket=pcsc
@@ -19,35 +23,42 @@ finish-args:
   # ancora-*.module são escritos ou apagados.
   - --filesystem=xdg-config/pkcs11:create
   # Rodar comandos no host: listar os aplicativos instalados, ligar o
-  # p11-kit-server.socket do usuário e, na tela de extensões, instalar e
-  # atualizar extensões. É a permissão que o Flathub marca como saída do
-  # sandbox, aceita de propósito (docs/arquitetura.md).
+  # p11-kit-server.socket do usuário, achar onde uma extensão está instalada e,
+  # na tela de extensões, instalar e atualizar extensões. É a permissão que o
+  # Flathub marca como saída do sandbox, aceita de propósito
+  # (docs/arquitetura.md).
   - --talk-name=org.freedesktop.Flatpak
-  # O socket do p11-kit-server.socket do usuário, para conferir de ponta a
-  # ponta o que os aplicativos enxergam por ele.
+  # O socket do p11-kit-server.socket do usuário: conferir de ponta a ponta o
+  # que os aplicativos enxergam, e o caminho dos assinadores até os tokens.
   - --filesystem=xdg-run/p11-kit/pkcs11
-  # Dar a um aplicativo a permissão do socket acima, e tirar só ela depois.
+  # Dar permissões a outros aplicativos, e tirar só as que o Âncora deu.
   - --filesystem=xdg-data/flatpak/overrides:create
-  # Os bancos NSS dos aplicativos (src/aplicativos.rs). Sem :create onde o
-  # banco é do aplicativo: ele o cria na primeira vez que abre, e o Âncora
-  # não cria pastas de aplicativos que não estão instalados.
-  - --filesystem=~/.var/app/org.mozilla.firefox/config/mozilla/firefox
-  - --filesystem=~/.var/app/org.mozilla.firefox/.mozilla/firefox
+  # Os lançadores dos assinadores para os navegadores nativos.
+  - --filesystem=xdg-data/ancora:create
+  # Os navegadores e leitores de PDF em Flatpak: bancos NSS
+  # (src/aplicativos.rs) e manifestos de native messaging (src/assinadores.rs).
+  # Sem :create: a pasta existe quando o aplicativo está instalado e já foi
+  # aberto, e o Âncora não cria pastas de quem não está.
+  - --filesystem=~/.var/app/org.mozilla.firefox
+  - --filesystem=~/.var/app/org.chromium.Chromium
+  - --filesystem=~/.var/app/com.google.Chrome
+  - --filesystem=~/.var/app/com.microsoft.Edge
+  - --filesystem=~/.var/app/com.brave.Browser
   - --filesystem=~/.var/app/org.gnome.Papers/config/mozilla:create
   - --filesystem=~/.var/app/org.kde.okular/config/mozilla:create
+  # Os navegadores nativos: bancos NSS (src/nativos.rs) e manifestos de native
+  # messaging. ~/.pki/nssdb é o banco antigo dos derivados do Chromium,
+  # ~/.local/share/pki/nssdb o novo.
   - --filesystem=~/.pki/nssdb
-  # Os bancos dos navegadores nativos (src/nativos.rs): o Firefox, e o banco
-  # novo dos derivados do Chromium (o antigo é o ~/.pki/nssdb acima).
-  - --filesystem=~/.mozilla/firefox
-  - --filesystem=~/.config/mozilla/firefox
   - --filesystem=~/.local/share/pki/nssdb
-  - --filesystem=~/.var/app/org.chromium.Chromium/data/pki/nssdb
-  - --filesystem=~/.var/app/com.google.Chrome/.pki/nssdb
-  - --filesystem=~/.var/app/com.google.Chrome/data/pki/nssdb
-  - --filesystem=~/.var/app/com.microsoft.Edge/.pki/nssdb
-  - --filesystem=~/.var/app/com.microsoft.Edge/data/pki/nssdb
-  - --filesystem=~/.var/app/com.brave.Browser/.pki/nssdb
-  - --filesystem=~/.var/app/com.brave.Browser/data/pki/nssdb
+  - --filesystem=~/.mozilla
+  - --filesystem=~/.config/mozilla
+  - --filesystem=~/.config/google-chrome
+  - --filesystem=~/.config/chromium
+  - --filesystem=~/.config/BraveSoftware
+  - --filesystem=~/.config/microsoft-edge
+  - --filesystem=~/.config/vivaldi
+  - --filesystem=~/.config/opera
 
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin

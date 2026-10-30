@@ -2,6 +2,7 @@ use adw::prelude::*;
 use std::path::Path;
 
 mod aplicativos;
+mod assinadores;
 mod cli;
 mod extensao;
 mod host;
@@ -30,6 +31,10 @@ fn main() -> gtk::glib::ExitCode {
         Some("aplicativos") => return cli::aplicativos(),
         Some("configurar") => return cli::configurar(args.get(2).map(String::as_str)),
         Some("desfazer") => return cli::desfazer(args.get(2).map(String::as_str)),
+        Some("assinadores") => return cli::assinadores(args.get(2).map(String::as_str)),
+        Some("assinar") => {
+            return cli::assinar(args.get(2).map(String::as_str), &args[3.min(args.len())..]);
+        }
         Some("nativos") => {
             return cli::nativos(
                 args.get(2).map(String::as_str),

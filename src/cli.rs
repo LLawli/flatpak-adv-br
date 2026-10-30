@@ -2,7 +2,7 @@
 //! também faz, para testar e para quem prefere o terminal.
 
 use crate::verificacao::{self, Medidor, Resultado};
-use crate::{APP_ID, aplicativos, extensao, host, nativos, sonda};
+use crate::{APP_ID, aplicativos, assinadores, extensao, host, nativos, sonda};
 use gtk::glib::{self, ExitCode};
 use std::path::Path;
 use std::time::Duration;
@@ -221,4 +221,124 @@ fn relatar(resultados: &[(std::path::PathBuf, Resultado)]) {
         };
         println!("  {}: {texto}", banco.display());
     }
+}
+
+/// `ancora assinadores`: os assinadores instalados e os navegadores
+/// presentes. `ancora assinadores publicar|despublicar`: muda isso.
+pub fn assinadores(acao: Option<&str>) -> ExitCode {
+    let home = host::home();
+    if acao == Some("despublicar") {
+        return match assinadores::aplicar(&home, &dados(), &assinadores::Plano::default()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    let flatpaks = match aplicativos::instalados() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("não consegui listar os aplicativos instalados: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let navegadores = assinadores::presentes(&home, &flatpaks);
+    let mut instalados = Vec::new();
+    for i in assinadores::instalados(&glib::home_dir()) {
+        match i {
+            Ok(i) => instalados.push(i),
+            Err(e) => eprintln!("{e}"),
+        }
+    }
+    for i in &instalados {
+        println!("assinador: {} ({})", i.assinador.host, i.id);
+    }
+    for n in &navegadores {
+        match n.flatpak {
+            Some(id) => println!("navegador: {} ({id})", n.nome),
+            None => println!("navegador: {} (nativo)", n.nome),
+        }
+    }
+    if acao != Some("publicar") {
+        return ExitCode::SUCCESS;
+    }
+    let resultado = assinadores::planejar(&home, &navegadores, &instalados)
+        .and_then(|p| assinadores::aplicar(&home, &dados(), &p).map(|()| p));
+    match resultado {
+        Ok(plano) => {
+            for id in &plano.sem_tokens {
+                println!(
+                    "{id}: sem a permissão do p11-kit; rode `ancora configurar {id}` para os tokens aparecerem no assinador"
+                );
+            }
+            println!("publicado. Feche e abra os navegadores de novo.");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `ancora assinar <host> [argumentos]`: o que o manifesto de um navegador
+/// nativo executa (pelo `flatpak run`). Roda o assinador neste sandbox, com
+/// os nomes de biblioteca que a extensão pede apontando para o cliente do
+/// p11-kit. A saída padrão é o protocolo do native messaging: nada é escrito
+/// nela antes do assinador.
+pub fn assinar(host_nm: Option<&str>, argumentos: &[String]) -> ExitCode {
+    use std::os::unix::process::CommandExt;
+    let Some(host_nm) = host_nm else {
+        eprintln!("uso: ancora assinar <host> [argumentos]");
+        return ExitCode::FAILURE;
+    };
+    let home = glib::home_dir();
+    let achado = extensao::encontrar(Path::new(extensao::RAIZ), &home)
+        .into_iter()
+        .filter_map(|e| e.descritor.ok())
+        .flat_map(|d| d.assinadores)
+        .find(|a| a.host == host_nm);
+    let Some(a) = achado else {
+        eprintln!("nenhum assinador instalado responde por {host_nm}");
+        return ExitCode::FAILURE;
+    };
+    // No $XDG_RUNTIME_DIR do sandbox, que é de cada instância: o /tmp de um
+    // aplicativo Flatpak é compartilhado entre as instâncias e sobrevive a
+    // elas, e os PIDs dentro do sandbox se repetem.
+    let bibliotecas = glib::user_runtime_dir().join("ancora-assinador");
+    let casa = glib::user_data_dir().join("assinadores").join(host_nm);
+    let preparo = (|| -> std::io::Result<()> {
+        std::fs::create_dir_all(&bibliotecas)?;
+        std::fs::create_dir_all(&casa)?;
+        for nome in &a.pkcs11 {
+            let link = bibliotecas.join(nome);
+            let _ = std::fs::remove_file(&link);
+            std::os::unix::fs::symlink(sonda::cliente(), link)?;
+        }
+        Ok(())
+    })();
+    if let Err(e) = preparo {
+        eprintln!("{host_nm}: {e}");
+        return ExitCode::FAILURE;
+    }
+    let mut caminho = std::ffi::OsString::from(bibliotecas.as_os_str());
+    if let Some(atual) = std::env::var_os("LD_LIBRARY_PATH") {
+        caminho.push(":");
+        caminho.push(atual);
+    }
+    let mut cmd = std::process::Command::new(&a.executavel);
+    cmd.args(argumentos)
+        .env("LD_LIBRARY_PATH", caminho)
+        .env("HOME", &casa)
+        .envs(&a.ambiente);
+    // Só nos testes: o servidor do sistema da sessão serviria os tokens reais.
+    if let Some(s) = std::env::var_os(verificacao::VARIAVEL_SERVIDOR) {
+        let mut endereco = std::ffi::OsString::from("unix:path=");
+        endereco.push(s);
+        cmd.env("P11_KIT_SERVER_ADDRESS", endereco);
+    }
+    let erro = cmd.exec();
+    eprintln!("{}: {erro}", a.executavel.display());
+    ExitCode::FAILURE
 }

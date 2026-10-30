@@ -161,13 +161,9 @@ fn bancos_medidos(app: &Aplicativo, home: &Path) -> Vec<PathBuf> {
     }
 }
 
-fn override_de(home: &Path, id: &str) -> PathBuf {
-    host::overrides(home).join(id)
-}
-
 pub fn situacao(app: &Aplicativo, home: &Path, dados: &Path) -> Situacao {
-    let override_atual = fs::read_to_string(override_de(home, app.id)).unwrap_or_default();
-    let permissao = app.receita == Receita::Pronto || permissao::tem(&override_atual);
+    let permissao = app.receita == Receita::Pronto
+        || permissao::tem_em(home, app.id, &permissao::Entrada::socket_do_sistema());
     if app.receita == Receita::Pronto {
         return Situacao {
             permissao,
@@ -211,34 +207,6 @@ pub fn situacao(app: &Aplicativo, home: &Path, dados: &Path) -> Situacao {
     Situacao { permissao, banco }
 }
 
-/// O registro das permissões que o Âncora concedeu, para desfazer só elas:
-/// uma permissão que já estava lá é de outra pessoa ou programa.
-fn concessoes(dados: &Path) -> PathBuf {
-    dados.join("concessoes")
-}
-
-fn ler_concessoes(dados: &Path) -> BTreeSet<String> {
-    fs::read_to_string(concessoes(dados))
-        .unwrap_or_default()
-        .lines()
-        .map(str::to_owned)
-        .filter(|l| !l.is_empty())
-        .collect()
-}
-
-fn gravar_concessoes(dados: &Path, ids: &BTreeSet<String>) -> Result<(), String> {
-    fs::create_dir_all(dados).map_err(|e| e.to_string())?;
-    let texto: String = ids.iter().map(|i| format!("{i}\n")).collect();
-    fs::write(concessoes(dados), texto).map_err(|e| e.to_string())
-}
-
-fn gravar(caminho: &Path, texto: &str) -> Result<(), String> {
-    if let Some(pai) = caminho.parent() {
-        fs::create_dir_all(pai).map_err(|e| format!("{}: {e}", pai.display()))?;
-    }
-    fs::write(caminho, texto).map_err(|e| format!("{}: {e}", caminho.display()))
-}
-
 /// Faz os dois passos e devolve, por banco, o que a verificação decidiu. A
 /// permissão só vale depois que o aplicativo for fechado e aberto de novo.
 pub fn configurar(
@@ -251,14 +219,12 @@ pub fn configurar(
         return Ok(vec![]);
     }
 
-    let arquivo = override_de(home, app.id);
-    let atual = fs::read_to_string(&arquivo).unwrap_or_default();
-    if !permissao::tem(&atual) {
-        gravar(&arquivo, &permissao::conceder(&atual)?)?;
-        let mut ids = ler_concessoes(dados);
-        ids.insert(app.id.to_owned());
-        gravar_concessoes(dados, &ids)?;
-    }
+    permissao::conceder_a(
+        home,
+        dados,
+        app.id,
+        &permissao::Entrada::socket_do_sistema(),
+    )?;
 
     let cliente = Some(nss::CLIENTE_NO_SANDBOX.to_owned());
     let (raizes, opcoes, padrao, nss_proprio) = match app.receita {
@@ -319,22 +285,12 @@ pub fn configurar(
 /// Desfaz o que o Âncora fez no aplicativo, e só isso. Os registros
 /// duplicados tirados de um Chromium não voltam: eram o defeito.
 pub fn desfazer(app: &Aplicativo, home: &Path, dados: &Path) -> Result<(), String> {
-    let mut ids = ler_concessoes(dados);
-    if ids.contains(app.id) {
-        let arquivo = override_de(home, app.id);
-        let atual = fs::read_to_string(&arquivo).unwrap_or_default();
-        match permissao::revogar(&atual)? {
-            Some(novo) => gravar(&arquivo, &novo)?,
-            None => match fs::remove_file(&arquivo) {
-                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                    return Err(format!("{}: {e}", arquivo.display()));
-                }
-                _ => {}
-            },
-        }
-        ids.remove(app.id);
-        gravar_concessoes(dados, &ids)?;
-    }
+    permissao::revogar_de(
+        home,
+        dados,
+        app.id,
+        &permissao::Entrada::socket_do_sistema(),
+    )?;
 
     match app.receita {
         Receita::Firefox => {
@@ -524,11 +480,15 @@ mod tests {
         let h = home("ja-tinha");
         let dados = h.0.join("dados");
         let arquivo = host::overrides(&h.0).join("org.gnome.Papers");
-        gravar(&arquivo, "[Context]\nfilesystems=xdg-run/p11-kit/pkcs11;\n").unwrap();
+        fs::create_dir_all(host::overrides(&h.0)).unwrap();
+        fs::write(&arquivo, "[Context]\nfilesystems=xdg-run/p11-kit/pkcs11;\n").unwrap();
 
         configurar(&app("org.gnome.Papers"), &h.0, &dados, &ja_ve).unwrap();
         desfazer(&app("org.gnome.Papers"), &h.0, &dados).unwrap();
-        assert!(permissao::tem(&fs::read_to_string(&arquivo).unwrap()));
+        assert!(permissao::tem(
+            &fs::read_to_string(&arquivo).unwrap(),
+            &permissao::Entrada::socket_do_sistema()
+        ));
     }
 
     #[test]
