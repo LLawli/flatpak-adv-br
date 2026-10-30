@@ -20,6 +20,11 @@ memory_query(query=..., scopes=[
 Escritas vão só para `ancora`. Uma armadilha nova é página nova aqui, mesmo
 que complemente uma de lá.
 
+Armadilha encontrada na memória do `flatpak-adv-br` que afeta o Âncora ganha
+página própria aqui, em `gotchas/`: o fato medido, onde ele pega no Âncora
+(etapa ou peça) e o que fazer, com o caminho da página de origem. Assim a
+leitura do escopo antigo deixa de ser necessária com o tempo.
+
 ## Regras do projeto
 
 - Gates: `scripts/ci.sh`, rodado com teto de CPU e memória nesta máquina.
