@@ -1,0 +1,17 @@
+[package]
+name = "ancora"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Central de certificados: publica tokens e assinadores instalados como extensões Flatpak para os navegadores e aplicativos do sistema"
+license = "GPL-3.0-only"
+publish = false
+
+[dependencies]
+gtk = { package = "gtk4", version = "0.11", features = ["v4_18"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_7"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

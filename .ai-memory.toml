@@ -1,0 +1,5 @@
+# Fixa o projeto da memória (ai-memory) em "ancora", independente do nome
+# da pasta (adv-central) e do remote, que vão mudar quando este repositório
+# substituir o flatpak-adv-br.
+workspace = "default"
+project = "ancora"

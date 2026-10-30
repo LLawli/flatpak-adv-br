@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-24.04
+    # O Ubuntu 24.04 traz GTK 4.14 e libadwaita 1.5, abaixo do que o
+    # Cargo.toml pede. O Fedora acompanha o GNOME do runtime Flatpak.
+    container: fedora:44
+    steps:
+      - name: Dependências do sistema
+        run: >
+          dnf install -y --setopt=install_weak_deps=False
+          gcc git gtk4-devel libadwaita-devel desktop-file-utils appstream
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: scripts/ci.sh

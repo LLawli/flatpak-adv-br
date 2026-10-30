@@ -1,0 +1,43 @@
+id: dev.lukakuuhaku.Ancora
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: ancora
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+
+modules:
+  - name: ancora
+    buildsystem: simple
+    build-options:
+      env:
+        # O cargo-sources.json descompacta os crates aqui, junto com um
+        # config.toml que manda o cargo usá-los em vez do crates.io.
+        CARGO_HOME: /run/build/ancora/cargo
+    build-commands:
+      - cargo --offline build --release --locked
+      - install -Dm755 target/release/ancora -t /app/bin
+      - install -Dm644 data/dev.lukakuuhaku.Ancora.desktop -t /app/share/applications
+      - install -Dm644 data/dev.lukakuuhaku.Ancora.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 data/icons/hicolor/scalable/apps/dev.lukakuuhaku.Ancora.svg
+        -t /app/share/icons/hicolor/scalable/apps
+    sources:
+      - type: dir
+        path: ..
+        skip:
+          - target
+          - .flatpak-builder
+          - build-dir
+          - repo
+          - .jj
+          - .git
+      - cargo-sources.json

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Âncora
+GenericName=Central de Certificados
+Comment=Use o seu token e o seu certificado digital nos navegadores e aplicativos
+Exec=ancora
+Icon=dev.lukakuuhaku.Ancora
+Terminal=false
+Categories=Utility;Security;
+Keywords=certificado;token;assinatura;ICP-Brasil;A3;PKCS11;smartcard;
+StartupNotify=true

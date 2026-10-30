@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.lukakuuhaku.Ancora</id>
+  <name>Âncora</name>
+  <summary>Seu token e seu certificado digital nos navegadores e aplicativos que você já usa</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="dev.lukakuuhaku">
+    <name>Luka Kuuhaku</name>
+  </developer>
+  <description>
+    <p>
+      Faz o certificado digital ICP-Brasil, em token A3 ou na nuvem, funcionar
+      no Linux. Instale a extensão do seu token e ele passa a aparecer nos
+      navegadores, no leitor de PDF e nos assinadores que você já usa, inclusive
+      quando eles também são Flatpak.
+    </p>
+    <p>
+      Drivers, assinadores e aplicativos são extensões, instaladas e atualizadas
+      pela própria janela. Cada uma é baixada do site do fabricante, na sua
+      máquina, com a soma de verificação conferida.
+    </p>
+  </description>
+  <launchable type="desktop-id">dev.lukakuuhaku.Ancora.desktop</launchable>
+  <url type="homepage">https://github.com/LLawli/flatpak-adv-br</url>
+  <url type="bugtracker">https://github.com/LLawli/flatpak-adv-br/issues</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-30">
+      <description>
+        <p>Primeira versão: a janela, ainda sem extensões.</p>
+      </description>
+    </release>
+  </releases>
+</component>
