@@ -1,6 +1,7 @@
 //! Os subcomandos de linha de comando: diagnóstico e o que a interface
 //! também faz, para testar e para quem prefere o terminal.
 
+use crate::verificacao::{self, Medidor, Resultado};
 use crate::{APP_ID, aplicativos, extensao, host, nativos, sonda};
 use gtk::glib::{self, ExitCode};
 use std::path::Path;
@@ -75,9 +76,14 @@ pub fn aplicativos() -> ExitCode {
         .iter()
         .filter(|a| instalados.contains(a.id))
     {
-        let s = aplicativos::situacao(app, &home);
+        let s = aplicativos::situacao(app, &home, &dados());
         if s.pronto() {
-            println!("{} ({}): pronto", app.nome, app.id);
+            let aviso = if s.banco == aplicativos::Banco::NaoVerificado {
+                " (não verificado)"
+            } else {
+                ""
+            };
+            println!("{} ({}): pronto{aviso}", app.nome, app.id);
             continue;
         }
         let mut falta = Vec::new();
@@ -89,7 +95,9 @@ pub fn aplicativos() -> ExitCode {
             aplicativos::Banco::EmUso => {
                 falta.push("feche o aplicativo para acertar o banco".into())
             }
-            aplicativos::Banco::Pronto | aplicativos::Banco::NaoSeAplica => {}
+            aplicativos::Banco::Pronto
+            | aplicativos::Banco::NaoSeAplica
+            | aplicativos::Banco::NaoVerificado => {}
         }
         println!("{} ({}): falta {}", app.nome, app.id, falta.join("; "));
     }
@@ -118,8 +126,11 @@ pub fn configurar(id: Option<&str>) -> ExitCode {
         eprintln!("não consegui ligar o p11-kit-server.socket: {e}");
         return ExitCode::FAILURE;
     }
-    match aplicativos::configurar(&app, &host::home(), &dados()) {
-        Ok(()) => {
+    let home = host::home();
+    let medidor = medidor(&home);
+    match aplicativos::configurar(&app, &home, &dados(), medidor.as_ref()) {
+        Ok(resultados) => {
+            relatar(&resultados);
             println!("{}: pronto. Feche e abra o aplicativo de novo.", app.nome);
             ExitCode::SUCCESS
         }
@@ -151,11 +162,13 @@ pub fn nativos(acao: Option<&str>, destino: Option<&str>) -> ExitCode {
     let home = host::home();
     let Some(acao) = acao else {
         for d in nativos::Destino::TODOS {
-            let s = nativos::situacao(d, &home);
+            let s = nativos::situacao(d, &home, &dados());
             let estado = if s.bancos == 0 {
                 "sem banco (abra o navegador uma vez)".to_owned()
-            } else if s.publicado() {
+            } else if s.publicado() && s.verificados == s.bancos {
                 "publicado".to_owned()
+            } else if s.publicado() {
+                "publicado (não verificado)".to_owned()
             } else {
                 format!("não publicado ({} de {} bancos)", s.publicados, s.bancos)
             };
@@ -168,8 +181,11 @@ pub fn nativos(acao: Option<&str>, destino: Option<&str>) -> ExitCode {
         return ExitCode::FAILURE;
     };
     let resultado = match acao {
-        "publicar" => nativos::proxy_do_host().and_then(|p| nativos::publicar(d, &home, &p)),
-        "despublicar" => nativos::despublicar(d, &home),
+        "publicar" => nativos::proxy_do_host().and_then(|p| {
+            let medidor = medidor(&home);
+            nativos::publicar(d, &home, &dados(), &p, medidor.as_ref()).map(|r| relatar(&r))
+        }),
+        "despublicar" => nativos::despublicar(d, &home, &dados()),
         _ => Err("uso: ancora nativos publicar|despublicar firefox|sistema".to_owned()),
     };
     match resultado {
@@ -181,5 +197,28 @@ pub fn nativos(acao: Option<&str>, destino: Option<&str>) -> ExitCode {
             eprintln!("{e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// O sentinela publicado para medir, ou, se não der (fora do Flatpak), um
+/// medidor que só diz por quê.
+fn medidor(home: &Path) -> Box<dyn Medidor> {
+    match verificacao::Sentinela::publicar(home) {
+        Ok(s) => Box::new(s),
+        Err(e) => Box::new(verificacao::Indisponivel(e)),
+    }
+}
+
+fn relatar(resultados: &[(std::path::PathBuf, Resultado)]) {
+    for (banco, r) in resultados {
+        let texto = match r {
+            Resultado::Uma(None) => "o token aparece uma vez sem registro do Âncora".to_owned(),
+            Resultado::Uma(Some(lib)) => format!("o token aparece uma vez, registrado com {lib}"),
+            Resultado::NaoVerificado { registro, motivo } => format!(
+                "não verificado ({motivo}); ficou {}",
+                registro.as_deref().unwrap_or("sem registro")
+            ),
+        };
+        println!("  {}: {texto}", banco.display());
     }
 }

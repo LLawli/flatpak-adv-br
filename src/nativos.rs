@@ -13,6 +13,7 @@
 //! veria o token duas vezes.
 
 use crate::nss;
+use crate::verificacao::{self, Ambiente, Medidor, Raizes, Registro, Resultado};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -71,7 +72,10 @@ pub fn bancos(destino: Destino, home: &Path) -> Vec<PathBuf> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Situacao {
     pub bancos: usize,
+    /// Bancos em que a publicação foi decidida e continua valendo.
     pub publicados: usize,
+    /// Desses, os que foram medidos (e não só configurados pelo padrão).
+    pub verificados: usize,
     /// Algum perfil está aberto por um Firefox.
     pub em_uso: bool,
 }
@@ -82,23 +86,33 @@ impl Situacao {
     }
 }
 
-pub fn situacao(destino: Destino, home: &Path) -> Situacao {
-    let bancos = bancos(destino, home);
-    Situacao {
-        publicados: bancos
-            .iter()
-            .filter(|b| nss::tem_modulo(&nss::ler(b)))
-            .count(),
-        em_uso: bancos.iter().any(|b| nss::em_uso(b)),
-        bancos: bancos.len(),
+fn raizes(destino: Destino) -> Raizes {
+    match destino {
+        Destino::Firefox => Raizes::Automaticas,
+        Destino::Sistema => Raizes::Chromium,
     }
 }
 
-fn editar_todos(
-    destino: Destino,
-    home: &Path,
-    f: impl Fn(&str) -> Option<String>,
-) -> Result<(), String> {
+pub fn situacao(destino: Destino, home: &Path, dados: &Path) -> Situacao {
+    let bancos = bancos(destino, home);
+    let registros = verificacao::ler_registros(dados);
+    let valendo: Vec<_> = bancos
+        .iter()
+        .filter_map(|b| {
+            registros
+                .get(&(b.clone(), nss::NOME_NATIVO.to_owned()))
+                .filter(|r| r.vale_para(b, nss::NOME_NATIVO))
+        })
+        .collect();
+    Situacao {
+        bancos: bancos.len(),
+        publicados: valendo.len(),
+        verificados: valendo.iter().filter(|r| r.verificado).count(),
+        em_uso: bancos.iter().any(|b| nss::em_uso(b)),
+    }
+}
+
+fn bancos_editaveis(destino: Destino, home: &Path) -> Result<Vec<PathBuf>, String> {
     let bancos = bancos(destino, home);
     if bancos.is_empty() {
         return Err(format!(
@@ -109,18 +123,55 @@ fn editar_todos(
     if bancos.iter().any(|b| nss::em_uso(b)) {
         return Err(format!("feche o {} antes", destino.nome()));
     }
-    for b in bancos {
-        nss::editar(&b, &f).map_err(|e| format!("{}: {e}", b.display()))?;
+    Ok(bancos)
+}
+
+/// Publica em cada banco do destino da forma que deixa o token aparecer uma
+/// vez, medido no host: sem registro (se o sistema já leva o token até lá),
+/// pelo caminho absoluto do proxy, ou pelo nome curto. Sem poder medir, fica o
+/// caminho absoluto.
+pub fn publicar(
+    destino: Destino,
+    home: &Path,
+    dados: &Path,
+    proxy: &str,
+    medidor: &dyn Medidor,
+) -> Result<Vec<(PathBuf, Resultado)>, String> {
+    let opcoes = [
+        None,
+        Some(proxy.to_owned()),
+        Some("p11-kit-proxy.so".to_owned()),
+    ];
+    let padrao = Some(proxy.to_owned());
+    let mut saida = Vec::new();
+    for banco in bancos_editaveis(destino, home)? {
+        let resultado = verificacao::garantir_um_no_banco(
+            &banco,
+            nss::NOME_NATIVO,
+            medidor,
+            Ambiente::Host,
+            raizes(destino),
+            &opcoes,
+            &padrao,
+        )?;
+        verificacao::gravar_registro(
+            dados,
+            &banco,
+            nss::NOME_NATIVO,
+            Some(Registro::de(&resultado)),
+        )?;
+        saida.push((banco, resultado));
+    }
+    Ok(saida)
+}
+
+pub fn despublicar(destino: Destino, home: &Path, dados: &Path) -> Result<(), String> {
+    for banco in bancos_editaveis(destino, home)? {
+        nss::editar(&banco, |t| nss::sem_modulo(t, nss::NOME_NATIVO))
+            .map_err(|e| format!("{}: {e}", banco.display()))?;
+        verificacao::gravar_registro(dados, &banco, nss::NOME_NATIVO, None)?;
     }
     Ok(())
-}
-
-pub fn publicar(destino: Destino, home: &Path, proxy: &str) -> Result<(), String> {
-    editar_todos(destino, home, |t| nss::com_modulo(t, proxy))
-}
-
-pub fn despublicar(destino: Destino, home: &Path) -> Result<(), String> {
-    editar_todos(destino, home, nss::sem_modulo)
 }
 
 /// Onde as distribuições põem o proxy, na ordem em que são procurados:
@@ -209,36 +260,116 @@ mod tests {
         assert_eq!(bancos(Destino::Sistema, &h.0), vec![h.0.join(".pki/nssdb")]);
     }
 
+    /// Um host como o Arch: o token só aparece com o bloco do Âncora.
+    fn como_o_arch(_: Ambiente, banco: &Path, _: Raizes) -> Result<verificacao::Contagem, String> {
+        let vezes = usize::from(nss::tem_modulo(&nss::ler(banco), nss::NOME_NATIVO));
+        Ok(verificacao::Contagem {
+            vezes,
+            modulos: vec![nss::NOME_NATIVO.into(); vezes],
+        })
+    }
+
     #[test]
     fn publica_em_todos_os_perfis_do_firefox_e_despublica() {
         let h = home("firefox");
+        let dados = h.0.join("dados");
         banco(&h.0.join(".mozilla/firefox/a.default"));
         banco(&h.0.join(".config/mozilla/firefox/b.default-release"));
         assert_eq!(
-            situacao(Destino::Firefox, &h.0),
+            situacao(Destino::Firefox, &h.0, &dados),
             Situacao {
                 bancos: 2,
                 publicados: 0,
+                verificados: 0,
                 em_uso: false
             }
         );
 
-        publicar(Destino::Firefox, &h.0, "/usr/lib/p11-kit-proxy.so").unwrap();
-        assert!(situacao(Destino::Firefox, &h.0).publicado());
+        let r = publicar(
+            Destino::Firefox,
+            &h.0,
+            &dados,
+            "/usr/lib/p11-kit-proxy.so",
+            &como_o_arch,
+        )
+        .unwrap();
+        assert!(
+            r.iter()
+                .all(|(_, r)| *r == Resultado::Uma(Some("/usr/lib/p11-kit-proxy.so".into())))
+        );
+        let s = situacao(Destino::Firefox, &h.0, &dados);
+        assert!(s.publicado() && s.verificados == 2);
         let texto = nss::ler(&h.0.join(".mozilla/firefox/a.default"));
-        assert!(texto.contains("library=/usr/lib/p11-kit-proxy.so\nname=Âncora (p11-kit)"));
+        assert!(texto.contains("library=/usr/lib/p11-kit-proxy.so\nname=Âncora (sistema)"));
 
-        despublicar(Destino::Firefox, &h.0).unwrap();
-        assert_eq!(situacao(Destino::Firefox, &h.0).publicados, 0);
+        despublicar(Destino::Firefox, &h.0, &dados).unwrap();
+        assert_eq!(situacao(Destino::Firefox, &h.0, &dados).publicados, 0);
         assert!(nss::ler(&h.0.join(".mozilla/firefox/a.default")).contains("NSS Internal"));
+    }
+
+    #[test]
+    fn sistema_que_ja_leva_o_token_nao_ganha_registro() {
+        // Um Fedora com o proxy no NSS do sistema: sem o Âncora já é 1.
+        let h = home("fedora");
+        let dados = h.0.join("dados");
+        banco(&h.0.join(".pki/nssdb"));
+        let ja_uma = |_: Ambiente, banco: &Path, _: Raizes| {
+            let vezes = 1 + usize::from(nss::tem_modulo(&nss::ler(banco), nss::NOME_NATIVO));
+            Ok(verificacao::Contagem {
+                vezes,
+                modulos: vec![],
+            })
+        };
+        let r = publicar(
+            Destino::Sistema,
+            &h.0,
+            &dados,
+            "/usr/lib64/p11-kit-proxy.so",
+            &ja_uma,
+        )
+        .unwrap();
+        assert_eq!(r[0].1, Resultado::Uma(None));
+        assert!(!nss::tem_modulo(
+            &nss::ler(&h.0.join(".pki/nssdb")),
+            nss::NOME_NATIVO
+        ));
+        assert!(situacao(Destino::Sistema, &h.0, &dados).publicado());
+    }
+
+    #[test]
+    fn mexer_no_banco_depois_desfaz_o_publicado() {
+        let h = home("mexido");
+        let dados = h.0.join("dados");
+        banco(&h.0.join(".pki/nssdb"));
+        publicar(
+            Destino::Sistema,
+            &h.0,
+            &dados,
+            "/usr/lib/p11-kit-proxy.so",
+            &como_o_arch,
+        )
+        .unwrap();
+        assert!(situacao(Destino::Sistema, &h.0, &dados).publicado());
+        nss::editar(&h.0.join(".pki/nssdb"), |t| {
+            nss::sem_modulo(t, nss::NOME_NATIVO)
+        })
+        .unwrap();
+        assert!(!situacao(Destino::Sistema, &h.0, &dados).publicado());
     }
 
     #[test]
     fn sem_banco_nao_cria_nada_e_explica() {
         let h = home("vazio");
-        let erro = publicar(Destino::Sistema, &h.0, "/usr/lib/p11-kit-proxy.so").unwrap_err();
+        let erro = publicar(
+            Destino::Sistema,
+            &h.0,
+            &h.0.join("dados"),
+            "/usr/lib/p11-kit-proxy.so",
+            &como_o_arch,
+        )
+        .unwrap_err();
         assert!(erro.contains("abra o navegador"), "{erro}");
         assert!(!h.0.join(".pki").exists());
-        assert!(!situacao(Destino::Sistema, &h.0).publicado());
+        assert!(!situacao(Destino::Sistema, &h.0, &h.0.join("dados")).publicado());
     }
 }

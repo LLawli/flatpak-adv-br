@@ -1,17 +1,20 @@
 //! Os aplicativos Flatpak que usam os tokens, e o que cada um precisa.
 //!
-//! Dois passos, os mesmos para todos, como no Tessera, de onde vêm as
-//! receitas (testadas com token real em 29/10/2026):
+//! Dois passos, os mesmos para todos:
 //!
 //! 1. **permissão**: acesso ao socket do `p11-kit-server.socket` do usuário,
 //!    que serve os módulos do host, os do Âncora entre eles;
 //! 2. **banco**: deixar o NSS do aplicativo chegar aos tokens exatamente uma
-//!    vez. No Firefox, registrar o cliente do p11-kit em cada perfil. No
-//!    Chromium e derivados não há o que registrar (o módulo de confiança do
-//!    runtime já chega ao servidor), só tirar um registro do p11-kit que
-//!    duplicaria os tokens. No Papers e no Okular, um banco vazio onde o
-//!    poppler procura primeiro, pelo mesmo motivo.
+//!    vez. Isso não é suposto, é medido (`verificacao`): o Âncora tenta não
+//!    registrar nada, depois as formas de registro, e fica com a primeira em
+//!    que o token-sentinela aparece uma vez dentro do sandbox do aplicativo.
+//!    As opções e o padrão (usado quando não dá para medir) vêm das receitas
+//!    que o Tessera testou com token real em 29/10/2026: no Firefox, o cliente
+//!    do p11-kit em cada perfil; no Chromium e derivados, nada (o módulo de
+//!    confiança do runtime já chega ao servidor); no Papers e no Okular, um
+//!    banco vazio onde o poppler procura primeiro.
 
+use crate::verificacao::{self, Ambiente, Medidor, Raizes, Registro, Resultado};
 use crate::{host, nss, permissao};
 use std::collections::BTreeSet;
 use std::fs;
@@ -86,10 +89,16 @@ pub fn por_id(id: &str) -> Option<Aplicativo> {
 /// recente em `$XDG_CONFIG_HOME/mozilla/firefox`.
 const BANCO_POPPLER: &str = "config/mozilla/firefox/ancora.default";
 
+/// O Firefox traz a própria libnss3.
+const NSS_DO_FIREFOX: &str = "/app/lib/firefox";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Banco {
     NaoSeAplica,
+    /// Verificado: o token aparece uma vez, e o banco segue como ficou.
     Pronto,
+    /// Configurado pela receita padrão, sem ter podido medir.
+    NaoVerificado,
     /// O que falta, em poucas palavras.
     Falta(String),
     /// O aplicativo está aberto e o banco não pode ser mexido agora.
@@ -104,78 +113,99 @@ pub struct Situacao {
 
 impl Situacao {
     pub fn pronto(&self) -> bool {
-        self.permissao && matches!(self.banco, Banco::Pronto | Banco::NaoSeAplica)
+        self.permissao
+            && matches!(
+                self.banco,
+                Banco::Pronto | Banco::NaoVerificado | Banco::NaoSeAplica
+            )
     }
 }
 
 /// Onde moram os perfis do Firefox em Flatpak: em `config/` a partir do
 /// Firefox 147, em `.mozilla/` antes.
-fn raizes_firefox(home: &Path) -> [PathBuf; 2] {
+fn perfis_firefox(home: &Path) -> Vec<PathBuf> {
     let base = host::var_app(home, "org.mozilla.firefox");
     [
         base.join("config/mozilla/firefox"),
         base.join(".mozilla/firefox"),
     ]
+    .iter()
+    .flat_map(|r| nss::bancos(r))
+    .collect()
 }
 
-/// Os bancos que um navegador da família Chromium pode estar usando: desde o
-/// Chromium 146, `$XDG_DATA_HOME/pki/nssdb`, salvo se o antigo existir.
+/// Os bancos que um navegador da família Chromium pode estar usando, do que
+/// vale mais para o que vale menos: o antigo ganha se existir, e o pacote do
+/// Chromium, que pode usar a home, usa o real.
 fn bancos_chromium(home: &Path, id: &str) -> Vec<PathBuf> {
     let base = host::var_app(home, id);
-    let mut candidatos = vec![base.join("data/pki/nssdb"), base.join(".pki/nssdb")];
+    let mut candidatos = Vec::new();
     if id == "org.chromium.Chromium" {
-        // O pacote do Chromium pode usar a home, e então o banco é o real.
         candidatos.push(home.join(".pki/nssdb"));
     }
+    candidatos.push(base.join(".pki/nssdb"));
+    candidatos.push(base.join("data/pki/nssdb"));
     candidatos
         .into_iter()
         .filter(|b| b.join("cert9.db").is_file())
         .collect()
 }
 
+/// Os bancos que o aplicativo de fato abre, e que a verificação mede.
+fn bancos_medidos(app: &Aplicativo, home: &Path) -> Vec<PathBuf> {
+    match app.receita {
+        Receita::Firefox => perfis_firefox(home),
+        Receita::Chromium => bancos_chromium(home, app.id).into_iter().take(1).collect(),
+        Receita::Poppler => vec![host::var_app(home, app.id).join(BANCO_POPPLER)],
+        Receita::Pronto => vec![],
+    }
+}
+
 fn override_de(home: &Path, id: &str) -> PathBuf {
     host::overrides(home).join(id)
 }
 
-pub fn situacao(app: &Aplicativo, home: &Path) -> Situacao {
+pub fn situacao(app: &Aplicativo, home: &Path, dados: &Path) -> Situacao {
     let override_atual = fs::read_to_string(override_de(home, app.id)).unwrap_or_default();
     let permissao = app.receita == Receita::Pronto || permissao::tem(&override_atual);
-    let banco = match app.receita {
-        Receita::Pronto => Banco::NaoSeAplica,
-        Receita::Firefox => {
-            let perfis: Vec<PathBuf> = raizes_firefox(home)
-                .iter()
-                .flat_map(|r| nss::bancos(r))
-                .collect();
-            if perfis.is_empty() {
-                Banco::Falta("abra o Firefox uma vez para criar o perfil".into())
-            } else if perfis.iter().all(|p| nss::tem_modulo(&nss::ler(p))) {
-                Banco::Pronto
-            } else if perfis.iter().any(|p| nss::em_uso(p)) {
+    if app.receita == Receita::Pronto {
+        return Situacao {
+            permissao,
+            banco: Banco::NaoSeAplica,
+        };
+    }
+    let bancos = bancos_medidos(app, home);
+    let registros = verificacao::ler_registros(dados);
+    let banco = if bancos.iter().all(|b| !b.join("cert9.db").is_file()) {
+        Banco::Falta(match app.receita {
+            Receita::Poppler => "criar o banco de certificados".into(),
+            _ => format!("abra o {} uma vez para criar o perfil", app.nome),
+        })
+    } else if app.receita == Receita::Chromium
+        && bancos_chromium(home, app.id)
+            .iter()
+            .any(|b| nss::tem_p11_kit(&nss::ler(b)))
+    {
+        Banco::Falta("tirar o módulo que duplica os tokens".into())
+    } else {
+        let estados: Vec<Option<&Registro>> = bancos
+            .iter()
+            .map(|b| {
+                registros
+                    .get(&(b.clone(), nss::NOME.to_owned()))
+                    .filter(|r| r.vale_para(b, nss::NOME))
+            })
+            .collect();
+        if estados.iter().any(Option::is_none) {
+            if app.receita == Receita::Firefox && bancos.iter().any(|b| nss::em_uso(b)) {
                 Banco::EmUso
             } else {
-                Banco::Falta("registrar o módulo nos perfis".into())
+                Banco::Falta("verificar".into())
             }
-        }
-        Receita::Chromium => {
-            if bancos_chromium(home, app.id)
-                .iter()
-                .any(|b| nss::tem_p11_kit(&nss::ler(b)))
-            {
-                Banco::Falta("tirar o módulo que duplica os tokens".into())
-            } else {
-                Banco::Pronto
-            }
-        }
-        Receita::Poppler => {
-            let banco = host::var_app(home, app.id).join(BANCO_POPPLER);
-            if !banco.join("cert9.db").is_file() {
-                Banco::Falta("criar o banco de certificados".into())
-            } else if nss::tem_p11_kit(&nss::ler(&banco)) {
-                Banco::Falta("tirar o módulo que duplica os tokens".into())
-            } else {
-                Banco::Pronto
-            }
+        } else if estados.iter().all(|r| r.is_some_and(|r| r.verificado)) {
+            Banco::Pronto
+        } else {
+            Banco::NaoVerificado
         }
     };
     Situacao { permissao, banco }
@@ -209,11 +239,16 @@ fn gravar(caminho: &Path, texto: &str) -> Result<(), String> {
     fs::write(caminho, texto).map_err(|e| format!("{}: {e}", caminho.display()))
 }
 
-/// Faz os dois passos. A permissão só vale depois que o aplicativo for
-/// fechado e aberto de novo.
-pub fn configurar(app: &Aplicativo, home: &Path, dados: &Path) -> Result<(), String> {
+/// Faz os dois passos e devolve, por banco, o que a verificação decidiu. A
+/// permissão só vale depois que o aplicativo for fechado e aberto de novo.
+pub fn configurar(
+    app: &Aplicativo,
+    home: &Path,
+    dados: &Path,
+    medidor: &dyn Medidor,
+) -> Result<Vec<(PathBuf, Resultado)>, String> {
     if app.receita == Receita::Pronto {
-        return Ok(());
+        return Ok(vec![]);
     }
 
     let arquivo = override_de(home, app.id);
@@ -225,24 +260,25 @@ pub fn configurar(app: &Aplicativo, home: &Path, dados: &Path) -> Result<(), Str
         gravar_concessoes(dados, &ids)?;
     }
 
-    match app.receita {
+    let cliente = Some(nss::CLIENTE_NO_SANDBOX.to_owned());
+    let (raizes, opcoes, padrao, nss_proprio) = match app.receita {
         Receita::Firefox => {
-            let perfis: Vec<PathBuf> = raizes_firefox(home)
-                .iter()
-                .flat_map(|r| nss::bancos(r))
-                .collect();
-            if perfis.iter().any(|p| nss::em_uso(p)) {
+            if perfis_firefox(home).iter().any(|p| nss::em_uso(p)) {
                 return Err("feche o Firefox antes".into());
             }
-            for p in perfis {
-                nss::editar(&p, |t| nss::com_modulo(t, nss::CLIENTE_NO_SANDBOX))
-                    .map_err(|e| format!("{}: {e}", p.display()))?;
-            }
+            let proxy = Some(nss::PROXY_NO_SANDBOX.to_owned());
+            (
+                Raizes::Automaticas,
+                vec![None, cliente.clone(), proxy],
+                cliente,
+                Some(NSS_DO_FIREFOX),
+            )
         }
         Receita::Chromium => {
             for b in bancos_chromium(home, app.id) {
                 nss::editar(&b, nss::sem_p11_kit).map_err(|e| format!("{}: {e}", b.display()))?;
             }
+            (Raizes::Chromium, vec![None, cliente], None, None)
         }
         Receita::Poppler => {
             let banco = host::var_app(home, app.id).join(BANCO_POPPLER);
@@ -251,10 +287,33 @@ pub fn configurar(app: &Aplicativo, home: &Path, dados: &Path) -> Result<(), Str
             }
             nss::editar(&banco, nss::sem_p11_kit)
                 .map_err(|e| format!("{}: {e}", banco.display()))?;
+            (Raizes::Automaticas, vec![None, cliente], None, None)
         }
-        Receita::Pronto => {}
+        Receita::Pronto => unreachable!(),
+    };
+
+    let ambiente = Ambiente::Flatpak {
+        app: app.id,
+        nss_proprio,
+    };
+    let mut saida = Vec::new();
+    for banco in bancos_medidos(app, home) {
+        if !banco.join("cert9.db").is_file() {
+            continue;
+        }
+        let resultado = verificacao::garantir_um_no_banco(
+            &banco,
+            nss::NOME,
+            medidor,
+            ambiente,
+            raizes,
+            &opcoes,
+            &padrao,
+        )?;
+        verificacao::gravar_registro(dados, &banco, nss::NOME, Some(Registro::de(&resultado)))?;
+        saida.push((banco, resultado));
     }
-    Ok(())
+    Ok(saida)
 }
 
 /// Desfaz o que o Âncora fez no aplicativo, e só isso. Os registros
@@ -279,15 +338,13 @@ pub fn desfazer(app: &Aplicativo, home: &Path, dados: &Path) -> Result<(), Strin
 
     match app.receita {
         Receita::Firefox => {
-            let perfis: Vec<PathBuf> = raizes_firefox(home)
-                .iter()
-                .flat_map(|r| nss::bancos(r))
-                .collect();
+            let perfis = perfis_firefox(home);
             if perfis.iter().any(|p| nss::em_uso(p)) {
                 return Err("feche o Firefox antes".into());
             }
             for p in perfis {
-                nss::editar(&p, nss::sem_modulo).map_err(|e| format!("{}: {e}", p.display()))?;
+                nss::editar(&p, |t| nss::sem_modulo(t, nss::NOME))
+                    .map_err(|e| format!("{}: {e}", p.display()))?;
             }
         }
         Receita::Poppler => {
@@ -299,7 +356,21 @@ pub fn desfazer(app: &Aplicativo, home: &Path, dados: &Path) -> Result<(), Strin
                 _ => {}
             }
         }
-        Receita::Chromium | Receita::Pronto => {}
+        Receita::Chromium | Receita::Pronto => {
+            for b in bancos_chromium(home, app.id) {
+                nss::editar(&b, |t| nss::sem_modulo(t, nss::NOME))
+                    .map_err(|e| format!("{}: {e}", b.display()))?;
+            }
+        }
+    }
+    // Os bancos medidos já foram calculados acima com o estado de antes; o
+    // do poppler pode ter acabado de ser apagado.
+    let mut esquecer = bancos_medidos(app, home);
+    if app.receita == Receita::Chromium {
+        esquecer = bancos_chromium(home, app.id);
+    }
+    for banco in esquecer {
+        verificacao::gravar_registro(dados, &banco, nss::NOME, None)?;
     }
     Ok(())
 }
@@ -355,6 +426,7 @@ pub fn socket_do_sistema() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::verificacao::Contagem;
 
     struct Home(PathBuf);
     impl Drop for Home {
@@ -372,6 +444,35 @@ mod tests {
         por_id(id).unwrap()
     }
 
+    /// Um consumidor que só vê o token pelo bloco do Âncora (o Firefox).
+    fn so_com_bloco(_: Ambiente, banco: &Path, _: Raizes) -> Result<Contagem, String> {
+        let vezes = usize::from(nss::tem_modulo(&nss::ler(banco), nss::NOME));
+        Ok(Contagem {
+            vezes,
+            modulos: vec![],
+        })
+    }
+
+    /// Um consumidor que já vê o token pelo módulo de confiança, e duplica
+    /// com o bloco (o Chromium, o Papers).
+    fn ja_ve(_: Ambiente, banco: &Path, _: Raizes) -> Result<Contagem, String> {
+        let vezes = 1 + usize::from(nss::tem_modulo(&nss::ler(banco), nss::NOME));
+        Ok(Contagem {
+            vezes,
+            modulos: vec![],
+        })
+    }
+
+    fn banco(dir: &Path) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(dir.join("cert9.db"), "").unwrap();
+        fs::write(
+            dir.join("pkcs11.txt"),
+            "library=\nname=NSS Internal PKCS #11 Module\n\n",
+        )
+        .unwrap();
+    }
+
     #[test]
     fn os_ids_do_catalogo_sao_unicos() {
         let ids: BTreeSet<_> = CONHECIDOS.iter().map(|a| a.id).collect();
@@ -381,9 +482,9 @@ mod tests {
     #[test]
     fn pjeoffice_do_flatpark_ja_esta_pronto() {
         let h = home("pje");
-        let s = situacao(&app("br.jus.cnj.PJeOfficePro"), &h.0);
-        assert!(s.pronto());
-        configurar(&app("br.jus.cnj.PJeOfficePro"), &h.0, &h.0.join("dados")).unwrap();
+        let dados = h.0.join("dados");
+        assert!(situacao(&app("br.jus.cnj.PJeOfficePro"), &h.0, &dados).pronto());
+        configurar(&app("br.jus.cnj.PJeOfficePro"), &h.0, &dados, &so_com_bloco).unwrap();
         assert!(
             !host::overrides(&h.0).exists(),
             "não deveria criar override"
@@ -391,20 +492,22 @@ mod tests {
     }
 
     #[test]
-    fn papers_ganha_permissao_e_banco_vazio_e_desfazer_tira_os_dois() {
+    fn papers_ganha_permissao_e_banco_vazio_sem_bloco_e_desfazer_tira_tudo() {
         let h = home("papers");
         let dados = h.0.join("dados");
         let papers = app("org.gnome.Papers");
         assert_eq!(
-            situacao(&papers, &h.0),
+            situacao(&papers, &h.0, &dados),
             Situacao {
                 permissao: false,
                 banco: Banco::Falta("criar o banco de certificados".into())
             }
         );
 
-        configurar(&papers, &h.0, &dados).unwrap();
-        assert!(situacao(&papers, &h.0).pronto());
+        let r = configurar(&papers, &h.0, &dados, &ja_ve).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].1, Resultado::Uma(None));
+        assert_eq!(situacao(&papers, &h.0, &dados).banco, Banco::Pronto);
 
         desfazer(&papers, &h.0, &dados).unwrap();
         assert!(!host::overrides(&h.0).join("org.gnome.Papers").exists());
@@ -413,6 +516,7 @@ mod tests {
                 .join(BANCO_POPPLER)
                 .exists()
         );
+        assert!(verificacao::ler_registros(&dados).is_empty());
     }
 
     #[test]
@@ -422,69 +526,105 @@ mod tests {
         let arquivo = host::overrides(&h.0).join("org.gnome.Papers");
         gravar(&arquivo, "[Context]\nfilesystems=xdg-run/p11-kit/pkcs11;\n").unwrap();
 
-        configurar(&app("org.gnome.Papers"), &h.0, &dados).unwrap();
+        configurar(&app("org.gnome.Papers"), &h.0, &dados, &ja_ve).unwrap();
         desfazer(&app("org.gnome.Papers"), &h.0, &dados).unwrap();
         assert!(permissao::tem(&fs::read_to_string(&arquivo).unwrap()));
     }
 
     #[test]
-    fn firefox_registra_em_todos_os_perfis_e_recusa_perfil_aberto_so_por_lock() {
+    fn firefox_registra_onde_precisa_e_desfazer_tira() {
         let h = home("firefox");
         let dados = h.0.join("dados");
         let raiz = host::var_app(&h.0, "org.mozilla.firefox").join("config/mozilla/firefox");
         for p in ["a.default", "b.default-release"] {
-            fs::create_dir_all(raiz.join(p)).unwrap();
-            fs::write(raiz.join(p).join("cert9.db"), "").unwrap();
-            fs::write(
-                raiz.join(p).join("pkcs11.txt"),
-                "library=\nname=NSS Internal PKCS #11 Module\n\n",
-            )
-            .unwrap();
+            banco(&raiz.join(p));
         }
         let firefox = app("org.mozilla.firefox");
         assert_eq!(
-            situacao(&firefox, &h.0).banco,
-            Banco::Falta("registrar o módulo nos perfis".into())
+            situacao(&firefox, &h.0, &dados).banco,
+            Banco::Falta("verificar".into())
         );
 
-        configurar(&firefox, &h.0, &dados).unwrap();
-        assert!(situacao(&firefox, &h.0).pronto());
-        for p in ["a.default", "b.default-release"] {
-            assert!(nss::tem_modulo(&nss::ler(&raiz.join(p))));
-        }
+        let r = configurar(&firefox, &h.0, &dados, &so_com_bloco).unwrap();
+        assert_eq!(r.len(), 2);
+        assert!(
+            r.iter()
+                .all(|(_, r)| *r == Resultado::Uma(Some(nss::CLIENTE_NO_SANDBOX.into())))
+        );
+        assert!(situacao(&firefox, &h.0, &dados).pronto());
+
+        // Alguém tira o bloco depois: deixa de estar pronto.
+        nss::editar(&raiz.join("a.default"), |t| nss::sem_modulo(t, nss::NOME)).unwrap();
+        assert_eq!(
+            situacao(&firefox, &h.0, &dados).banco,
+            Banco::Falta("verificar".into())
+        );
 
         desfazer(&firefox, &h.0, &dados).unwrap();
         for p in ["a.default", "b.default-release"] {
             let texto = nss::ler(&raiz.join(p));
-            assert!(!nss::tem_modulo(&texto));
+            assert!(!nss::tem_modulo(&texto, nss::NOME));
             assert!(texto.contains("NSS Internal"));
         }
+    }
+
+    #[test]
+    fn sem_poder_medir_fica_a_receita_padrao_marcada() {
+        let h = home("sem-medir");
+        let dados = h.0.join("dados");
+        banco(&host::var_app(&h.0, "org.mozilla.firefox").join("config/mozilla/firefox/a.default"));
+        let firefox = app("org.mozilla.firefox");
+        let r = configurar(
+            &firefox,
+            &h.0,
+            &dados,
+            &verificacao::Indisponivel("sem sandbox".into()),
+        )
+        .unwrap();
+        assert!(
+            matches!(&r[0].1, Resultado::NaoVerificado { registro: Some(c), .. } if c == nss::CLIENTE_NO_SANDBOX)
+        );
+        assert_eq!(situacao(&firefox, &h.0, &dados).banco, Banco::NaoVerificado);
     }
 
     #[test]
     fn firefox_sem_perfil_pede_para_abrir_uma_vez() {
         let h = home("firefox-novo");
         assert_eq!(
-            situacao(&app("org.mozilla.firefox"), &h.0).banco,
+            situacao(&app("org.mozilla.firefox"), &h.0, &h.0.join("dados")).banco,
             Banco::Falta("abra o Firefox uma vez para criar o perfil".into())
         );
     }
 
     #[test]
-    fn chromium_com_registro_do_p11_kit_e_limpo() {
-        let h = home("brave");
-        let banco = host::var_app(&h.0, "com.brave.Browser").join("data/pki/nssdb");
-        fs::create_dir_all(&banco).unwrap();
-        fs::write(banco.join("cert9.db"), "").unwrap();
-        fs::write(
-            banco.join("pkcs11.txt"),
-            "library=\nname=NSS Internal PKCS #11 Module\n\nlibrary=/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so\nname=Tessera (p11-kit)\n\n",
-        )
+    fn chromium_tira_duplicado_de_outro_dono_e_preserva_o_nativo() {
+        let h = home("chromium");
+        let dados = h.0.join("dados");
+        // O pacote do Chromium usa o ~/.pki/nssdb real, o mesmo dos nativos.
+        let nssdb = h.0.join(".pki/nssdb");
+        banco(&nssdb);
+        nss::editar(&nssdb, |t| {
+            nss::com_modulo(t, "Tessera (p11-kit)", nss::CLIENTE_NO_SANDBOX)
+        })
         .unwrap();
-        let brave = app("com.brave.Browser");
-        assert!(!situacao(&brave, &h.0).pronto());
-        configurar(&brave, &h.0, &h.0.join("dados")).unwrap();
-        assert!(situacao(&brave, &h.0).pronto());
-        assert!(nss::ler(&banco).contains("NSS Internal"));
+        nss::editar(&nssdb, |t| {
+            nss::com_modulo(t, nss::NOME_NATIVO, "/usr/lib/p11-kit-proxy.so")
+        })
+        .unwrap();
+        let chromium = app("org.chromium.Chromium");
+        assert!(!situacao(&chromium, &h.0, &dados).pronto());
+
+        let r = configurar(&chromium, &h.0, &dados, &ja_ve).unwrap();
+        assert_eq!(r[0], (nssdb.clone(), Resultado::Uma(None)));
+        let texto = nss::ler(&nssdb);
+        assert!(!texto.contains("Tessera"));
+        assert!(
+            nss::tem_modulo(&texto, nss::NOME_NATIVO),
+            "a publicação nativa não pode sair"
+        );
+        assert!(situacao(&chromium, &h.0, &dados).pronto());
+
+        desfazer(&chromium, &h.0, &dados).unwrap();
+        assert!(nss::tem_modulo(&nss::ler(&nssdb), nss::NOME_NATIVO));
     }
 }

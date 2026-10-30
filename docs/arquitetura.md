@@ -119,6 +119,34 @@ com o do runtime, e esse caso ainda duplica: ainda não tratado.
 Pelo terminal: `ancora nativos`, e `ancora nativos publicar|despublicar
 firefox|sistema`. `tests/e2e/nativos.sh` confere as duas pontas.
 
+### Um token, exatamente uma vez: verificado, não suposto
+
+As receitas acima são o padrão, não a garantia. O que cada consumidor enxerga
+depende da distribuição (o Fedora pode já pôr o proxy no NSS do sistema; no
+Debian o caminho do proxy do host coincide com o do runtime), então
+`src/verificacao.rs` mede. Publica por alguns segundos o token-sentinela
+(`sentinela/sentinela.c`, um módulo PKCS#11 mínimo com um token "Âncora:
+verificação", sem PIN e sem objetos), abre o banco NSS do consumidor do jeito
+que ele abre, dentro do ambiente dele (o sandbox do aplicativo, pelo
+`flatpak run --command=python3`, ou o host), e conta quantas vezes o
+sentinela aparece. Tenta, em ordem, não registrar nada e cada forma de
+registro, e fica com a primeira que dá 1. Se nem sem o Âncora der 1, diz por
+quais módulos o token duplica. Se não der para medir (aplicativo sem
+`python3`, por exemplo), aplica a receita padrão e marca "não verificado".
+
+O resultado de cada banco fica em `verificados`, nos dados do Âncora, e
+"pronto" quer dizer "verificado, e o banco continua como foi verificado". Cada
+dono tem o seu bloco no `pkcs11.txt`: `Âncora (p11-kit)` para os aplicativos
+Flatpak e `Âncora (sistema)` para os nativos, porque o `~/.pki/nssdb` é lido
+pelos dois.
+
+O módulo do sentinela vai com `priority: 1000`. O `p11-kit server` (o
+`p11-kit-server.socket`, por onde os aplicativos Flatpak chegam aos tokens)
+abre uma sessão em cada token que lista e encerra a lista inteira no primeiro
+`C_OpenSession` que falhar: todo módulo que vem depois some (p11-kit 0.26.5,
+`iter.c`; o `main` ainda é assim). Os módulos são ordenados por `priority` e
+depois pelo nome, e o sentinela na frente não pode ser escondido.
+
 ## Instalar extensões de dentro do aplicativo
 
 A tela de extensões procura, nos remotes que a pessoa já tem configurados, os

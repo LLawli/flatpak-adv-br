@@ -17,6 +17,10 @@ use std::path::{Path, PathBuf};
 pub const PREFIXO: &str = "ancora-";
 const SUFIXO: &str = ".module";
 
+/// O módulo do token-sentinela (ver `verificacao`). É de quem verifica, que o
+/// publica e o tira: a publicação dos drivers não o lê nem o apaga.
+pub const SENTINELA: &str = "ancora-verificacao.module";
+
 const MARCA: &str =
     "# Publicado pelo Âncora (dev.lukakuuhaku.Ancora). Reescrito a cada publicação.";
 
@@ -42,6 +46,14 @@ pub fn diretorio(home_host: &Path) -> PathBuf {
 /// O nome do arquivo de um driver: `ancora-safesign.module`.
 pub fn nome(chave: &str) -> String {
     format!("{PREFIXO}{}{SUFIXO}", chave.to_lowercase())
+}
+
+/// O módulo do token-sentinela vai na frente de todos: o `p11-kit server`
+/// encerra a varredura no primeiro token que recusar `C_OpenSession`, e tudo o
+/// que vem depois some para os aplicativos Flatpak (p11-kit 0.26.5, iter.c).
+/// Com prioridade alta, nenhum outro módulo o esconde.
+pub fn conteudo_sentinela(socket: &Path) -> String {
+    format!("{}priority: 1000\n", conteudo(socket))
 }
 
 pub fn conteudo(socket: &Path) -> String {
@@ -80,7 +92,7 @@ pub fn planejar(
 }
 
 fn e_nosso(nome: &str) -> bool {
-    nome.starts_with(PREFIXO) && nome.ends_with(SUFIXO)
+    nome.starts_with(PREFIXO) && nome.ends_with(SUFIXO) && nome != SENTINELA
 }
 
 /// Os `ancora-*.module` do diretório, com o conteúdo. Os de outros donos
@@ -161,6 +173,14 @@ mod tests {
     }
 
     #[test]
+    fn o_sentinela_vai_na_frente_de_todos_os_modulos() {
+        let c = conteudo_sentinela(Path::new("/run/user/1000/ancora/verificacao"));
+        assert!(c.contains("\nremote: unix:path=/run/user/1000/ancora/verificacao\n"));
+        assert!(c.ends_with("\npriority: 1000\n"));
+        assert!(c.contains("\ndisable-in: "));
+    }
+
+    #[test]
     fn o_nome_tem_o_prefixo_e_e_minusculo() {
         assert_eq!(nome("SafeSign"), "ancora-safesign.module");
     }
@@ -221,6 +241,7 @@ mod tests {
             "de uma publicação anterior",
         )
         .unwrap();
+        fs::write(dir.0.join(SENTINELA), "de uma verificação em andamento").unwrap();
 
         let socket = Path::new("/run/user/1000/ancora/safesign");
         let desejados = mapa(&[(&nome("SafeSign"), &conteudo(socket))]);
@@ -231,15 +252,19 @@ mod tests {
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
         arquivos.sort();
-        assert_eq!(arquivos, ["ancora-safesign.module", "opensc.module"]);
+        assert_eq!(
+            arquivos,
+            ["ancora-safesign.module", SENTINELA, "opensc.module"]
+        );
         assert_eq!(ler(&dir.0).unwrap(), desejados);
 
         publicar(&dir.0, &BTreeMap::new()).unwrap();
-        let arquivos: Vec<_> = fs::read_dir(&dir.0)
+        let mut arquivos: Vec<_> = fs::read_dir(&dir.0)
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
-        assert_eq!(arquivos, ["opensc.module"]);
+        arquivos.sort();
+        assert_eq!(arquivos, [SENTINELA, "opensc.module"]);
     }
 
     #[test]

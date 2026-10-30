@@ -11,13 +11,12 @@
 //! reiniciado.
 
 use crate::extensao::{self, Familia};
-use crate::publicacao;
 use crate::supervisao::{Acao, Estado, Sondagem, Supervisao};
+use crate::{processo, publicacao};
 use gtk::glib;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
@@ -101,6 +100,10 @@ fn iniciar() -> Result<Servico, String> {
             } else {
                 (e.id.to_lowercase(), e.id.clone())
             };
+            if publicacao::nome(&chave) == publicacao::SENTINELA {
+                eprintln!("{rotulo}: o nome é reservado ao token-sentinela");
+                continue;
+            }
             drivers.insert(
                 chave.clone(),
                 Driver {
@@ -263,20 +266,6 @@ fn descrever(estado: &Estado) -> String {
     }
 }
 
-/// Faz o filho morrer junto com o serviço, mesmo que o serviço seja morto
-/// com SIGKILL, e o põe num grupo de processos próprio, para que os
-/// `p11-kit-remote` de cada conexão saiam junto com o servidor.
-fn amarrar_ao_servico(cmd: &mut Command) {
-    // SAFETY: entre o fork e o exec só chamamos funções seguras para isso.
-    unsafe {
-        cmd.pre_exec(|| {
-            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
-            libc::setpgid(0, 0);
-            Ok(())
-        });
-    }
-}
-
 fn iniciar_servidor(d: &mut Driver) {
     for dir in &d.criar_diretorios {
         if let Err(e) = fs::create_dir_all(dir) {
@@ -289,22 +278,13 @@ fn iniciar_servidor(d: &mut Driver) {
     if let Some(atual) = std::env::var_os("LD_LIBRARY_PATH") {
         bibliotecas.extend(std::env::split_paths(&atual));
     }
-    let mut cmd = Command::new("p11-kit");
-    cmd.args(["server", "-f", "-n"])
-        .arg(&d.socket)
-        .arg("--provider")
-        .arg(&d.modulo.modulo)
-        .arg("pkcs11:")
-        .envs(&d.modulo.ambiente)
-        .stdin(Stdio::null())
-        // O `p11-kit server` escreve no stdout as variáveis para o cliente.
-        .stdout(Stdio::null());
+    let mut cmd = processo::comando_servidor(&d.socket, &d.modulo.modulo);
+    cmd.envs(&d.modulo.ambiente);
     if let Ok(caminho) = std::env::join_paths(&bibliotecas)
         && !bibliotecas.is_empty()
     {
         cmd.env("LD_LIBRARY_PATH", caminho);
     }
-    amarrar_ao_servico(&mut cmd);
     match cmd.spawn() {
         Ok(servidor) => d.servidor = Some(servidor),
         Err(e) => eprintln!("{}: p11-kit server: {e}", d.rotulo),
@@ -313,24 +293,11 @@ fn iniciar_servidor(d: &mut Driver) {
 }
 
 fn parar_servidor(d: &mut Driver) {
-    let Some(mut servidor) = d.servidor.take() else {
-        return;
-    };
-    // SIGTERM ao grupo: o servidor apaga o socket ao sair, e as conexões
-    // abertas (inclusive uma travada num driver) saem junto.
-    let grupo = servidor.id() as libc::pid_t;
-    // SAFETY: o grupo é o do filho que este serviço criou.
-    unsafe { libc::killpg(grupo, libc::SIGTERM) };
-    let limite = Instant::now() + Duration::from_secs(2);
-    while Instant::now() < limite {
-        if let Ok(Some(_)) = servidor.try_wait() {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(50));
+    // O servidor apaga o socket ao sair, e as conexões abertas (inclusive uma
+    // travada num driver) saem junto, por estarem no mesmo grupo.
+    if let Some(mut servidor) = d.servidor.take() {
+        processo::parar_grupo(&mut servidor);
     }
-    // SAFETY: idem.
-    unsafe { libc::killpg(grupo, libc::SIGKILL) };
-    let _ = servidor.wait();
 }
 
 fn iniciar_sonda(socket: &Path) -> Result<Child, String> {
@@ -341,7 +308,7 @@ fn iniciar_sonda(socket: &Path) -> Result<Child, String> {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    amarrar_ao_servico(&mut cmd);
+    processo::amarrar(&mut cmd);
     cmd.spawn().map_err(|e| e.to_string())
 }
 

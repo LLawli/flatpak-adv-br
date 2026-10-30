@@ -127,8 +127,13 @@ pid_servico() {
 
 # Roda um subcomando do Âncora contra a home falsa.
 ancora() {
+    local extra=()
+    if [ -n "${ANCORA_SERVIDOR_DO_SISTEMA:-}" ]; then
+        extra=(--env=ANCORA_SERVIDOR_DO_SISTEMA="$ANCORA_SERVIDOR_DO_SISTEMA"
+            --filesystem="$(dirname "$ANCORA_SERVIDOR_DO_SISTEMA")")
+    fi
     flatpak run --env=ANCORA_HOME_HOST="$FALSA" --env=XDG_DATA_HOME="$BANCADA/dados" \
-        --filesystem="$BANCADA" --command=ancora dev.lukakuuhaku.Ancora "$@"
+        --filesystem="$BANCADA" "${extra[@]}" --command=ancora dev.lukakuuhaku.Ancora "$@"
 }
 
 subir() {
@@ -138,3 +143,13 @@ subir() {
 
 [ -z "$(pid_servico)" ] || { echo "já há um ancora servir rodando; pare-o antes"; exit 1; }
 : >"$LOG"
+
+# Processos que o teste sobe e que não podem sobrar se ele abortar no meio.
+PARAR=()
+limpar() {
+    local p
+    for p in "${PARAR[@]}"; do kill -TERM "$p" 2>/dev/null || true; done
+    p=$(pid_servico)
+    [ -z "$p" ] || kill -TERM "$p"
+}
+trap limpar EXIT

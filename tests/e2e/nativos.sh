@@ -36,18 +36,20 @@ confere "antes de publicar, o host não vê o token" "$(no_host "$SISTEMA")" ""
 
 ancora nativos publicar firefox >/dev/null
 ancora nativos publicar sistema >/dev/null
-confere "registra o proxy do host pelo caminho absoluto" \
+confere "a verificação escolhe o proxy pelo caminho absoluto" \
     "$(grep -c "^library=$PROXY$" "$FIREFOX/pkcs11.txt" "$SISTEMA/pkcs11.txt" | cut -d: -f2 | tr '\n' ' ')" "1 1 "
-confere "o Firefox nativo vê o token uma vez" "$(no_host "$FIREFOX")" "Âncora (p11-kit)"
-confere "o Chromium nativo vê o token uma vez" "$(no_host "$SISTEMA")" "Âncora (p11-kit)"
+confere "o sentinela sai ao terminar" "$(ls "$MODULES" | grep -c verificacao || true)" "0"
+confere "o Firefox nativo vê o token uma vez" "$(no_host "$FIREFOX")" "Âncora (sistema)"
+confere "o Chromium nativo vê o token uma vez" "$(no_host "$SISTEMA")" "Âncora (sistema)"
+confere "e consta como publicado e verificado" "$(ancora nativos | grep -c ': publicado$')" "2"
 
 no_sandbox=$(flatpak run --filesystem="$BANCADA" --command=python3 dev.lukakuuhaku.Ancora \
-    -I "$OBRA/nss.py" "$SISTEMA" | python3 -I -c 'import json,sys; print(sum(1 for m,t in json.load(sys.stdin) if m == "Âncora (p11-kit)"))')
+    -I "$OBRA/nss.py" "$SISTEMA" | python3 -I -c 'import json,sys; print(sum(1 for m,t in json.load(sys.stdin) if m.startswith("Âncora")))')
 confere "dentro de um sandbox o mesmo banco ignora o registro" "$no_sandbox" "0"
 
 ancora configurar org.chromium.Chromium >/dev/null
 confere "a receita do Chromium Flatpak não apaga a publicação nativa" \
-    "$(grep -c '^name=Âncora (p11-kit)$' "$SISTEMA/pkcs11.txt")" "1"
+    "$(grep -c '^name=Âncora (sistema)$' "$SISTEMA/pkcs11.txt")" "1"
 ancora desfazer org.chromium.Chromium
 
 ancora nativos despublicar firefox >/dev/null

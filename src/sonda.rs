@@ -20,29 +20,10 @@ pub fn sondar_com_limite(
     socket: &Path,
     limite: std::time::Duration,
 ) -> Result<Vec<String>, String> {
-    use std::process::{Command, Stdio};
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut filho = Command::new(exe)
-        .arg("sondar")
-        .arg(socket)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    let fim = std::time::Instant::now() + limite;
-    loop {
-        match filho.try_wait().map_err(|e| e.to_string())? {
-            Some(_) => break,
-            None if std::time::Instant::now() >= fim => {
-                let _ = filho.kill();
-                let _ = filho.wait();
-                return Err(format!("sem resposta em {} s", limite.as_secs()));
-            }
-            None => std::thread::sleep(std::time::Duration::from_millis(50)),
-        }
-    }
-    let saida = filho.wait_with_output().map_err(|e| e.to_string())?;
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("sondar").arg(socket);
+    let saida = crate::processo::executar(cmd, b"", limite)?;
     if saida.status.success() {
         Ok(String::from_utf8_lossy(&saida.stdout)
             .lines()

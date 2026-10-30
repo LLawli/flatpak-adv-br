@@ -8,10 +8,12 @@ mod host;
 mod nativos;
 mod nss;
 mod permissao;
+mod processo;
 mod publicacao;
 mod servico;
 mod sonda;
 mod supervisao;
+mod verificacao;
 
 /// O id do aplicativo. É também o prefixo das extensões
 /// (`dev.lukakuuhaku.Ancora.Driver.SafeSign`), e por isso não muda.

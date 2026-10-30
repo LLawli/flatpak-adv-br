@@ -27,3 +27,7 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
 - Firefox e navegadores derivados do Chromium instalados fora do Flatpak
   podem receber os tokens: `ancora nativos publicar firefox|sistema`, e
   `despublicar` para tirar.
+- Antes de dar um aplicativo ou navegador por pronto, o Âncora confere, dentro
+  dele, que o token aparece exatamente uma vez, e escolhe a forma de registro
+  que garante isso. Sem token espetado também: a conferência usa um token de
+  verificação próprio, visível só por alguns segundos.

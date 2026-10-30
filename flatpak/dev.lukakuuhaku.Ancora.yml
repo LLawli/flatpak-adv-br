@@ -78,6 +78,18 @@ add-extensions:
     version: master
 
 modules:
+  # O token-sentinela que a verificação publica por alguns segundos (ver
+  # src/verificacao.rs).
+  - name: sentinela
+    buildsystem: simple
+    build-commands:
+      - gcc -shared -fPIC -O2 -Wall -Wextra -Werror -I/usr/include/p11-kit-1
+        sentinela.c -o libancora-sentinela.so
+      - install -Dm755 libancora-sentinela.so -t /app/lib/ancora
+    sources:
+      - type: file
+        path: ../sentinela/sentinela.c
+
   - name: ancora
     buildsystem: simple
     build-options:

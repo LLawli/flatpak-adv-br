@@ -16,6 +16,7 @@ cryptoki = "0.12"
 libc = "0.2"
 glib-unix = "0.22"
 libloading = "0.8"
+serde_json = "1"
 
 [profile.release]
 lto = true

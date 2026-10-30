@@ -10,13 +10,22 @@ use std::io;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 
-/// O nome com que o Âncora registra o módulo, e por onde ele o reconhece
-/// para atualizar ou remover.
+/// O bloco que o Âncora registra nos aplicativos Flatpak: o cliente do
+/// p11-kit do runtime deles. É pelo nome que ele o reconhece para atualizar
+/// ou remover.
 pub const NOME: &str = "Âncora (p11-kit)";
+
+/// O bloco que o Âncora registra nos navegadores nativos: o proxy do host.
+/// Outro nome porque o `~/.pki/nssdb` é lido pelos nativos e pelo Chromium
+/// Flatpak, e cada um decide o próprio bloco.
+pub const NOME_NATIVO: &str = "Âncora (sistema)";
 
 /// O cliente do p11-kit no runtime de um aplicativo Flatpak. É um caminho de
 /// dentro do sandbox dele, não deste.
 pub const CLIENTE_NO_SANDBOX: &str = "/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so";
+
+/// O proxy do p11-kit no runtime de um aplicativo Flatpak.
+pub const PROXY_NO_SANDBOX: &str = "/usr/lib/x86_64-linux-gnu/p11-kit-proxy.so";
 
 /// Bibliotecas que levam aos tokens pelo p11-kit. Registrar uma delas onde o
 /// aplicativo já chega aos tokens pelo módulo de confiança faz cada token
@@ -48,17 +57,17 @@ fn juntar(blocos: &[String]) -> String {
 /// Chromium Flatpak, ele aponta o proxy do host por caminho absoluto, que o
 /// sandbox não acha e ignora (medido).
 fn e_do_p11_kit(bloco: &str) -> bool {
-    campo(bloco, "name") != Some(NOME)
+    !campo(bloco, "name").is_some_and(|n| n == NOME || n == NOME_NATIVO)
         && campo(bloco, "library")
             .map(|l| DO_P11_KIT.iter().any(|b| l.ends_with(b)))
             .unwrap_or(false)
 }
 
 /// O `pkcs11.txt` com o módulo do Âncora; `None` se já estava assim.
-pub fn com_modulo(texto: &str, biblioteca: &str) -> Option<String> {
-    let novo = format!("library={biblioteca}\nname={NOME}\nNSS=trustOrder=100");
+pub fn com_modulo(texto: &str, nome: &str, biblioteca: &str) -> Option<String> {
+    let novo = format!("library={biblioteca}\nname={nome}\nNSS=trustOrder=100");
     let mut lista = blocos(texto);
-    match lista.iter().position(|b| campo(b, "name") == Some(NOME)) {
+    match lista.iter().position(|b| campo(b, "name") == Some(nome)) {
         Some(i) if lista[i] == novo => return None,
         Some(i) => lista[i] = novo,
         None => lista.push(novo),
@@ -67,8 +76,8 @@ pub fn com_modulo(texto: &str, biblioteca: &str) -> Option<String> {
 }
 
 /// O `pkcs11.txt` sem o módulo do Âncora; `None` se ele não estava lá.
-pub fn sem_modulo(texto: &str) -> Option<String> {
-    sem(texto, |b| campo(b, "name") == Some(NOME))
+pub fn sem_modulo(texto: &str, nome: &str) -> Option<String> {
+    sem(texto, |b| campo(b, "name") == Some(nome))
 }
 
 /// O `pkcs11.txt` sem nenhum registro do p11-kit; `None` se não havia.
@@ -82,8 +91,18 @@ fn sem(texto: &str, tirar: impl Fn(&str) -> bool) -> Option<String> {
     (restantes.len() != lista.len()).then(|| juntar(&restantes))
 }
 
-pub fn tem_modulo(texto: &str) -> bool {
-    blocos(texto).iter().any(|b| campo(b, "name") == Some(NOME))
+#[cfg(test)]
+pub fn tem_modulo(texto: &str, nome: &str) -> bool {
+    blocos(texto).iter().any(|b| campo(b, "name") == Some(nome))
+}
+
+/// A biblioteca do bloco do Âncora, se houver.
+pub fn biblioteca_do_ancora(texto: &str, nome: &str) -> Option<String> {
+    blocos(texto)
+        .iter()
+        .find(|b| campo(b, "name") == Some(nome))
+        .and_then(|b| campo(b, "library"))
+        .map(str::to_owned)
 }
 
 pub fn tem_p11_kit(texto: &str) -> bool {
@@ -207,18 +226,18 @@ mod tests {
 
     #[test]
     fn registra_uma_vez_e_preserva_o_modulo_interno() {
-        let um = com_modulo(INTERNO, CLIENTE_NO_SANDBOX).unwrap();
+        let um = com_modulo(INTERNO, NOME, CLIENTE_NO_SANDBOX).unwrap();
         assert!(um.starts_with("library=\nname=NSS Internal"));
         assert!(um.contains(&format!("library={CLIENTE_NO_SANDBOX}\nname={NOME}\n")));
-        assert!(tem_modulo(&um));
-        assert_eq!(com_modulo(&um, CLIENTE_NO_SANDBOX), None);
+        assert!(tem_modulo(&um, NOME));
+        assert_eq!(com_modulo(&um, NOME, CLIENTE_NO_SANDBOX), None);
         assert_eq!(um.matches(NOME).count(), 1);
     }
 
     #[test]
     fn registrar_com_outra_biblioteca_atualiza_no_lugar() {
-        let um = com_modulo(INTERNO, "/velho.so").unwrap();
-        let dois = com_modulo(&um, CLIENTE_NO_SANDBOX).unwrap();
+        let um = com_modulo(INTERNO, NOME, "/velho.so").unwrap();
+        let dois = com_modulo(&um, NOME, CLIENTE_NO_SANDBOX).unwrap();
         assert!(!dois.contains("/velho.so"));
         assert_eq!(dois.matches(NOME).count(), 1);
     }
@@ -226,16 +245,16 @@ mod tests {
     #[test]
     fn remover_tira_so_o_do_ancora() {
         let outro = "library=/usr/lib/opensc-pkcs11.so\nname=OpenSC\n";
-        let texto = com_modulo(&format!("{INTERNO}{outro}"), CLIENTE_NO_SANDBOX).unwrap();
-        let sem = sem_modulo(&texto).unwrap();
-        assert!(!tem_modulo(&sem));
+        let texto = com_modulo(&format!("{INTERNO}{outro}"), NOME, CLIENTE_NO_SANDBOX).unwrap();
+        let sem = sem_modulo(&texto, NOME).unwrap();
+        assert!(!tem_modulo(&sem, NOME));
         assert!(sem.contains("name=OpenSC") && sem.contains("NSS Internal"));
-        assert_eq!(sem_modulo(&sem), None);
+        assert_eq!(sem_modulo(&sem, NOME), None);
     }
 
     #[test]
     fn acha_e_tira_registros_do_p11_kit_de_outros_donos() {
-        let do_ancora = com_modulo("", "/usr/lib/p11-kit-proxy.so").unwrap();
+        let do_ancora = com_modulo("", NOME_NATIVO, "/usr/lib/p11-kit-proxy.so").unwrap();
         let texto = format!(
             "{INTERNO}library=/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so\nname=Tessera (p11-kit)\n\nlibrary=p11-kit-proxy.so\nname=advbr-proxy\n\nlibrary=/usr/lib/opensc-pkcs11.so\nname=OpenSC\n\n{do_ancora}"
         );
@@ -243,7 +262,10 @@ mod tests {
         let limpo = sem_p11_kit(&texto).unwrap();
         assert!(!tem_p11_kit(&limpo));
         assert!(limpo.contains("OpenSC") && limpo.contains("NSS Internal"));
-        assert!(tem_modulo(&limpo), "o registro do Âncora não pode sair");
+        assert!(
+            tem_modulo(&limpo, NOME_NATIVO),
+            "o registro do Âncora não pode sair"
+        );
         assert!(!tem_p11_kit(INTERNO));
         assert!(!tem_p11_kit(&do_ancora));
     }
@@ -280,9 +302,9 @@ mod tests {
     fn editar_grava_so_quando_muda() {
         let d = dir("editar");
         fs::write(d.0.join("pkcs11.txt"), INTERNO).unwrap();
-        assert!(editar(&d.0, |t| com_modulo(t, CLIENTE_NO_SANDBOX)).unwrap());
-        assert!(!editar(&d.0, |t| com_modulo(t, CLIENTE_NO_SANDBOX)).unwrap());
-        assert!(tem_modulo(&ler(&d.0)));
+        assert!(editar(&d.0, |t| com_modulo(t, NOME, CLIENTE_NO_SANDBOX)).unwrap());
+        assert!(!editar(&d.0, |t| com_modulo(t, NOME, CLIENTE_NO_SANDBOX)).unwrap());
+        assert!(tem_modulo(&ler(&d.0), NOME));
     }
 
     #[test]

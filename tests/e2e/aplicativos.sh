@@ -29,20 +29,29 @@ subir
 confere "o SoftHSM está publicado" "$(publicados)" "ancora-softhsm.module"
 
 HOME=$FALSA XDG_CONFIG_HOME=$FALSA/.config p11-kit server -f -n "$SISTEMA" pkcs11: >/dev/null 2>&1 &
-pid_sistema=$!
+PARAR+=($!)
 sleep 1
+export ANCORA_SERVIDOR_DO_SISTEMA=$SISTEMA
 
-# Papers: permissão e banco vazio.
-ancora configurar org.gnome.Papers >/dev/null
+# Papers: permissão e banco vazio. Não está instalado aqui, então a medição
+# dentro dele não roda e fica a receita padrão, marcada.
+saida=$(ancora configurar org.gnome.Papers)
+echo "$saida" | sed 's/^/     /'
 confere "Papers ganha a permissão" "$(grep -c 'xdg-run/p11-kit/pkcs11' "$OVERRIDES/org.gnome.Papers")" "1"
 confere "Papers ganha um banco vazio" "$([ -f "$PAPERS/config/mozilla/firefox/ancora.default/cert9.db" ] && echo sim)" "sim"
+confere "sem o Papers instalado, fica não verificado" "$(echo "$saida" | grep -c 'não verificado')" "1"
 
-# Firefox: um perfil (o banco vazio que o Âncora acabou de criar serve) e o
-# registro do módulo.
+# Firefox: um perfil (o banco vazio que o Âncora acabou de criar serve). A
+# medição roda no sandbox do Firefox de verdade, com o token-sentinela.
 mkdir -p "$FIREFOX"
 cp -r "$PAPERS/config/mozilla/firefox/ancora.default" "$FIREFOX/teste.default"
-ancora configurar org.mozilla.firefox >/dev/null
+saida=$(ancora configurar org.mozilla.firefox)
+echo "$saida" | sed 's/^/     /'
+confere "a verificação escolhe registrar o cliente" \
+    "$(echo "$saida" | grep -c 'aparece uma vez, registrado com /usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so')" "1"
 confere "o perfil do Firefox ganha o módulo" "$(grep -c '^name=Âncora (p11-kit)$' "$FIREFOX/teste.default/pkcs11.txt")" "1"
+confere "o sentinela sai ao terminar" "$(ls "$MODULES" | grep -c verificacao || true)" "0"
+confere "e ninguém mais o vê" "$(tokens_no_host | grep -c 'verificação' || true)" "0"
 
 vistos=$(flatpak run --filesystem="$BANCADA" --filesystem="$SISTEMA_DIR" \
     --env=LD_LIBRARY_PATH=/app/lib/firefox --command=python3 org.mozilla.firefox \
@@ -60,7 +69,6 @@ confere "desfazer tira o módulo do perfil" "$(grep -c 'Âncora' "$FIREFOX/teste
 confere "desfazer apaga o override que o Âncora criou" "$(ls "$OVERRIDES" | tr '\n' ' ')" ""
 confere "desfazer apaga o banco do Papers" "$([ -e "$PAPERS/config/mozilla/firefox/ancora.default" ] && echo ainda || echo saiu)" "saiu"
 
-kill -TERM "$pid_sistema"
 kill -TERM "$(pid_servico)"; sleep 3
 rm -rf "$SISTEMA_DIR"
 remover SoftHSM
