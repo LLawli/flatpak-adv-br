@@ -5,3 +5,6 @@
 
 # Os repositórios das extensões, cada um com o seu controle de versão.
 /extensoes/
+
+# A configuração de publicação (ver config/publicar.env.example).
+/config/publicar.env

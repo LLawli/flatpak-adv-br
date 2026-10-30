@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# Constrói, assina e publica o Âncora e as extensões de extensoes/ no remote.
+#
+#   bin/publicar              constrói e assina no repositório local
+#   bin/publicar --enviar     e manda para o servidor
+#
+# A configuração vem de config/publicar.env (ver o .example). A chave privada
+# nunca sai desta máquina: o que atravessa a rede é o resultado assinado.
+#
+# O repositório é o mesmo do AdvBr (dev.lukakuuhaku.AdvBr) até o fim da
+# migração: o end-of-life-rebase só leva quem usa o AdvBr ao Âncora se os dois
+# estiverem no mesmo remote. A ordem e as armadilhas da assinatura vêm do
+# bin/publicar do flatpak-adv-br, onde foram medidas.
+set -euo pipefail
+RAIZ=$(cd "$(dirname "$0")/.." && pwd)
+APP_ID=dev.lukakuuhaku.Ancora
+[ -f "$RAIZ/config/publicar.env" ] && . "$RAIZ/config/publicar.env"
+REPO=${ANCORA_REPO:-${XDG_DATA_HOME:-$HOME/.local/share}/adv-br-repo}
+TRABALHO=${ANCORA_TRABALHO:-${XDG_CACHE_HOME:-$HOME/.cache}/ancora-publicacao}
+CHAVE=${ANCORA_CHAVE_GPG:-}
+DESTINO=${ANCORA_DESTINO:-}
+ORIGEM=${ANCORA_ORIGEM_PUBLICA:-https://flatpak.lukakuuhaku.dev}
+
+erro() { printf '\033[1;31m ✗\033[0m %s\n' "$*" >&2; exit 1; }
+passo() { printf '\033[1;36m ▸\033[0m %s\n' "$*"; }
+ok() { printf '\033[1;32m ✓\033[0m %s\n' "$*"; }
+
+ENVIAR=nao
+for argumento in "$@"; do
+    case $argumento in
+        --enviar) ENVIAR=sim ;;
+        *) erro "argumento desconhecido: $argumento" ;;
+    esac
+done
+
+command -v ostree >/dev/null || erro "falta o ostree, que assina as refs"
+flatpak info org.flatpak.Builder >/dev/null 2>&1 ||
+    erro "falta o org.flatpak.Builder (flatpak install flathub org.flatpak.Builder)"
+# As extensões são construídas sobre o Âncora instalado, que é o runtime delas.
+flatpak info "$APP_ID" >/dev/null 2>&1 ||
+    erro "instale o $APP_ID antes: ele é o runtime das extensões"
+[ -n "$CHAVE" ] || erro "defina ANCORA_CHAVE_GPG em config/publicar.env"
+gpg --list-secret-keys "$CHAVE" >/dev/null 2>&1 ||
+    erro "não achei a chave privada $CHAVE neste computador"
+
+# A chave pública versionada é a segunda fonte de confiança: o .flatpakrepo é
+# servido pelo mesmo domínio que os pacotes. Assinar com outra chave produz um
+# repositório que ninguém instala, e o erro do outro lado fala de referência
+# inexistente, não de assinatura.
+anunciada=$(gpg --show-keys --with-colons "${ANCORA_CHAVE_PUBLICA:-$RAIZ/packaging/chave-publica.asc}" |
+    awk -F: '/^fpr/{print $10; exit}')
+usada=$(gpg --list-keys --with-colons "$CHAVE" | awk -F: '/^fpr/{print $10; exit}')
+[ -n "$anunciada" ] && [ "$anunciada" = "$usada" ] ||
+    erro "a chave em uso ($usada) não é a que o repositório anuncia ($anunciada)"
+
+# ---------------------------------------------------------------------------
+mkdir -p "$TRABALHO" "$REPO"
+passo "Construindo o $APP_ID"
+# A assinatura não é pedida ao builder: o org.flatpak.Builder roda num sandbox
+# sem pinentry e sem o gpg-agent desta sessão, e quem fala com a YubiKey é ele.
+flatpak run --filesystem="$TRABALHO" --filesystem="$REPO" org.flatpak.Builder \
+    --force-clean --disable-rofiles-fuse --state-dir="$TRABALHO/estado" \
+    --repo="$REPO" --default-branch=master \
+    "$TRABALHO/base" "$RAIZ/flatpak/$APP_ID.yml" >"$TRABALHO/base.log" 2>&1 ||
+    erro "o build do $APP_ID falhou (veja $TRABALHO/base.log)"
+
+extensoes=0
+for script in "$RAIZ"/extensoes/*/scripts/construir.sh; do
+    [ -x "$script" ] || continue
+    nome=$(basename "$(dirname "$(dirname "$script")")")
+    passo "Construindo a extensão $nome"
+    (cd "$(dirname "$script")/.." && ./scripts/ci.sh >/dev/null) ||
+        erro "os gates de $nome falharam"
+    "$script" --repo "$REPO" >"$TRABALHO/$nome.log" 2>&1 ||
+        erro "o build de $nome falhou (veja $TRABALHO/$nome.log)"
+    extensoes=$((extensoes + 1))
+done
+ok "o Âncora e $extensoes extensão(ões)"
+
+# ---------------------------------------------------------------------------
+# A ordem é o que deixa o repositório instalável. Numa instalação nova, o
+# cliente usa o delta estático de origem vazia, que carrega uma cópia do
+# commit feita quando o delta foi gerado: assinar depois dos deltas deixa a
+# assinatura lá, correta e inútil ("GPG verification enabled, but no
+# signatures found"). Então: appstream, assinatura de tudo, deltas e summary.
+passo "Preparando as refs"
+flatpak build-update-repo "$REPO" >/dev/null
+
+assinar_pendentes() {
+    pendentes=0
+    while IFS= read -r ref; do
+        [ -n "$ref" ] || continue
+        commit=$(ostree --repo="$REPO" rev-parse "$ref")
+        # Perguntar pelos metadados destacados é estável; procurar a palavra
+        # "signature" na saída depende do idioma do ostree.
+        ostree --repo="$REPO" show --print-detached-metadata-key=ostree.gpgsigs \
+            "$commit" >/dev/null 2>&1 && continue
+        # Com a chave num cartão, a YubiKey pisca e espera um toque sem nada no
+        # terminal, e o erro de quem perde a janela é "SCD: Tempo limite".
+        command -v notify-send >/dev/null 2>&1 &&
+            notify-send -u normal -t 30000 "Toque na YubiKey" "Assinando $ref" 2>/dev/null
+        # Pelo ostree, e não pelo flatpak build-sign, que ignora em silêncio
+        # as refs de appstream, as primeiras que o cliente baixa.
+        ostree --repo="$REPO" gpg-sign "$commit" "$CHAVE" >/dev/null ||
+            erro "não consegui assinar $ref (toque não recebido a tempo?)"
+        pendentes=$((pendentes + 1))
+    done < <(ostree --repo="$REPO" refs)
+}
+
+atualizar() {
+    command -v notify-send >/dev/null 2>&1 &&
+        notify-send -u normal -t 30000 "Toque na YubiKey" "Assinando o summary" 2>/dev/null
+    flatpak build-update-repo "$REPO" --gpg-sign="$CHAVE" --generate-static-deltas \
+        --prune --prune-depth=3 >/dev/null
+}
+
+passo "Assinando, aqui fora"
+assinar_pendentes
+assinadas=$pendentes
+atualizar
+# Se a passada recriou alguma ref (o appstream muda com o repositório), ela
+# nasceu sem assinatura: assina e refaz uma vez.
+assinar_pendentes
+if [ "$pendentes" -gt 0 ]; then
+    assinadas=$((assinadas + pendentes))
+    atualizar
+fi
+
+# A guarda final conta contra um mínimo absoluto: o aplicativo e cada
+# extensão construída, e nada sem assinatura.
+faltando=0
+while IFS= read -r ref; do
+    commit=$(ostree --repo="$REPO" rev-parse "$ref")
+    ostree --repo="$REPO" show --print-detached-metadata-key=ostree.gpgsigs \
+        "$commit" >/dev/null 2>&1 || { faltando=$((faltando + 1)); echo "   sem assinatura: $ref"; }
+done < <(ostree --repo="$REPO" refs)
+[ "$faltando" -eq 0 ] || erro "$faltando ref(s) sem assinatura: o repositório não instalaria"
+refs=$(ostree --repo="$REPO" refs)
+grep -qx "app/$APP_ID/x86_64/master" <<<"$refs" || erro "o $APP_ID não está no repositório"
+[ "$(grep -c "^runtime/$APP_ID\.\(Driver\|Assinador\|App\)\." <<<"$refs")" -ge "$extensoes" ] ||
+    erro "faltam extensões no repositório"
+ok "todas as refs assinadas ($assinadas nesta rodada)"
+
+# ---------------------------------------------------------------------------
+passo "Arquivos para adicionar o remote e instalar"
+# A chave pública vai dentro, em base64: quem baixa o arquivo por HTTPS do
+# domínio já leva a chave certa, sem importar nada à mão.
+chave=$(gpg --export "$CHAVE" | base64 -w0)
+cat >"$REPO/ancora.flatpakrepo" <<FIM
+[Flatpak Repo]
+Title=Âncora
+Url=$ORIGEM
+Homepage=https://github.com/LLawli/flatpak-adv-br
+Comment=Certificado digital ICP-Brasil no Linux
+Description=Tokens, assinadores e o PJeOffice nos navegadores e aplicativos que você já usa
+GPGKey=$chave
+FIM
+cat >"$REPO/$APP_ID.flatpakref" <<FIM
+[Flatpak Ref]
+Name=$APP_ID
+Branch=master
+Title=Âncora
+Url=$ORIGEM
+SuggestRemoteName=ancora
+RuntimeRepo=https://dl.flathub.org/repo/flathub.flatpakrepo
+IsRuntime=false
+GPGKey=$chave
+FIM
+ok "repositório em $REPO ($(du -sh "$REPO" | cut -f1))"
+
+# ---------------------------------------------------------------------------
+if [ "$ENVIAR" = nao ]; then
+    printf '\n   Para publicar:  %s --enviar\n\n' "$0"
+    exit 0
+fi
+[ -n "$DESTINO" ] || erro "defina ANCORA_DESTINO em config/publicar.env"
+# O rsync vai com --delete: um repositório local sem o AdvBr apagaria o AdvBr
+# do servidor, de quem ainda o usa.
+grep -q '^app/dev.lukakuuhaku.AdvBr/' <<<"$refs" ||
+    erro "o repositório não tem o dev.lukakuuhaku.AdvBr: enviar o apagaria do servidor"
+passo "Enviando para $DESTINO"
+rsync -a --delete --info=stats1 "$REPO/" "$DESTINO/"
+ok "enviado"

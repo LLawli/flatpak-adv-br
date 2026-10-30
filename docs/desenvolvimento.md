@@ -41,6 +41,33 @@ flatpak run org.flatpak.Builder --user --install --force-clean build-dir flatpak
 flatpak run dev.lukakuuhaku.Ancora
 ```
 
+## Extensões
+
+Cada extensão é um repositório próprio em `extensoes/<Família>.<Nome>`, fora
+do controle de versão do Âncora, com `scripts/ci.sh` e `scripts/construir.sh`.
+O contrato está em [extensoes.md](extensoes.md), e o exemplo é o
+`extensoes/Driver.SafeSign`.
+
+## Publicar
+
+```bash
+cp config/publicar.env.example config/publicar.env   # e preencha
+bin/publicar            # constrói o Âncora e as extensões e assina
+bin/publicar --enviar   # e manda para o servidor
+```
+
+O repositório local é o do AdvBr (`~/.local/share/adv-br-repo`), porque o
+`end-of-life-rebase` só leva quem usa o AdvBr ao Âncora se os dois estiverem
+no mesmo remote. A assinatura é feita fora do sandbox do builder, com a chave
+da YubiKey (um toque por ref, e um pelo summary), e o envio por `rsync` pede
+outro toque. O `--enviar` se recusa a mandar um repositório sem o AdvBr: com
+`--delete`, ele o apagaria do servidor. A ordem da assinatura e as armadilhas
+estão comentadas no próprio `bin/publicar`.
+
+Para testar sem a chave real, uma chave descartável num `GNUPGHOME` próprio:
+`ANCORA_REPO`, `ANCORA_TRABALHO`, `ANCORA_CHAVE_GPG` e `ANCORA_CHAVE_PUBLICA`
+apontando para ela e para um repositório temporário.
+
 ## Ponta a ponta
 
 `tests/e2e/` tem testes que rodam no sandbox de verdade, com extensões de
