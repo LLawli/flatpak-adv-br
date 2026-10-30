@@ -42,8 +42,19 @@ pelo módulo do Âncora. O servidor do sistema, no meio da cadeia, é um
 tudo o que o Âncora pôs. `ancora configurar` liga o `p11-kit-server.socket` do
 usuário no host, o que não muda nada se ele já estiver ligado.
 
+## `nativos.sh`
+
+```bash
+ANCORA_BANCADA=/mnt/dados/caches/ancora-exp tests/e2e/nativos.sh
+```
+
+Publica e despublica no Firefox nativo e no `~/.pki/nssdb` de uma home falsa.
+O NSS do host precisa ver o token uma vez; o mesmo `~/.pki/nssdb` aberto de
+dentro de um sandbox não pode vê-lo; e a receita do Chromium Flatpak não pode
+apagar a publicação nativa.
+
 ## Isolamento
 
 Os testes isolam a sessão com `HOME` e `XDG_CONFIG_HOME` falsos (o p11-kit acha a
-configuração do usuário pelo segundo) e desliga, na home falsa, os módulos de
+configuração do usuário pelo segundo) e desligam, na home falsa, os módulos de
 hardware do sistema, para não disputar a leitora com o gpg ou o ssh-agent.

@@ -43,11 +43,15 @@ fn juntar(blocos: &[String]) -> String {
     s
 }
 
-/// O bloco é um registro do p11-kit (cliente ou proxy), de quem quer que seja.
+/// O bloco é um registro do p11-kit (cliente ou proxy) de outro dono. O do
+/// Âncora fica: no `~/.pki/nssdb`, lido pelos navegadores nativos e pelo
+/// Chromium Flatpak, ele aponta o proxy do host por caminho absoluto, que o
+/// sandbox não acha e ignora (medido).
 fn e_do_p11_kit(bloco: &str) -> bool {
-    campo(bloco, "library")
-        .map(|l| DO_P11_KIT.iter().any(|b| l.ends_with(b)))
-        .unwrap_or(false)
+    campo(bloco, "name") != Some(NOME)
+        && campo(bloco, "library")
+            .map(|l| DO_P11_KIT.iter().any(|b| l.ends_with(b)))
+            .unwrap_or(false)
 }
 
 /// O `pkcs11.txt` com o módulo do Âncora; `None` se já estava assim.
@@ -230,15 +234,18 @@ mod tests {
     }
 
     #[test]
-    fn acha_e_tira_registros_do_p11_kit_de_qualquer_dono() {
+    fn acha_e_tira_registros_do_p11_kit_de_outros_donos() {
+        let do_ancora = com_modulo("", "/usr/lib/p11-kit-proxy.so").unwrap();
         let texto = format!(
-            "{INTERNO}library=/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so\nname=Tessera (p11-kit)\n\nlibrary=p11-kit-proxy.so\nname=advbr-proxy\n\nlibrary=/usr/lib/opensc-pkcs11.so\nname=OpenSC\n"
+            "{INTERNO}library=/usr/lib/x86_64-linux-gnu/pkcs11/p11-kit-client.so\nname=Tessera (p11-kit)\n\nlibrary=p11-kit-proxy.so\nname=advbr-proxy\n\nlibrary=/usr/lib/opensc-pkcs11.so\nname=OpenSC\n\n{do_ancora}"
         );
         assert!(tem_p11_kit(&texto));
         let limpo = sem_p11_kit(&texto).unwrap();
         assert!(!tem_p11_kit(&limpo));
         assert!(limpo.contains("OpenSC") && limpo.contains("NSS Internal"));
+        assert!(tem_modulo(&limpo), "o registro do Âncora não pode sair");
         assert!(!tem_p11_kit(INTERNO));
+        assert!(!tem_p11_kit(&do_ancora));
     }
 
     struct Dir(PathBuf);

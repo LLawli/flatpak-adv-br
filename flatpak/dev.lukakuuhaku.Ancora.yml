@@ -36,6 +36,11 @@ finish-args:
   - --filesystem=~/.var/app/org.gnome.Papers/config/mozilla:create
   - --filesystem=~/.var/app/org.kde.okular/config/mozilla:create
   - --filesystem=~/.pki/nssdb
+  # Os bancos dos navegadores nativos (src/nativos.rs): o Firefox, e o banco
+  # novo dos derivados do Chromium (o antigo é o ~/.pki/nssdb acima).
+  - --filesystem=~/.mozilla/firefox
+  - --filesystem=~/.config/mozilla/firefox
+  - --filesystem=~/.local/share/pki/nssdb
   - --filesystem=~/.var/app/org.chromium.Chromium/data/pki/nssdb
   - --filesystem=~/.var/app/com.google.Chrome/.pki/nssdb
   - --filesystem=~/.var/app/com.google.Chrome/data/pki/nssdb

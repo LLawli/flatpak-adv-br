@@ -1,7 +1,7 @@
 //! Os subcomandos de linha de comando: diagnóstico e o que a interface
 //! também faz, para testar e para quem prefere o terminal.
 
-use crate::{APP_ID, aplicativos, extensao, host, sonda};
+use crate::{APP_ID, aplicativos, extensao, host, nativos, sonda};
 use gtk::glib::{self, ExitCode};
 use std::path::Path;
 use std::time::Duration;
@@ -140,6 +140,45 @@ pub fn desfazer(id: Option<&str>) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("{}: {e}", app.nome);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `ancora nativos`: em que navegadores nativos o Âncora está publicado.
+/// `ancora nativos publicar|despublicar <firefox|sistema>`: muda isso.
+pub fn nativos(acao: Option<&str>, destino: Option<&str>) -> ExitCode {
+    let home = host::home();
+    let Some(acao) = acao else {
+        for d in nativos::Destino::TODOS {
+            let s = nativos::situacao(d, &home);
+            let estado = if s.bancos == 0 {
+                "sem banco (abra o navegador uma vez)".to_owned()
+            } else if s.publicado() {
+                "publicado".to_owned()
+            } else {
+                format!("não publicado ({} de {} bancos)", s.publicados, s.bancos)
+            };
+            println!("{} ({}): {estado}", d.nome(), d.id());
+        }
+        return ExitCode::SUCCESS;
+    };
+    let Some(d) = destino.and_then(nativos::Destino::por_id) else {
+        eprintln!("uso: ancora nativos publicar|despublicar firefox|sistema");
+        return ExitCode::FAILURE;
+    };
+    let resultado = match acao {
+        "publicar" => nativos::proxy_do_host().and_then(|p| nativos::publicar(d, &home, &p)),
+        "despublicar" => nativos::despublicar(d, &home),
+        _ => Err("uso: ancora nativos publicar|despublicar firefox|sistema".to_owned()),
+    };
+    match resultado {
+        Ok(()) => {
+            println!("{}: feito. Feche e abra o navegador de novo.", d.nome());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
             ExitCode::FAILURE
         }
     }

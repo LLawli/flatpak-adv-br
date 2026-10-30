@@ -100,8 +100,24 @@ verdade: o token aparece uma vez, pelo módulo do Âncora.
 Pelo terminal: `ancora aplicativos` (o que falta em cada um),
 `ancora configurar <id>` e `ancora desfazer <id>`.
 
-Ainda falta: os navegadores nativos (fora do Flatpak), que não passam pelo
-servidor do sistema.
+### Navegadores nativos
+
+Fora do Flatpak, o navegador não passa pelo servidor do sistema: carrega o que
+está no banco NSS dele. Publicar ali é uma escolha da pessoa, por destino
+(`src/nativos.rs`): os perfis do Firefox nativo, e o banco compartilhado do
+usuário (`~/.pki/nssdb`, ou `~/.local/share/pki/nssdb` desde o Chromium 146),
+que serve Chromium, Chrome, Brave, Edge e o poppler nativo. Publicar registra o
+`p11-kit-proxy.so` do host; despublicar tira o registro.
+
+O registro usa o caminho absoluto do proxy, perguntado ao host. Medido em
+2026-10-30 no Arch: no host ele carrega e o token aparece uma vez; dentro de um
+sandbox, que não tem esse caminho, o NSS o ignora. É isso que impede o token de
+aparecer duas vezes no Chromium Flatpak, que lê o mesmo `~/.pki/nssdb`. No
+Debian e no Ubuntu o caminho do host (`/usr/lib/x86_64-linux-gnu/`) coincide
+com o do runtime, e esse caso ainda duplica: ainda não tratado.
+
+Pelo terminal: `ancora nativos`, e `ancora nativos publicar|despublicar
+firefox|sistema`. `tests/e2e/nativos.sh` confere as duas pontas.
 
 ## Instalar extensões de dentro do aplicativo
 

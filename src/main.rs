@@ -5,6 +5,7 @@ mod aplicativos;
 mod cli;
 mod extensao;
 mod host;
+mod nativos;
 mod nss;
 mod permissao;
 mod publicacao;
@@ -27,6 +28,12 @@ fn main() -> gtk::glib::ExitCode {
         Some("aplicativos") => return cli::aplicativos(),
         Some("configurar") => return cli::configurar(args.get(2).map(String::as_str)),
         Some("desfazer") => return cli::desfazer(args.get(2).map(String::as_str)),
+        Some("nativos") => {
+            return cli::nativos(
+                args.get(2).map(String::as_str),
+                args.get(3).map(String::as_str),
+            );
+        }
         _ => {}
     }
     let app = adw::Application::builder().application_id(APP_ID).build();

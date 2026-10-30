@@ -24,3 +24,6 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   banco de certificados de cada um, sem token duplicado nem PIN pedido duas
   vezes. `ancora desfazer <id>` tira só o que o Âncora pôs, e
   `ancora aplicativos` mostra o que falta em cada um.
+- Firefox e navegadores derivados do Chromium instalados fora do Flatpak
+  podem receber os tokens: `ancora nativos publicar firefox|sistema`, e
+  `despublicar` para tirar.
