@@ -57,6 +57,8 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   o que leva cerca de um segundo.
 - `ancora disponiveis`, `ancora instalar`, `ancora atualizar` e
   `ancora remover` fazem o mesmo pelo terminal.
+- O cliente PC/SC vem no Âncora, para os drivers de token falarem com as
+  leitoras do sistema.
 
 ### Corrigido
 

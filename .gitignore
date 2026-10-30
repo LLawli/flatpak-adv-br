@@ -2,3 +2,6 @@
 /.flatpak-builder
 /build-dir
 /repo
+
+# Os repositórios das extensões, cada um com o seu controle de versão.
+/extensoes/

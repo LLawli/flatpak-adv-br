@@ -67,6 +67,10 @@ p11-kit responde `CKR_BUFFER_TOO_SMALL`, e ele repete para sempre com a mesma
 conta: medido em VM, o driver era parado depois de três sondas, com a carga em
 16. `tests/e2e/semtoken.sh` confere com um módulo sem slot (`vazio.c`).
 
+O aplicativo base traz o cliente PC/SC (`libpcsclite.so.1`, pcsc-lite 2.5.1),
+que todo driver usa para falar com o `pcscd` do host pelo `--socket=pcsc`: o
+runtime não o traz, e um só para todos os drivers evita versões diferentes.
+
 O sandbox tem rede (`--share=network`): os drivers rodam no serviço do Âncora,
 alguns falam com o fabricante durante a assinatura (o da Certisign, por
 exemplo), e uma extensão não acrescenta permissões ao sandbox.

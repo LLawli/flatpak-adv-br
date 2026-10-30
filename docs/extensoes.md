@@ -14,7 +14,39 @@ O código que lê este contrato está em `src/extensao.rs`.
 O manifesto da extensão usa `build-extension: true`,
 `runtime: dev.lukakuuhaku.Ancora` e `runtime-version: master`, e instala tudo
 em `${FLATPAK_DEST}`. O que for parar fora desse prefixo não entra na
-extensão.
+extensão. Módulos com sistema de build (autotools, meson) precisam de
+`build-options: prefix:` com o lugar de montagem
+(`/app/extensoes/driver/<Nome>`): o builder não muda o prefixo numa extensão,
+e sem isso eles tentam instalar em `/app`.
+
+O Âncora fornece o `libpcsclite.so.1` (pcsc-lite 2.5.1, em `/app/lib`), que
+fala com o `pcscd` do host: um driver não deve trazer o seu.
+
+O repositório de exemplo é o do SafeSign, em `extensoes/Driver.SafeSign`.
+
+## Pacote do fabricante: `extra-data`
+
+Driver que não pode ser redistribuído entra como `extra-data` (`filename`,
+`url`, `sha256`, `size`): o remote publica só a receita, e o Flatpak baixa o
+pacote na máquina de quem instala, confere o sha256 e roda
+`${FLATPAK_DEST}/bin/apply_extra`. O que se sabe dele, medido no Flatpak
+1.18.2:
+
+- roda sem rede, com o runtime do `[ExtensionOf]` (o GNOME 51) em `/usr`, e com
+  o diretório atual em `extra/`, onde o pacote foi baixado; o que ele deixa ali
+  é o que a extensão tem em `extra/`;
+- o runtime não tem `ar`: o `bsdtar` abre um `.deb` direto
+  (`bsdtar -xOf pacote.deb 'data.tar.*' | bsdtar -xf - ...`), e os caminhos
+  dentro do `data.tar` começam com `./`;
+- o `--install` do flatpak-builder falha nessa etapa ("apply_extra script
+  failed, exit status 256"), porque o `org.flatpak.Builder` já é um Flatpak e
+  não abre o sandbox do `apply_extra`. Exporte com `--repo` e instale do
+  repositório, como quem usa;
+- um `apply_extra` quebrado, ou uma biblioteca que o carregador não resolve,
+  só apareceria na máquina de quem instala. Repita no build o que ele faz numa
+  cópia do mesmo pacote (uma fonte `type: file`, que não entra na extensão) e
+  abra a biblioteca de verdade (`ctypes.CDLL`); o `ldd` não vê símbolo
+  indefinido.
 
 ## O descritor: `ancora.toml`
 
