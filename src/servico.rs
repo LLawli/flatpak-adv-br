@@ -364,11 +364,19 @@ mod tests {
     }
 
     #[test]
-    fn conta_os_filhos_deste_processo() {
-        let antes = conexoes(std::process::id());
-        let mut filho = Command::new("sleep").arg("5").spawn().unwrap();
-        assert_eq!(conexoes(std::process::id()), antes + 1);
-        let _ = filho.kill();
-        let _ = filho.wait();
+    fn conta_os_filhos_de_um_processo() {
+        // Os filhos de um `sh` só deste teste: os do processo de testes mudam
+        // com os outros testes rodando em paralelo.
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "sleep 30 & sleep 30 & wait"]);
+        processo::amarrar(&mut cmd);
+        let mut pai = cmd.spawn().unwrap();
+        let fim = Instant::now() + Duration::from_secs(5);
+        while conexoes(pai.id()) < 2 && Instant::now() < fim {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let vistos = conexoes(pai.id());
+        processo::parar_grupo(&mut pai);
+        assert_eq!(vistos, 2);
     }
 }
