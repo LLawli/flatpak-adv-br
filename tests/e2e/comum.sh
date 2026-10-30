@@ -44,7 +44,7 @@ for m in opensc gnome-keyring; do
     fi
 done
 
-cp "$BANCADA/libsofthsm2.so" "$AQUI/travado.c" "$AQUI/nss.py" "$OBRA/"
+cp "$BANCADA/libsofthsm2.so" "$AQUI/travado.c" "$AQUI/espera.c" "$AQUI/nss.py" "$OBRA/"
 printf 'contrato = 1\nnome = "SoftHSM de teste"\n[[pkcs11]]\nmodulo = "lib/libsofthsm2.so"\nambiente = { SOFTHSM2_CONF = "%s/softhsm2.conf" }\n' \
     "$BANCADA" >"$OBRA/softhsm.toml"
 printf 'contrato = 1\nnome = "Driver que trava"\n[[pkcs11]]\nmodulo = "lib/libtravado.so"\n' \
@@ -71,7 +71,8 @@ EOF
         "dev.lukakuuhaku.Ancora.Driver.$nome.yml" >"$OBRA/build-$nome.log" 2>&1)
 }
 
-# Instala as extensões de teste pedidas: SoftHSM, Travado.
+# Instala as extensões de teste pedidas: SoftHSM, Travado, Espera (esta com
+# ESPERA_COMPARTILHA=1 para listar tokens disputando a trava do login).
 instalar() {
     local nome
     for nome in "$@"; do
@@ -79,6 +80,12 @@ instalar() {
         SoftHSM) construir SoftHSM \
             '["install -Dm644 softhsm.toml ${FLATPAK_DEST}/ancora.toml", "install -Dm755 libsofthsm2.so ${FLATPAK_DEST}/lib/libsofthsm2.so"]' \
             '[{type: file, path: softhsm.toml}, {type: file, path: libsofthsm2.so}]' ;;
+        Espera)
+            printf 'contrato = 1\nnome = "Driver que espera"\n[[pkcs11]]\nmodulo = "lib/libespera.so"\nambiente = { ESPERA_COMPARTILHA = "%s", ESPERA_SEGUNDOS = "25" }\n' \
+                "${ESPERA_COMPARTILHA:-0}" >"$OBRA/espera.toml"
+            construir Espera \
+            '["install -Dm644 espera.toml ${FLATPAK_DEST}/ancora.toml", "install -d ${FLATPAK_DEST}/lib", "gcc -shared -fPIC -Wall -Werror -I/usr/include/p11-kit-1 espera.c -o ${FLATPAK_DEST}/lib/libespera.so"]' \
+            '[{type: file, path: espera.toml}, {type: file, path: espera.c}]' ;;
         Travado) construir Travado \
             '["install -Dm644 travado.toml ${FLATPAK_DEST}/ancora.toml", "install -d ${FLATPAK_DEST}/lib", "gcc -shared -fPIC -Wall -Werror -I/usr/include/p11-kit-1 travado.c -o ${FLATPAK_DEST}/lib/libtravado.so"]' \
             '[{type: file, path: travado.toml}, {type: file, path: travado.c}]' ;;

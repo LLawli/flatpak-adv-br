@@ -53,6 +53,18 @@ O NSS do host precisa ver o token uma vez; o mesmo `~/.pki/nssdb` aberto de
 dentro de um sandbox não pode vê-lo; e a receita do Chromium Flatpak não pode
 apagar a publicação nativa.
 
+## `supervisao.sh`
+
+```bash
+ANCORA_BANCADA=/mnt/dados/caches/ancora-exp tests/e2e/supervisao.sh
+```
+
+Um aplicativo faz login no `Driver.Espera` (`espera.c`), que demora 25 s
+segurando uma trava, como um leitor com teclado esperando o PIN, enquanto o
+serviço sonda. Com a listagem de tokens disputando essa trava e sem disputa, o
+login tem de terminar bem e sem ser interrompido, e o driver não pode ser
+reiniciado.
+
 ## Isolamento
 
 Os testes isolam a sessão com `HOME` e `XDG_CONFIG_HOME` falsos (o p11-kit acha a

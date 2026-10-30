@@ -18,7 +18,9 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
 - `ancora servir`: publica os drivers instalados no p11-kit do sistema, para
   os navegadores e aplicativos (inclusive Flatpak, como o PJeOffice Pro do
   FlatPark). Um driver que trava sai da publicação em vez de travar quem abre o
-  token, e fechar o serviço não deixa nada para trás.
+  token, e fechar o serviço não deixa nada para trás. Um token esperando a
+  pessoa digitar o PIN não é confundido com um driver travado: a assinatura em
+  andamento não é interrompida.
 - Firefox, Chromium, Chrome, Edge, Brave, Papers e Okular em Flatpak passam a
   enxergar os tokens com `ancora configurar <id>`, que dá a permissão e acerta o
   banco de certificados de cada um, sem token duplicado nem PIN pedido duas

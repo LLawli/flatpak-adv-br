@@ -51,6 +51,15 @@ com limite de 10 s. Só o que respondeu da última vez fica publicado
 reiniciado, e depois de 3 vezes seguidas é parado (`src/supervisao.rs`): um
 driver travado e publicado travaria todo aplicativo que abrisse o p11-kit.
 
+Sem resposta não quer dizer travado. Se, quando a sonda passa do limite, o
+servidor tem outras conexões abertas, o driver pode estar só ocupado: uma
+pessoa digitando o PIN num leitor com teclado segura a transação do cartão, e
+um driver que fala com o cartão para listar tokens espera por ela. Nesse caso
+o driver sai da publicação até voltar a responder, mas não é reiniciado nem
+conta para parar: reiniciar mataria a conexão de quem está assinando
+(medido: o login era derrubado em 11 s com `CKR_DEVICE_ERROR`; com esta regra,
+termina em 25 s). `tests/e2e/supervisao.sh` confere.
+
 Por que socket e não `remote: |flatpak run ...` por stdio, como no
 flatpak-adv-br: medido em 2026-10-30, abrir o proxy do host custa ~6 ms pelo
 socket e ~205 ms pelo stdio, por módulo e por processo consumidor, e o stdio

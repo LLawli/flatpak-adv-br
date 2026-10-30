@@ -16,8 +16,13 @@ pub enum Sondagem {
     Respondeu(Vec<String>),
     /// Respondeu com erro.
     Falhou(String),
-    /// Não respondeu dentro do limite.
+    /// Não respondeu dentro do limite, e ninguém mais está usando o driver.
     Travou,
+    /// Não respondeu dentro do limite enquanto outra conexão usa o driver.
+    /// Pode ser uma pessoa digitando o PIN num leitor com teclado, com a
+    /// transação do cartão presa: reiniciar mataria essa conexão no meio do
+    /// login (medido em tests/e2e/supervisao.sh).
+    Ocupado,
     /// O servidor saiu sozinho.
     Caiu,
 }
@@ -69,6 +74,13 @@ impl Supervisao {
             Sondagem::Respondeu(tokens) => {
                 self.sem_resposta = 0;
                 self.estado = Estado::Publicado(tokens);
+                Acao::Nenhuma
+            }
+            Sondagem::Ocupado => {
+                // Sai da publicação, para que um aplicativo novo não fique
+                // esperando, mas não reinicia e não conta para parar.
+                self.estado =
+                    Estado::ComErro("sem resposta enquanto outra conexão usa o driver".into());
                 Acao::Nenhuma
             }
             Sondagem::Falhou(erro) => {
@@ -149,6 +161,22 @@ mod tests {
         assert!(s.parado());
         assert_eq!(s.registrar(Sondagem::Respondeu(vec![])), Acao::Nenhuma);
         assert!(s.parado());
+    }
+
+    #[test]
+    fn ocupado_despublica_sem_reiniciar_nem_contar() {
+        let mut s = Supervisao::default();
+        s.registrar(Sondagem::Respondeu(vec![]));
+        for _ in 0..10 {
+            assert_eq!(s.registrar(Sondagem::Ocupado), Acao::Nenhuma);
+        }
+        assert!(!s.publicado() && !s.parado());
+        // A contagem de travadas não andou: ainda são precisas todas.
+        for _ in 1..LIMITE_SEM_RESPOSTA {
+            assert_eq!(s.registrar(Sondagem::Travou), Acao::Reiniciar);
+        }
+        s.registrar(Sondagem::Respondeu(vec![]));
+        assert!(s.publicado());
     }
 
     #[test]

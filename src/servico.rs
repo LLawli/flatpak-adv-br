@@ -201,8 +201,14 @@ fn observar(d: &mut Driver) -> Option<Sondagem> {
                 Some(resultado(sonda))
             }
             Ok(None) if inicio.elapsed() > LIMITE_SONDA => {
+                // Contado antes de matar a sonda: uma das conexões é a dela.
+                let ocupado = d.servidor.as_ref().is_some_and(|s| conexoes(s.id()) > 1);
                 matar_sonda(d);
-                Some(Sondagem::Travou)
+                Some(if ocupado {
+                    Sondagem::Ocupado
+                } else {
+                    Sondagem::Travou
+                })
             }
             Ok(None) => None,
             Err(e) => {
@@ -219,6 +225,30 @@ fn observar(d: &mut Driver) -> Option<Sondagem> {
         }
     }
     None
+}
+
+/// Quantas conexões o servidor atende agora: o `p11-kit server` abre um
+/// processo filho por conexão.
+fn conexoes(servidor: u32) -> usize {
+    let Ok(entradas) = fs::read_dir("/proc") else {
+        return 0;
+    };
+    entradas
+        .flatten()
+        .filter_map(|e| fs::read_to_string(e.path().join("stat")).ok())
+        .filter(|stat| pai(stat) == Some(servidor))
+        .count()
+}
+
+/// O PPID de uma linha de `/proc/<pid>/stat`. O nome do processo vem entre
+/// parênteses e pode ter espaços: os campos contam a partir do último `)`.
+fn pai(stat: &str) -> Option<u32> {
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
 }
 
 fn resultado(sonda: Child) -> Sondagem {
@@ -316,5 +346,29 @@ fn matar_sonda(d: &mut Driver) {
     if let Some((mut sonda, _)) = d.sonda.take() {
         let _ = sonda.kill();
         let _ = sonda.wait();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn le_o_pai_mesmo_com_parenteses_e_espacos_no_nome() {
+        assert_eq!(
+            pai("1234 (p11-kit-remote) S 1200 1234 1234 0 -1"),
+            Some(1200)
+        );
+        assert_eq!(pai("99 (nome (com) espaço) R 7 99 99"), Some(7));
+        assert_eq!(pai("lixo"), None);
+    }
+
+    #[test]
+    fn conta_os_filhos_deste_processo() {
+        let antes = conexoes(std::process::id());
+        let mut filho = Command::new("sleep").arg("5").spawn().unwrap();
+        assert_eq!(conexoes(std::process::id()), antes + 1);
+        let _ = filho.kill();
+        let _ = filho.wait();
     }
 }
