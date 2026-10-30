@@ -13,6 +13,8 @@ adw = { package = "libadwaita", version = "0.9", features = ["v1_7"] }
 serde = { version = "1", features = ["derive"] }
 toml = "1"
 cryptoki = "0.12"
+# Só para listar os slots sem o laço do cryptoki (ver `sonda::slots_com_token`).
+cryptoki-sys = "0.5"
 libc = "0.2"
 glib-unix = "0.22"
 libloading = "0.8"

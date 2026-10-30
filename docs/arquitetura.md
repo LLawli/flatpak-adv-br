@@ -60,6 +60,17 @@ conta para parar: reiniciar mataria a conexão de quem está assinando
 (medido: o login era derrubado em 11 s com `CKR_DEVICE_ERROR`; com esta regra,
 termina em 25 s). `tests/e2e/supervisao.sh` confere.
 
+A sonda lista os slots pela chamada crua (`sonda::slots_com_token`), e não pelo
+`get_slots_with_token` do cryptoki. Com zero slots (o driver de uma leitora sem
+cartão), o cryptoki pede a lista de novo com um buffer de tamanho zero, o RPC do
+p11-kit responde `CKR_BUFFER_TOO_SMALL`, e ele repete para sempre com a mesma
+conta: medido em VM, o driver era parado depois de três sondas, com a carga em
+16. `tests/e2e/semtoken.sh` confere com um módulo sem slot (`vazio.c`).
+
+O sandbox tem rede (`--share=network`): os drivers rodam no serviço do Âncora,
+alguns falam com o fabricante durante a assinatura (o da Certisign, por
+exemplo), e uma extensão não acrescenta permissões ao sandbox.
+
 Por que socket e não `remote: |flatpak run ...` por stdio, como no
 flatpak-adv-br: medido em 2026-10-30, abrir o proxy do host custa ~6 ms pelo
 socket e ~205 ms pelo stdio, por módulo e por processo consumidor, e o stdio

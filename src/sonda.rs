@@ -5,7 +5,15 @@
 //! serviço mata a sonda que passar do limite, e segue.
 
 use cryptoki::context::{CInitializeArgs, CInitializeFlags, Pkcs11};
+use cryptoki::slot::Slot;
+use cryptoki_sys::{
+    CK_FUNCTION_LIST, CK_RV, CK_SLOT_ID, CK_TRUE, CK_ULONG, CKR_BUFFER_TOO_SMALL, CKR_OK,
+};
 use std::path::{Path, PathBuf};
+
+/// Quantas vezes pedir a lista de novo se um token chegar entre a contagem e
+/// a lista.
+const TENTATIVAS: usize = 3;
 
 /// O cliente do p11-kit do runtime, que fala com um `p11-kit server`.
 pub fn cliente() -> PathBuf {
@@ -34,10 +42,10 @@ pub fn sondar_com_limite(
     }
 }
 
-/// O cliente do p11-kit ligado ao servidor de `socket`. Só para o começo de
-/// um processo próprio e de vida curta, antes de qualquer outra thread
-/// existir: muda o ambiente do processo.
-pub fn abrir(socket: &Path) -> Result<Pkcs11, String> {
+/// O cliente do p11-kit ligado ao servidor de `socket`, e os slots com token
+/// dele. Só para o começo de um processo próprio e de vida curta, antes de
+/// qualquer outra thread existir: muda o ambiente do processo.
+pub fn abrir(socket: &Path) -> Result<(Pkcs11, Vec<Slot>), String> {
     // SAFETY: ver acima; quem chama roda antes de criar threads.
     unsafe {
         std::env::set_var(
@@ -46,17 +54,91 @@ pub fn abrir(socket: &Path) -> Result<Pkcs11, String> {
         )
     };
     let cliente = cliente();
+    let slots = slots_com_token(&cliente)?;
     let p11 = Pkcs11::new(&cliente).map_err(|e| format!("{}: {e}", cliente.display()))?;
     p11.initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK))
         .map_err(|e| format!("C_Initialize: {e}"))?;
-    Ok(p11)
+    Ok((p11, slots))
+}
+
+/// Os slots com token, numa conexão própria, fechada antes de o cryptoki
+/// abrir a dele: o `p11-kit-client.so` dá uma tabela nova (e uma conexão nova)
+/// a cada `C_GetFunctionList`, e duas conexões juntas confundiriam a
+/// supervisão, que conta as conexões para separar ocupado de travado.
+///
+/// Não usa o `get_slots_with_token` do cryptoki: com zero slots (o driver de
+/// uma leitora sem cartão), ele pede a lista de novo com um buffer de tamanho
+/// zero, o RPC do p11-kit responde `CKR_BUFFER_TOO_SMALL`, e ele repete para
+/// sempre, com a mesma conta zero. Aqui a conta zero encerra a lista.
+fn slots_com_token(cliente: &Path) -> Result<Vec<Slot>, String> {
+    // SAFETY: carregar o cliente do p11-kit do runtime não roda nada além do
+    // construtor dele.
+    let biblioteca = unsafe { libloading::Library::new(cliente) }
+        .map_err(|e| format!("{}: {e}", cliente.display()))?;
+    let pegar: libloading::Symbol<unsafe extern "C" fn(*mut *mut CK_FUNCTION_LIST) -> CK_RV> =
+        unsafe { biblioteca.get(b"C_GetFunctionList") }.map_err(|e| e.to_string())?;
+    let mut tabela: *mut CK_FUNCTION_LIST = std::ptr::null_mut();
+    // SAFETY: C_GetFunctionList só escreve o ponteiro da tabela.
+    let rv = unsafe { pegar(&mut tabela) };
+    if rv != CKR_OK || tabela.is_null() {
+        return Err(format!("C_GetFunctionList: 0x{rv:x}"));
+    }
+    // SAFETY: a tabela vive enquanto o módulo estiver carregado, e
+    // `biblioteca` o mantém até o fim da função.
+    let (iniciar, finalizar, listar) = unsafe {
+        let t = &*tabela;
+        (t.C_Initialize, t.C_Finalize, t.C_GetSlotList)
+    };
+    let (Some(iniciar), Some(finalizar), Some(listar)) = (iniciar, finalizar, listar) else {
+        return Err("o cliente do p11-kit não tem as funções da lista".into());
+    };
+    // SAFETY: sem argumentos, o módulo não usa threads de quem chama.
+    let rv = unsafe { iniciar(std::ptr::null_mut()) };
+    if rv != CKR_OK {
+        return Err(format!("C_Initialize: 0x{rv:x}"));
+    }
+    let lista = listar_slots(|ids, n| {
+        // SAFETY: `ids` é nulo ou tem espaço para `*n` ids.
+        unsafe { listar(CK_TRUE, ids, n) }
+    });
+    // SAFETY: fecha a conexão aberta acima.
+    unsafe { finalizar(std::ptr::null_mut()) };
+    lista
+}
+
+/// O protocolo de duas chamadas do `C_GetSlotList`: a conta, depois a lista,
+/// de novo se um token chegar no meio. Conta zero é lista vazia.
+fn listar_slots(
+    mut listar: impl FnMut(*mut CK_SLOT_ID, &mut CK_ULONG) -> CK_RV,
+) -> Result<Vec<Slot>, String> {
+    for _ in 0..TENTATIVAS {
+        let mut n: CK_ULONG = 0;
+        let rv = listar(std::ptr::null_mut(), &mut n);
+        if rv != CKR_OK {
+            return Err(format!("C_GetSlotList: 0x{rv:x}"));
+        }
+        if n == 0 {
+            return Ok(vec![]);
+        }
+        let mut ids: Vec<CK_SLOT_ID> = vec![0; n as usize];
+        let rv = listar(ids.as_mut_ptr(), &mut n);
+        if rv == CKR_BUFFER_TOO_SMALL {
+            continue;
+        }
+        if rv != CKR_OK {
+            return Err(format!("C_GetSlotList: 0x{rv:x}"));
+        }
+        ids.truncate(n as usize);
+        return ids
+            .into_iter()
+            .map(|id| Slot::try_from(id).map_err(|e| e.to_string()))
+            .collect();
+    }
+    Err("C_GetSlotList: a lista não parou de mudar".into())
 }
 
 pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
-    let p11 = abrir(socket)?;
-    let slots = p11
-        .get_slots_with_token()
-        .map_err(|e| format!("C_GetSlotList: {e}"))?;
+    let (p11, slots) = abrir(socket)?;
     let mut rotulos = Vec::new();
     for slot in slots {
         let token = p11
@@ -69,4 +151,75 @@ pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(rotulos)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // O RPC do p11-kit: com um buffer não nulo de tamanho zero, responde
+    // CKR_BUFFER_TOO_SMALL. Quem pede de novo nesse caso nunca sai.
+    fn rpc(ids: &'static [CK_SLOT_ID]) -> impl FnMut(*mut CK_SLOT_ID, &mut CK_ULONG) -> CK_RV {
+        move |buffer, n| {
+            if buffer.is_null() {
+                *n = ids.len() as CK_ULONG;
+                return CKR_OK;
+            }
+            if (*n as usize) < ids.len() || ids.is_empty() {
+                *n = ids.len() as CK_ULONG;
+                return CKR_BUFFER_TOO_SMALL;
+            }
+            // SAFETY: o buffer tem espaço para `*n` ids.
+            unsafe { std::ptr::copy_nonoverlapping(ids.as_ptr(), buffer, ids.len()) };
+            *n = ids.len() as CK_ULONG;
+            CKR_OK
+        }
+    }
+
+    #[test]
+    fn sem_slot_a_lista_vem_vazia_e_sem_laco() {
+        assert_eq!(listar_slots(rpc(&[])), Ok(vec![]));
+    }
+
+    #[test]
+    fn lista_os_slots_do_servidor() {
+        let slots = listar_slots(rpc(&[3, 7])).unwrap();
+        assert_eq!(slots.iter().map(|s| s.id()).collect::<Vec<_>>(), vec![3, 7]);
+    }
+
+    #[test]
+    fn um_token_que_chega_no_meio_pede_de_novo_e_desiste_se_nao_para() {
+        // A conta diz 1, a lista pede 2: chegou um token. Na segunda volta,
+        // a conta já diz 2.
+        let mut vez = 0;
+        let r = listar_slots(|buffer, n| {
+            vez += 1;
+            match vez {
+                1 => *n = 1,
+                2 => {
+                    *n = 2;
+                    return CKR_BUFFER_TOO_SMALL;
+                }
+                3 => *n = 2,
+                _ => {
+                    // SAFETY: o buffer tem espaço para 2 ids.
+                    unsafe { std::ptr::copy_nonoverlapping([1, 2].as_ptr(), buffer, 2) };
+                    *n = 2;
+                }
+            }
+            CKR_OK
+        });
+        assert_eq!(r.unwrap().len(), 2);
+
+        let sempre_mudando = listar_slots(|buffer, n| {
+            if buffer.is_null() {
+                *n = 1;
+                CKR_OK
+            } else {
+                *n = 2;
+                CKR_BUFFER_TOO_SMALL
+            }
+        });
+        assert!(sempre_mudando.is_err());
+    }
 }

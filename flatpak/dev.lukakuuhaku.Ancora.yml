@@ -17,6 +17,11 @@ finish-args:
   - --device=dri
   # As leitoras de smartcard, pelo pcscd do host.
   - --socket=pcsc
+  # Rede: os drivers rodam no serviço do Âncora, e alguns falam com o
+  # fabricante durante a assinatura (o da Certisign, por exemplo). Uma extensão
+  # não acrescenta permissões ao sandbox, então a rede tem de estar aqui: sem
+  # ela, toda assinatura real com esses drivers falha.
+  - --share=network
   # Os sockets dos servidores de cada driver: $XDG_RUNTIME_DIR/ancora/<driver>.
   - --filesystem=xdg-run/ancora:create
   # Onde o p11-kit do host procura os módulos do usuário. Só os arquivos

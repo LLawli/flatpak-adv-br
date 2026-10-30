@@ -50,6 +50,14 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
 - `ancora certificados <socket>` lista, em JSON, os certificados dos tokens de
   um driver, sem pedir PIN.
 
+### Corrigido
+
+- Um driver sem nenhum token (uma leitora sem cartão, por exemplo) deixa de
+  ser tratado como travado e parado: a lista vazia de slots fazia a sonda
+  repetir o pedido para sempre.
+- Os drivers que falam com o fabricante durante a assinatura (como o da
+  Certisign) passam a ter rede.
+
 ### Mudado
 
 - `ancora assinadores publicar` liga todos os assinadores instalados, e

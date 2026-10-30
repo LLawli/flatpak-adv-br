@@ -29,6 +29,16 @@ desliga e religa um driver pela lista que a janela escreve, e pede a parada como
 ela pede. Desinstala
 as extensões de teste no fim. Leva cerca de um minuto.
 
+## `semtoken.sh`
+
+```bash
+ANCORA_BANCADA=/mnt/dados/caches/ancora-exp tests/e2e/semtoken.sh
+```
+
+Instala `Driver.Vazio` (`vazio.c`, um módulo sem nenhum slot, como o driver de
+uma leitora sem cartão) e confere que ele fica publicado sem token, sem ser
+parado, sem sonda presa e com a lista de certificados vazia na hora.
+
 ## `aplicativos.sh`
 
 ```bash

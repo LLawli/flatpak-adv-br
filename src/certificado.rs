@@ -97,10 +97,7 @@ pub fn listar_com_limite(socket: &Path, limite: Duration) -> Result<Vec<Token>, 
 
 /// Os certificados de cada token inicializado, lidos sem login.
 pub fn listar(socket: &Path) -> Result<Vec<Token>, String> {
-    let p11 = sonda::abrir(socket)?;
-    let slots = p11
-        .get_slots_with_token()
-        .map_err(|e| format!("C_GetSlotList: {e}"))?;
+    let (p11, slots) = sonda::abrir(socket)?;
     let mut tokens = Vec::new();
     for slot in slots {
         let info = p11

@@ -46,7 +46,7 @@ for m in opensc gnome-keyring; do
     fi
 done
 
-cp "$BANCADA/libsofthsm2.so" "$AQUI/travado.c" "$AQUI/espera.c" "$AQUI/nss.py" "$AQUI/assinador-teste.py" "$OBRA/"
+cp "$BANCADA/libsofthsm2.so" "$AQUI/travado.c" "$AQUI/vazio.c" "$AQUI/espera.c" "$AQUI/nss.py" "$AQUI/assinador-teste.py" "$OBRA/"
 printf 'contrato = 1\nnome = "SoftHSM de teste"\n[[pkcs11]]\nmodulo = "lib/libsofthsm2.so"\nambiente = { SOFTHSM2_CONF = "%s/softhsm2.conf" }\n' \
     "$BANCADA" >"$OBRA/softhsm.toml"
 printf 'contrato = 1\nnome = "Driver que trava"\n[[pkcs11]]\nmodulo = "lib/libtravado.so"\n' \
@@ -96,6 +96,11 @@ instalar() {
             '["install -Dm644 assinador.toml ${FLATPAK_DEST}/ancora.toml", "install -Dm755 assinador-teste.py ${FLATPAK_DEST}/bin/assinador", "install -Dm644 firefox.json ${FLATPAK_DEST}/nm/firefox.json", "install -Dm644 chromium.json ${FLATPAK_DEST}/nm/chromium.json"]' \
             '[{type: file, path: assinador.toml}, {type: file, path: assinador-teste.py}, {type: file, path: firefox.json}, {type: file, path: chromium.json}]' \
             Assinador ;;
+        Vazio)
+            printf 'contrato = 1\nnome = "Driver sem slot"\n[[pkcs11]]\nmodulo = "lib/libvazio.so"\n' >"$OBRA/vazio.toml"
+            construir Vazio \
+            '["install -Dm644 vazio.toml ${FLATPAK_DEST}/ancora.toml", "install -d ${FLATPAK_DEST}/lib", "gcc -shared -fPIC -Wall -Werror -I/usr/include/p11-kit-1 vazio.c -o ${FLATPAK_DEST}/lib/libvazio.so"]' \
+            '[{type: file, path: vazio.toml}, {type: file, path: vazio.c}]' ;;
         Travado) construir Travado \
             '["install -Dm644 travado.toml ${FLATPAK_DEST}/ancora.toml", "install -d ${FLATPAK_DEST}/lib", "gcc -shared -fPIC -Wall -Werror -I/usr/include/p11-kit-1 travado.c -o ${FLATPAK_DEST}/lib/libtravado.so"]' \
             '[{type: file, path: travado.toml}, {type: file, path: travado.c}]' ;;
