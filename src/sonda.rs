@@ -137,6 +137,15 @@ fn listar_slots(
     Err("C_GetSlotList: a lista não parou de mudar".into())
 }
 
+/// Um campo de texto fixo do PKCS#11 (rótulo, fabricante), sem o
+/// preenchimento. A norma pede espaços, mas o SerproID preenche com bytes
+/// nulos, que chegariam à janela e ao estado.
+pub fn texto_fixo(campo: &str) -> String {
+    campo
+        .trim_end_matches(|c: char| c == '\0' || c.is_whitespace())
+        .to_owned()
+}
+
 pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
     let (p11, slots) = abrir(socket)?;
     let mut rotulos = Vec::new();
@@ -147,7 +156,7 @@ pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
         // Um slot livre (o SoftHSM sempre deixa um) tem token sem
         // inicializar, sem rótulo e sem certificado.
         if token.token_initialized() {
-            rotulos.push(token.label().trim_end().to_owned());
+            rotulos.push(texto_fixo(token.label()));
         }
     }
     Ok(rotulos)
@@ -174,6 +183,14 @@ mod tests {
             *n = ids.len() as CK_ULONG;
             CKR_OK
         }
+    }
+
+    #[test]
+    fn texto_fixo_perde_o_preenchimento_de_espacos_e_de_nulos() {
+        assert_eq!(texto_fixo("SafeSign IC      "), "SafeSign IC");
+        assert_eq!(texto_fixo("SerproID\0\0\0\0"), "SerproID");
+        assert_eq!(texto_fixo("Meu token \0 \0"), "Meu token");
+        assert_eq!(texto_fixo("\0\0"), "");
     }
 
     #[test]

@@ -67,6 +67,8 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   repetir o pedido para sempre.
 - Os drivers que falam com o fabricante durante a assinatura (como o da
   Certisign) passam a ter rede.
+- O nome do token do SerproID aparece sem lixo no fim: o driver completa o
+  nome com bytes nulos, e não com espaços como a norma pede.
 
 ### Mudado
 

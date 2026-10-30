@@ -129,7 +129,7 @@ pub fn listar(socket: &Path) -> Result<Vec<Token>, String> {
         certificados.sort();
         certificados.dedup();
         tokens.push(Token {
-            rotulo: info.label().trim_end().to_owned(),
+            rotulo: crate::sonda::texto_fixo(info.label()),
             certificados,
         });
     }
