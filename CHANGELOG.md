@@ -38,3 +38,19 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   com os tokens dos drivers do Âncora. Num navegador Flatpak o assinador roda
   dentro dele, sem dar ao navegador permissão de sair do sandbox.
   `ancora assinadores despublicar` tira tudo.
+- A janela mostra os tokens conectados e os certificados de cada um (titular,
+  CPF ou CNPJ, emissor e validade), com destaque para o que venceu ou vence nos
+  próximos 30 dias. Ela lista as extensões instaladas, com um interruptor para
+  cada driver e cada assinador e o motivo de um driver que não responde, e os
+  aplicativos Flatpak e navegadores do sistema, cada um com o seu interruptor.
+- Abrir a janela sobe o serviço, que continua depois de ela fechar. No menu,
+  "Iniciar com a sessão" pede ao sistema que o suba no login (onde houver o
+  portal Background, como no GNOME), e "Reiniciar o serviço" faz uma extensão
+  instalada depois passar a valer, o que a linha dela também oferece.
+- `ancora certificados <socket>` lista, em JSON, os certificados dos tokens de
+  um driver, sem pedir PIN.
+
+### Mudado
+
+- `ancora assinadores publicar` liga todos os assinadores instalados, e
+  `despublicar` desliga todos: é a mesma escolha que a janela mostra.

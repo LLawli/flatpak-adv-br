@@ -79,8 +79,7 @@ As extensões são lidas na partida: o Flatpak monta extensões quando o sandbox
 começa, e uma instalada depois só aparece num serviço reiniciado.
 
 Ainda falta: host com p11-kit da série 0.25 (Debian trixie, Ubuntu 24.04), que
-fala um protocolo diferente do runtime (0.26), e o início automático do
-serviço com a sessão.
+fala um protocolo diferente do runtime (0.26).
 
 ## Os aplicativos que usam os tokens
 
@@ -184,6 +183,48 @@ abre uma sessão em cada token que lista e encerra a lista inteira no primeiro
 `iter.c`; o `main` ainda é assim). Os módulos são ordenados por `priority` e
 depois pelo nome, e o sentinela na frente não pode ser escondido.
 
+## A janela
+
+A janela (`src/janela.rs`) e o serviço são processos à parte, e podem estar em
+instâncias diferentes do sandbox (o serviço do início automático começa antes
+de qualquer janela). Eles conversam por arquivos (`src/estado.rs`):
+
+| o quê | onde | quem escreve |
+|---|---|---|
+| o que cada driver está fazendo | `$XDG_RUNTIME_DIR/ancora/estado.json` | o serviço, a cada mudança, de uma vez (escreve ao lado e renomeia) |
+| se o serviço está vivo | a trava `servico.trava` | ninguém: a janela tenta a trava compartilhada, e o arquivo de estado que sobra de um SIGKILL não engana |
+| os drivers desligados | `drivers-desligados`, nos dados | a janela; o serviço confere a cada passo (200 ms) e para ou sobe o driver |
+| pedido de parada | `$XDG_RUNTIME_DIR/ancora/parar` | a janela; o serviço o consome e sai como num SIGTERM |
+
+Os dados do Âncora, no sandbox, são a `~/.local/share/ancora` do host: a
+permissão `xdg-data/ancora` a monta por cima da pasta de dados do aplicativo.
+Nos testes, `ANCORA_DADOS` os redireciona (o Flatpak sobrescreve o
+`XDG_DATA_HOME`).
+
+Abrir a janela sobe o serviço, num grupo de sessão próprio, e ele segue depois
+de ela fechar. As extensões são lidas quando o sandbox começa, então uma
+extensão instalada com o serviço rodando só vale num serviço novo: a linha
+dela oferece reiniciar, que pede a parada do serviço antigo (que pode ser de
+outra instância, onde um sinal não chega, porque cada instância tem o seu
+espaço de PIDs) e sobe um nesta. "Iniciar com a sessão" pede ao portal
+Background que rode `ancora servir` no login. No Hyprland e no Sway o portal
+não tem essa interface, e a janela diz isso; no GNOME ainda não foi testado.
+
+Os certificados de cada token vêm de `ancora certificados <socket>`, num
+processo à parte com limite de 15 s, pelo socket do driver e sem login. A
+janela pede de novo só quando a lista de tokens de um driver muda, para não
+abrir sessão no cartão a cada sonda. Do X.509 saem o nome comum do titular
+(`NOME:CPF` ou `RAZÃO:CNPJ` na ICP-Brasil), o do emissor e o fim da validade,
+lidos por um leitor DER mínimo (`src/certificado.rs`).
+
+O que demora (perguntar ao host, medir com o sentinela) roda fora da thread da
+interface, uma operação por vez: o interruptor só muda quando ela termina, e
+os outros esperam esmaecidos. O que custa ler é relido ao abrir a janela,
+quando ela volta ao foco e depois de cada operação; o estado do serviço, a
+cada segundo. Desligar um assinador sincroniza a publicação (escreve o que os
+ligados pedem e apaga o resto), e abrir a janela sincroniza de novo, para
+alcançar um navegador instalado depois.
+
 ## Instalar extensões de dentro do aplicativo
 
 A tela de extensões procura, nos remotes que a pessoa já tem configurados, os
@@ -214,7 +255,8 @@ PJeOffice, quando existir, convive com ele.
 3. **Núcleo de publicação** (feito): PKCS#11 por socket com supervisão,
    aplicativos Flatpak e navegadores nativos (permissão e NSS, verificados com
    o token-sentinela) e os assinadores por native messaging.
-4. **Interface base**: o estado do certificado e as extensões instaladas.
+4. **Interface base** (feito): os tokens e os certificados, as extensões
+   instaladas, os aplicativos e navegadores, e o serviço com a sessão.
 5. **Tela de extensões**: busca, instala e atualiza nos remotes.
 6. **Migração**: as extensões do flatpak-adv-br (SafeSign primeiro), o remote e
    o `end-of-life-rebase` do `dev.lukakuuhaku.AdvBr` para o Âncora.

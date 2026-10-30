@@ -11,6 +11,8 @@ FALSA=$BANCADA/home-falsa
 MODULES=$FALSA/.config/pkcs11/modules
 SOCKS=/run/user/$(id -u)/ancora
 LOG=$BANCADA/servico.log
+# Os dados do Âncora (escolhas e registros), fora dos da sessão de quem roda.
+DADOS=$BANCADA/dados
 falhas=0
 
 confere() {
@@ -34,7 +36,7 @@ terminar() {
 
 # --- preparo --------------------------------------------------------------
 
-mkdir -p "$OBRA" "$MODULES"
+mkdir -p "$OBRA" "$MODULES" "$DADOS"
 # Os módulos de hardware do sistema, desligados por nome na home falsa: o
 # teste não pode disputar a leitora com o gpg/ssh-agent.
 for m in opensc gnome-keyring; do
@@ -152,7 +154,7 @@ ancora() {
         extra=(--env=ANCORA_SERVIDOR_DO_SISTEMA="$ANCORA_SERVIDOR_DO_SISTEMA"
             --filesystem="$(dirname "$ANCORA_SERVIDOR_DO_SISTEMA")")
     fi
-    flatpak run --env=ANCORA_HOME_HOST="$FALSA" --env=XDG_DATA_HOME="$BANCADA/dados" \
+    flatpak run --env=ANCORA_HOME_HOST="$FALSA" --env=ANCORA_DADOS="$DADOS" \
         --filesystem="$BANCADA" "${extra[@]}" --command=ancora dev.lukakuuhaku.Ancora "$@"
 }
 

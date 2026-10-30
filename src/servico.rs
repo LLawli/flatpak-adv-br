@@ -3,24 +3,29 @@
 //! Para cada módulo PKCS#11 das extensões de driver, sobe um `p11-kit server`
 //! em `$XDG_RUNTIME_DIR/ancora/<chave>`, sonda-o periodicamente num processo
 //! à parte e mantém publicado no host (ver `publicacao`) só o que respondeu
-//! da última vez. Ao receber SIGTERM, SIGINT ou SIGHUP, despublica tudo e
-//! para os servidores.
+//! da última vez. Ao receber SIGTERM, SIGINT ou SIGHUP, ou o pedido de
+//! parada da janela, despublica tudo e para os servidores.
+//!
+//! O que cada driver está fazendo vai para o estado que a janela lê, e um
+//! driver que a pessoa desliga é parado e despublicado na hora (ver
+//! `estado`).
 //!
 //! As extensões são lidas uma vez, na partida: o Flatpak monta as extensões
 //! quando o sandbox começa, e uma instalada depois só aparece num serviço
 //! reiniciado.
 
+use crate::estado::{self, Situacao};
 use crate::extensao::{self, Familia};
 use crate::supervisao::{Acao, Estado, Sondagem, Supervisao};
 use crate::{processo, publicacao};
 use gtk::glib;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 /// De quanto em quanto tempo cada driver é sondado.
 const INTERVALO: Duration = Duration::from_secs(10);
@@ -32,6 +37,8 @@ const ESPERA_INICIAL: Duration = Duration::from_secs(1);
 const PASSO: Duration = Duration::from_millis(200);
 
 struct Driver {
+    /// O id da extensão, que é o que a pessoa liga e desliga.
+    extensao: String,
     /// Como aparece no log: `SafeSign`, ou `SafeSign/2` no segundo módulo.
     rotulo: String,
     modulo: extensao::Pkcs11,
@@ -41,10 +48,16 @@ struct Driver {
     sonda: Option<(Child, Instant)>,
     proxima_sonda: Instant,
     supervisao: Supervisao,
+    desligado: bool,
 }
 
 struct Servico {
     dir_modules: PathBuf,
+    dir_sockets: PathBuf,
+    /// A lista de drivers desligados, e quando ela mudou da última vez que
+    /// foi lida.
+    desligados: PathBuf,
+    visto_em: Option<SystemTime>,
     drivers: BTreeMap<String, Driver>,
     /// Mantém a trava de instância única enquanto o serviço existe.
     _trava: File,
@@ -62,15 +75,16 @@ pub fn servir() -> glib::ExitCode {
 
 fn iniciar() -> Result<Servico, String> {
     let home = glib::home_dir();
-    let dir_sockets = glib::user_runtime_dir().join("ancora");
+    let dir_sockets = estado::diretorio();
     fs::create_dir_all(&dir_sockets).map_err(|e| format!("{}: {e}", dir_sockets.display()))?;
 
-    let caminho_trava = dir_sockets.join("servico.trava");
+    let caminho_trava = estado::caminho_trava(&dir_sockets);
     let trava =
         File::create(&caminho_trava).map_err(|e| format!("{}: {e}", caminho_trava.display()))?;
     trava
         .try_lock()
         .map_err(|_| "já há um serviço do Âncora rodando".to_owned())?;
+    estado::descartar_parada(&dir_sockets);
 
     // Uma queda anterior pode ter deixado módulos publicados. Apontam para
     // sockets mortos, o que não trava ninguém, mas não devem ficar.
@@ -107,6 +121,7 @@ fn iniciar() -> Result<Servico, String> {
             drivers.insert(
                 chave.clone(),
                 Driver {
+                    extensao: e.id.clone(),
                     rotulo,
                     modulo,
                     criar_diretorios: d.criar_diretorios.clone(),
@@ -115,6 +130,7 @@ fn iniciar() -> Result<Servico, String> {
                     sonda: None,
                     proxima_sonda: Instant::now(),
                     supervisao: Supervisao::default(),
+                    desligado: false,
                 },
             );
         }
@@ -122,17 +138,28 @@ fn iniciar() -> Result<Servico, String> {
     if drivers.is_empty() {
         eprintln!("nenhum driver instalado");
     }
-    Ok(Servico {
+    let mut servico = Servico {
         dir_modules,
+        dir_sockets,
+        desligados: estado::caminho_desligados(&estado::dados()),
+        visto_em: None,
         drivers,
         _trava: trava,
-    })
+    };
+    let desligados = ler_desligados(&mut servico);
+    for d in servico.drivers.values_mut() {
+        d.desligado = desligados.contains(&d.extensao);
+    }
+    Ok(servico)
 }
 
 fn rodar(mut servico: Servico) -> glib::ExitCode {
     for d in servico.drivers.values_mut() {
-        iniciar_servidor(d);
+        if !d.desligado {
+            iniciar_servidor(d);
+        }
     }
+    gravar_estado(&servico);
     let servico = Rc::new(RefCell::new(servico));
     let laco = glib::MainLoop::new(None, false);
 
@@ -148,8 +175,16 @@ fn rodar(mut servico: Servico) -> glib::ExitCode {
 
     {
         let servico = servico.clone();
+        let laco = laco.clone();
         glib::timeout_add_local(PASSO, move || {
-            acompanhar(&mut servico.borrow_mut());
+            let mut servico = servico.borrow_mut();
+            if estado::parada_pedida(&servico.dir_sockets) {
+                eprintln!("parada pedida");
+                encerrar(&mut servico);
+                laco.quit();
+                return glib::ControlFlow::Break;
+            }
+            acompanhar(&mut servico);
             glib::ControlFlow::Continue
         });
     }
@@ -158,10 +193,47 @@ fn rodar(mut servico: Servico) -> glib::ExitCode {
     glib::ExitCode::SUCCESS
 }
 
+/// A lista de drivers desligados, se mudou desde a última leitura.
+fn desligados_novos(servico: &mut Servico) -> Option<BTreeSet<String>> {
+    let quando = fs::metadata(&servico.desligados)
+        .and_then(|m| m.modified())
+        .ok();
+    if quando == servico.visto_em {
+        return None;
+    }
+    Some(ler_desligados(servico))
+}
+
+fn ler_desligados(servico: &mut Servico) -> BTreeSet<String> {
+    servico.visto_em = fs::metadata(&servico.desligados)
+        .and_then(|m| m.modified())
+        .ok();
+    estado::ler_lista(&servico.desligados)
+}
+
 fn acompanhar(servico: &mut Servico) {
     let mut mudou = false;
+    if let Some(desligados) = desligados_novos(servico) {
+        for d in servico.drivers.values_mut() {
+            let desligar = desligados.contains(&d.extensao);
+            if desligar == d.desligado {
+                continue;
+            }
+            d.desligado = desligar;
+            if desligar {
+                eprintln!("{}: desligado", d.rotulo);
+                matar_sonda(d);
+                parar_servidor(d);
+            } else {
+                eprintln!("{}: ligado", d.rotulo);
+                d.supervisao = Supervisao::default();
+                iniciar_servidor(d);
+            }
+            mudou = true;
+        }
+    }
     for d in servico.drivers.values_mut() {
-        if d.supervisao.parado() {
+        if d.desligado || d.supervisao.parado() {
             continue;
         }
         let antes = d.supervisao.estado.clone();
@@ -268,11 +340,46 @@ fn publicar(servico: &Servico) {
     let desejados = servico
         .drivers
         .iter()
-        .filter(|(_, d)| d.supervisao.publicado())
+        .filter(|(_, d)| !d.desligado && d.supervisao.publicado())
         .map(|(chave, d)| (publicacao::nome(chave), publicacao::conteudo(&d.socket)))
         .collect();
     if let Err(e) = publicacao::publicar(&servico.dir_modules, &desejados) {
         eprintln!("{}: {e}", servico.dir_modules.display());
+    }
+    gravar_estado(servico);
+}
+
+fn gravar_estado(servico: &Servico) {
+    let drivers = servico
+        .drivers
+        .values()
+        .map(|d| estado::Driver {
+            extensao: d.extensao.clone(),
+            rotulo: d.rotulo.clone(),
+            socket: d.socket.clone(),
+            situacao: situacao(d),
+        })
+        .collect();
+    if let Err(e) = estado::gravar(&servico.dir_sockets, &estado::Estado { drivers }) {
+        eprintln!("{}: {e}", servico.dir_sockets.display());
+    }
+}
+
+fn situacao(d: &Driver) -> Situacao {
+    if d.desligado {
+        return Situacao::Desligado;
+    }
+    match &d.supervisao.estado {
+        Estado::Iniciando => Situacao::Iniciando,
+        Estado::Publicado(tokens) => Situacao::Publicado {
+            tokens: tokens.clone(),
+        },
+        Estado::ComErro(motivo) => Situacao::ComErro {
+            motivo: motivo.clone(),
+        },
+        Estado::Parado(motivo) => Situacao::Parado {
+            motivo: motivo.clone(),
+        },
     }
 }
 
@@ -280,6 +387,7 @@ fn encerrar(servico: &mut Servico) {
     if let Err(e) = publicacao::publicar(&servico.dir_modules, &BTreeMap::new()) {
         eprintln!("{}: {e}", servico.dir_modules.display());
     }
+    estado::apagar(&servico.dir_sockets);
     for d in servico.drivers.values_mut() {
         matar_sonda(d);
         parar_servidor(d);

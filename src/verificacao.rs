@@ -56,6 +56,15 @@ pub struct Contagem {
     pub modulos: Vec<String>,
 }
 
+/// O sentinela publicado para medir, ou, se não der (fora do Flatpak), um
+/// medidor que só diz por quê.
+pub fn medidor(home: &Path) -> Box<dyn Medidor> {
+    match Sentinela::publicar(home) {
+        Ok(s) => Box::new(s),
+        Err(e) => Box::new(Indisponivel(e)),
+    }
+}
+
 pub trait Medidor {
     fn contar(&self, ambiente: Ambiente, banco: &Path, raizes: Raizes) -> Result<Contagem, String>;
 }

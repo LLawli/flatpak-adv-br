@@ -3,9 +3,13 @@ use std::path::Path;
 
 mod aplicativos;
 mod assinadores;
+mod certificado;
 mod cli;
+mod estado;
 mod extensao;
+mod fundo;
 mod host;
+mod janela;
 mod nativos;
 mod nss;
 mod permissao;
@@ -28,6 +32,7 @@ fn main() -> gtk::glib::ExitCode {
         Some("extensoes") => return cli::extensoes(),
         Some("servir") => return servico::servir(),
         Some("sondar") => return cli::sondar(args.get(2).map(Path::new)),
+        Some("certificados") => return cli::certificados(args.get(2).map(Path::new)),
         Some("aplicativos") => return cli::aplicativos(),
         Some("configurar") => return cli::configurar(args.get(2).map(String::as_str)),
         Some("desfazer") => return cli::desfazer(args.get(2).map(String::as_str)),
@@ -44,28 +49,8 @@ fn main() -> gtk::glib::ExitCode {
         _ => {}
     }
     let app = adw::Application::builder().application_id(APP_ID).build();
-    app.connect_activate(montar_janela);
+    app.connect_activate(janela::montar);
     app.run()
-}
-
-fn montar_janela(app: &adw::Application) {
-    let pagina = adw::StatusPage::builder()
-        .icon_name(APP_ID)
-        .title(NOME)
-        .build();
-
-    let conteudo = adw::ToolbarView::new();
-    conteudo.add_top_bar(&adw::HeaderBar::new());
-    conteudo.set_content(Some(&pagina));
-
-    adw::ApplicationWindow::builder()
-        .application(app)
-        .title(NOME)
-        .default_width(720)
-        .default_height(640)
-        .content(&conteudo)
-        .build()
-        .present();
 }
 
 #[cfg(test)]

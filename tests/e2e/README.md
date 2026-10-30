@@ -24,7 +24,9 @@ ANCORA_BANCADA=/mnt/dados/caches/ancora-exp tests/e2e/publicacao.sh
 Instala `Driver.SoftHSM` e `Driver.Travado` (um módulo que trava ao listar
 slots, `travado.c`), sobe `ancora servir` e confere: só o que responde é
 publicado, o travado é parado, uma segunda instância é recusada, e SIGTERM,
-SIGKILL e a partida seguinte deixam o diretório de módulos limpo. Desinstala
+SIGKILL e a partida seguinte deixam o diretório de módulos limpo. Também
+desliga e religa um driver pela lista que a janela escreve, e pede a parada como
+ela pede. Desinstala
 as extensões de teste no fim. Leva cerca de um minuto.
 
 ## `aplicativos.sh`
@@ -82,4 +84,7 @@ manifestos, lançadores, links e a permissão dada.
 
 Os testes isolam a sessão com `HOME` e `XDG_CONFIG_HOME` falsos (o p11-kit acha a
 configuração do usuário pelo segundo) e desligam, na home falsa, os módulos de
-hardware do sistema, para não disputar a leitora com o gpg ou o ssh-agent.
+hardware do sistema, para não disputar a leitora com o gpg ou o ssh-agent. No
+sandbox, `ANCORA_HOME_HOST` aponta o Âncora para a home falsa e `ANCORA_DADOS`
+para os dados da bancada: o `XDG_DATA_HOME` não serve, porque o Flatpak o
+sobrescreve e a permissão `xdg-data/ancora` traz a pasta real do host.

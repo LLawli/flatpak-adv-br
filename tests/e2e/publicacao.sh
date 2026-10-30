@@ -22,11 +22,32 @@ confere "o driver travado é parado" "$(grep -c 'Travado: parado' "$LOG")" "1"
 confere "só o servidor do SoftHSM continua no ar" "$(servidores)" "1"
 confere "o host segue vendo o token" "$(tokens_no_host)" "HUBTESTE"
 
+# A janela desliga um driver escrevendo a lista; o serviço a lê sozinho.
+situacao() {
+    python3 -I -c 'import json, sys; print(" ".join(d["situacao"]["tipo"] for d in json.load(sys.stdin)["drivers"]))' <"$SOCKS/estado.json"
+}
+confere "o estado diz o que cada driver faz" "$(situacao)" "publicado parado"
+echo SoftHSM >"$DADOS/drivers-desligados"; sleep 2
+confere "desligar o driver o despublica" "$(publicados)" ""
+confere "desligar para o servidor dele" "$(servidores)" "0"
+confere "o estado diz desligado" "$(situacao)" "desligado parado"
+: >"$DADOS/drivers-desligados"; sleep 3
+confere "religar publica de novo" "$(publicados)" "ancora-softhsm.module"
+confere "o host volta a ver o token" "$(tokens_no_host)" "HUBTESTE"
+
 set +e
 flatpak run --command=ancora dev.lukakuuhaku.Ancora servir 2>/dev/null
 segunda=$?
 set -e
 confere "uma segunda instância é recusada" "$segunda" "1"
+
+touch "$SOCKS/parar"; sleep 3
+confere "o pedido de parada da janela encerra o serviço" "$(pid_servico)" ""
+confere "o pedido de parada despublica tudo" "$(publicados)" ""
+confere "o pedido de parada para os servidores" "$(servidores)" "0"
+confere "e apaga o estado" "$(ls "$SOCKS/estado.json" 2>/dev/null)" ""
+
+subir
 
 kill -TERM "$(pid_servico)"; sleep 3
 confere "SIGTERM despublica tudo" "$(publicados)" ""

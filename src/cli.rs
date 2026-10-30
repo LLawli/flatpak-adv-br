@@ -1,8 +1,9 @@
 //! Os subcomandos de linha de comando: diagnóstico e o que a interface
 //! também faz, para testar e para quem prefere o terminal.
 
-use crate::verificacao::{self, Medidor, Resultado};
-use crate::{APP_ID, aplicativos, assinadores, extensao, host, nativos, sonda};
+use crate::estado::dados;
+use crate::verificacao::{self, Resultado, medidor};
+use crate::{APP_ID, aplicativos, assinadores, certificado, extensao, host, nativos, sonda};
 use gtk::glib::{self, ExitCode};
 use std::path::Path;
 use std::time::Duration;
@@ -50,9 +51,23 @@ pub fn sondar(socket: Option<&Path>) -> ExitCode {
     }
 }
 
-/// Os dados do Âncora no host (o registro das permissões concedidas).
-fn dados() -> std::path::PathBuf {
-    glib::user_data_dir().join("ancora")
+/// `ancora certificados <socket>`: os tokens e os certificados de cada um,
+/// em JSON, para a janela.
+pub fn certificados(socket: Option<&Path>) -> ExitCode {
+    let Some(socket) = socket else {
+        eprintln!("uso: ancora certificados <socket>");
+        return ExitCode::FAILURE;
+    };
+    match certificado::listar(socket) {
+        Ok(tokens) => {
+            println!("{}", serde_json::to_string(&tokens).unwrap_or_default());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// `ancora aplicativos`: o servidor do sistema e cada aplicativo conhecido
@@ -200,15 +215,6 @@ pub fn nativos(acao: Option<&str>, destino: Option<&str>) -> ExitCode {
     }
 }
 
-/// O sentinela publicado para medir, ou, se não der (fora do Flatpak), um
-/// medidor que só diz por quê.
-fn medidor(home: &Path) -> Box<dyn Medidor> {
-    match verificacao::Sentinela::publicar(home) {
-        Ok(s) => Box::new(s),
-        Err(e) => Box::new(verificacao::Indisponivel(e)),
-    }
-}
-
 fn relatar(resultados: &[(std::path::PathBuf, Resultado)]) {
     for (banco, r) in resultados {
         let texto = match r {
@@ -228,8 +234,10 @@ fn relatar(resultados: &[(std::path::PathBuf, Resultado)]) {
 pub fn assinadores(acao: Option<&str>) -> ExitCode {
     let home = host::home();
     if acao == Some("despublicar") {
-        return match assinadores::aplicar(&home, &dados(), &assinadores::Plano::default()) {
-            Ok(()) => ExitCode::SUCCESS,
+        let r = assinadores::ligar(&dados(), &Default::default())
+            .and_then(|()| assinadores::sincronizar(&home, &glib::home_dir(), &dados()));
+        return match r {
+            Ok(_) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("{e}");
                 ExitCode::FAILURE
@@ -263,8 +271,9 @@ pub fn assinadores(acao: Option<&str>) -> ExitCode {
     if acao != Some("publicar") {
         return ExitCode::SUCCESS;
     }
-    let resultado = assinadores::planejar(&home, &navegadores, &instalados)
-        .and_then(|p| assinadores::aplicar(&home, &dados(), &p).map(|()| p));
+    let todos = instalados.iter().map(|i| i.id.clone()).collect();
+    let resultado = assinadores::ligar(&dados(), &todos)
+        .and_then(|()| assinadores::sincronizar(&home, &glib::home_dir(), &dados()));
     match resultado {
         Ok(plano) => {
             for id in &plano.sem_tokens {

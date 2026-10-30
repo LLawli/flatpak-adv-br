@@ -415,6 +415,43 @@ pub fn planejar(
     Ok(plano)
 }
 
+fn arquivo_ligados(dados: &Path) -> PathBuf {
+    dados.join("assinadores-ligados")
+}
+
+/// As extensões de assinador que a pessoa quer nos navegadores.
+pub fn ligados(dados: &Path) -> BTreeSet<String> {
+    crate::estado::ler_lista(&arquivo_ligados(dados))
+}
+
+pub fn ligar(dados: &Path, ids: &BTreeSet<String>) -> Result<(), String> {
+    crate::estado::gravar_lista(&arquivo_ligados(dados), ids).map_err(|e| e.to_string())
+}
+
+/// Publica os assinadores ligados em todo navegador presente, e tira o resto.
+/// É o que se roda quando a escolha muda, e de novo quando um navegador
+/// aparece.
+pub fn sincronizar(home: &Path, home_sandbox: &Path, dados: &Path) -> Result<Plano, String> {
+    let ligados = ligados(dados);
+    if ligados.is_empty() {
+        let plano = Plano::default();
+        aplicar(home, dados, &plano)?;
+        return Ok(plano);
+    }
+    let flatpaks = crate::aplicativos::instalados()?;
+    let navegadores = presentes(home, &flatpaks);
+    let mut escolhidos = Vec::new();
+    for i in instalados(home_sandbox) {
+        let i = i?;
+        if ligados.contains(&i.id) {
+            escolhidos.push(i);
+        }
+    }
+    let plano = planejar(home, &navegadores, &escolhidos)?;
+    aplicar(home, dados, &plano)?;
+    Ok(plano)
+}
+
 fn arquivo_registro(dados: &Path) -> PathBuf {
     dados.join("assinadores")
 }

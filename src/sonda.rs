@@ -34,9 +34,11 @@ pub fn sondar_com_limite(
     }
 }
 
-pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
-    // SAFETY: `sondar` roda no começo de um processo próprio e de vida curta,
-    // antes de qualquer outra thread existir.
+/// O cliente do p11-kit ligado ao servidor de `socket`. Só para o começo de
+/// um processo próprio e de vida curta, antes de qualquer outra thread
+/// existir: muda o ambiente do processo.
+pub fn abrir(socket: &Path) -> Result<Pkcs11, String> {
+    // SAFETY: ver acima; quem chama roda antes de criar threads.
     unsafe {
         std::env::set_var(
             "P11_KIT_SERVER_ADDRESS",
@@ -47,6 +49,11 @@ pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
     let p11 = Pkcs11::new(&cliente).map_err(|e| format!("{}: {e}", cliente.display()))?;
     p11.initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK))
         .map_err(|e| format!("C_Initialize: {e}"))?;
+    Ok(p11)
+}
+
+pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
+    let p11 = abrir(socket)?;
     let slots = p11
         .get_slots_with_token()
         .map_err(|e| format!("C_GetSlotList: {e}"))?;
