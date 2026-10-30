@@ -73,6 +73,36 @@ Ainda falta: host com p11-kit da série 0.25 (Debian trixie, Ubuntu 24.04), que
 fala um protocolo diferente do runtime (0.26), e o início automático do
 serviço com a sessão.
 
+## Os aplicativos que usam os tokens
+
+Um aplicativo Flatpak chega aos tokens pelo `p11-kit-server.socket` do
+usuário, que serve os módulos do host (os do Âncora entre eles) e a confiança
+do sistema. `src/aplicativos.rs` conhece os aplicativos testados e faz, para
+cada um, dois passos, com as receitas que o Tessera testou com token real:
+
+| aplicativo | permissão | banco NSS |
+|---|---|---|
+| Firefox | `xdg-run/p11-kit/pkcs11` | registra o `p11-kit-client.so` do runtime em cada perfil |
+| Chromium, Chrome, Edge, Brave | idem | nada a registrar: o módulo de confiança do runtime já chega ao servidor; tira um registro do p11-kit que duplicaria os tokens |
+| Papers, Okular | idem | um banco vazio em `config/mozilla/firefox/ancora.default`, o primeiro que o poppler procura |
+| PJeOffice Pro (FlatPark) | já tem | já carrega o cliente |
+
+A permissão é escrita no override do aplicativo (o INI de `flatpak override
+--user`), e desfazer tira só essa entrada, e só se foi o Âncora que a pôs (o
+registro fica em `concessoes`, nos dados do Âncora). Nunca `--nofilesystem`,
+que grava uma negação permanente, nem `--reset`, que apaga o que outros
+programas concederam. O Firefox aberto segura um lock no `.parentlock` do
+perfil, e o Âncora não mexe no banco nessa hora.
+
+`tests/e2e/aplicativos.sh` prova a cadeia com o NSS do Firefox Flatpak de
+verdade: o token aparece uma vez, pelo módulo do Âncora.
+
+Pelo terminal: `ancora aplicativos` (o que falta em cada um),
+`ancora configurar <id>` e `ancora desfazer <id>`.
+
+Ainda falta: os navegadores nativos (fora do Flatpak), que não passam pelo
+servidor do sistema.
+
 ## Instalar extensões de dentro do aplicativo
 
 A tela de extensões procura, nos remotes que a pessoa já tem configurados, os

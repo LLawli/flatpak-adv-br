@@ -75,7 +75,7 @@ fn iniciar() -> Result<Servico, String> {
 
     // Uma queda anterior pode ter deixado módulos publicados. Apontam para
     // sockets mortos, o que não trava ninguém, mas não devem ficar.
-    let dir_modules = publicacao::diretorio(&home);
+    let dir_modules = publicacao::diretorio(&crate::host::home());
     publicacao::publicar(&dir_modules, &BTreeMap::new())
         .map_err(|e| format!("{}: {e}", dir_modules.display()))?;
 

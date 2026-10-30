@@ -32,17 +32,11 @@ pub const DESLIGADO_EM: [&str; 6] = [
     "gnome-keyring-daemon",
 ];
 
-/// Variável que redireciona o diretório de módulos, para testes.
-pub const VARIAVEL_DIRETORIO: &str = "ANCORA_DIR_MODULES";
-
 /// Onde o p11-kit do host procura os módulos do usuário. Dentro do sandbox o
 /// `XDG_CONFIG_HOME` é o do aplicativo, e o do host não é exportado: vale o
 /// padrão, que é para onde a permissão `xdg-config/pkcs11` aponta.
-pub fn diretorio(home: &Path) -> PathBuf {
-    match std::env::var_os(VARIAVEL_DIRETORIO) {
-        Some(d) if !d.is_empty() => PathBuf::from(d),
-        _ => home.join(".config/pkcs11/modules"),
-    }
+pub fn diretorio(home_host: &Path) -> PathBuf {
+    home_host.join(".config/pkcs11/modules")
 }
 
 /// O nome do arquivo de um driver: `ancora-safesign.module`.

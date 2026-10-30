@@ -18,6 +18,31 @@ finish-args:
   # Onde o p11-kit do host procura os módulos do usuário. Só os arquivos
   # ancora-*.module são escritos ou apagados.
   - --filesystem=xdg-config/pkcs11:create
+  # Rodar comandos no host: listar os aplicativos instalados, ligar o
+  # p11-kit-server.socket do usuário e, na tela de extensões, instalar e
+  # atualizar extensões. É a permissão que o Flathub marca como saída do
+  # sandbox, aceita de propósito (docs/arquitetura.md).
+  - --talk-name=org.freedesktop.Flatpak
+  # O socket do p11-kit-server.socket do usuário, para conferir de ponta a
+  # ponta o que os aplicativos enxergam por ele.
+  - --filesystem=xdg-run/p11-kit/pkcs11
+  # Dar a um aplicativo a permissão do socket acima, e tirar só ela depois.
+  - --filesystem=xdg-data/flatpak/overrides:create
+  # Os bancos NSS dos aplicativos (src/aplicativos.rs). Sem :create onde o
+  # banco é do aplicativo: ele o cria na primeira vez que abre, e o Âncora
+  # não cria pastas de aplicativos que não estão instalados.
+  - --filesystem=~/.var/app/org.mozilla.firefox/config/mozilla/firefox
+  - --filesystem=~/.var/app/org.mozilla.firefox/.mozilla/firefox
+  - --filesystem=~/.var/app/org.gnome.Papers/config/mozilla:create
+  - --filesystem=~/.var/app/org.kde.okular/config/mozilla:create
+  - --filesystem=~/.pki/nssdb
+  - --filesystem=~/.var/app/org.chromium.Chromium/data/pki/nssdb
+  - --filesystem=~/.var/app/com.google.Chrome/.pki/nssdb
+  - --filesystem=~/.var/app/com.google.Chrome/data/pki/nssdb
+  - --filesystem=~/.var/app/com.microsoft.Edge/.pki/nssdb
+  - --filesystem=~/.var/app/com.microsoft.Edge/data/pki/nssdb
+  - --filesystem=~/.var/app/com.brave.Browser/.pki/nssdb
+  - --filesystem=~/.var/app/com.brave.Browser/data/pki/nssdb
 
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin

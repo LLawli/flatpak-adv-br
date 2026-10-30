@@ -15,6 +15,44 @@ pub fn cliente() -> PathBuf {
     ))
 }
 
+/// `sondar` num subprocesso, desistindo depois de `limite`.
+pub fn sondar_com_limite(
+    socket: &Path,
+    limite: std::time::Duration,
+) -> Result<Vec<String>, String> {
+    use std::process::{Command, Stdio};
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut filho = Command::new(exe)
+        .arg("sondar")
+        .arg(socket)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let fim = std::time::Instant::now() + limite;
+    loop {
+        match filho.try_wait().map_err(|e| e.to_string())? {
+            Some(_) => break,
+            None if std::time::Instant::now() >= fim => {
+                let _ = filho.kill();
+                let _ = filho.wait();
+                return Err(format!("sem resposta em {} s", limite.as_secs()));
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    }
+    let saida = filho.wait_with_output().map_err(|e| e.to_string())?;
+    if saida.status.success() {
+        Ok(String::from_utf8_lossy(&saida.stdout)
+            .lines()
+            .map(str::to_owned)
+            .collect())
+    } else {
+        Err(String::from_utf8_lossy(&saida.stderr).trim().to_owned())
+    }
+}
+
 pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
     // SAFETY: `sondar` roda no começo de um processo próprio e de vida curta,
     // antes de qualquer outra thread existir.

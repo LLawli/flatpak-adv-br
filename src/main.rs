@@ -1,7 +1,12 @@
 use adw::prelude::*;
 use std::path::Path;
 
+mod aplicativos;
+mod cli;
 mod extensao;
+mod host;
+mod nss;
+mod permissao;
 mod publicacao;
 mod servico;
 mod sonda;
@@ -16,9 +21,12 @@ const NOME: &str = "Âncora";
 fn main() -> gtk::glib::ExitCode {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
-        Some("extensoes") => return listar_extensoes(),
+        Some("extensoes") => return cli::extensoes(),
         Some("servir") => return servico::servir(),
-        Some("sondar") => return sondar(args.get(2).map(Path::new)),
+        Some("sondar") => return cli::sondar(args.get(2).map(Path::new)),
+        Some("aplicativos") => return cli::aplicativos(),
+        Some("configurar") => return cli::configurar(args.get(2).map(String::as_str)),
+        Some("desfazer") => return cli::desfazer(args.get(2).map(String::as_str)),
         _ => {}
     }
     let app = adw::Application::builder().application_id(APP_ID).build();
@@ -44,49 +52,6 @@ fn montar_janela(app: &adw::Application) {
         .content(&conteudo)
         .build()
         .present();
-}
-
-/// `ancora extensoes`: o que está montado, uma linha por extensão, pelo ref
-/// que o `flatpak` entende. Sai com erro se alguma estiver quebrada.
-fn listar_extensoes() -> gtk::glib::ExitCode {
-    let home = gtk::glib::home_dir();
-    let mut quebradas = false;
-    for e in extensao::encontrar(Path::new(extensao::RAIZ), &home) {
-        let referencia = format!("{APP_ID}.{}.{}", e.familia.ponto(), e.id);
-        match &e.descritor {
-            Ok(d) if d.fabricante.is_empty() => println!("{referencia}: {}", d.nome),
-            Ok(d) => println!("{referencia}: {} ({})", d.nome, d.fabricante),
-            Err(erro) => {
-                quebradas = true;
-                println!("{referencia}: {erro}");
-            }
-        }
-    }
-    if quebradas {
-        gtk::glib::ExitCode::FAILURE
-    } else {
-        gtk::glib::ExitCode::SUCCESS
-    }
-}
-
-/// `ancora sondar <socket>`: os rótulos dos tokens, um por linha.
-fn sondar(socket: Option<&Path>) -> gtk::glib::ExitCode {
-    let Some(socket) = socket else {
-        eprintln!("uso: ancora sondar <socket>");
-        return gtk::glib::ExitCode::FAILURE;
-    };
-    match sonda::sondar(socket) {
-        Ok(tokens) => {
-            for t in tokens {
-                println!("{t}");
-            }
-            gtk::glib::ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("{e}");
-            gtk::glib::ExitCode::FAILURE
-        }
-    }
 }
 
 #[cfg(test)]

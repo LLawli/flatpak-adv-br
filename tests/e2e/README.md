@@ -27,6 +27,23 @@ publicado, o travado é parado, uma segunda instância é recusada, e SIGTERM,
 SIGKILL e a partida seguinte deixam o diretório de módulos limpo. Desinstala
 as extensões de teste no fim. Leva cerca de um minuto.
 
-O teste isola a sessão com `HOME` e `XDG_CONFIG_HOME` falsos (o p11-kit acha a
+## `aplicativos.sh`
+
+```bash
+ANCORA_BANCADA=/mnt/dados/caches/ancora-exp tests/e2e/aplicativos.sh
+```
+
+Exige o `org.mozilla.firefox` instalado e o `p11-kit` no host. O Âncora
+acerta o Papers (permissão e banco vazio) e um perfil do Firefox (permissão e
+registro do módulo) numa home falsa. Depois o NSS de dentro do Firefox Flatpak
+de verdade abre esse perfil e precisa ver o token de teste exatamente uma vez,
+pelo módulo do Âncora. O servidor do sistema, no meio da cadeia, é um
+`p11-kit server` do host lendo a home falsa. Por fim, desfazer precisa tirar
+tudo o que o Âncora pôs. `ancora configurar` liga o `p11-kit-server.socket` do
+usuário no host, o que não muda nada se ele já estiver ligado.
+
+## Isolamento
+
+Os testes isolam a sessão com `HOME` e `XDG_CONFIG_HOME` falsos (o p11-kit acha a
 configuração do usuário pelo segundo) e desliga, na home falsa, os módulos de
 hardware do sistema, para não disputar a leitora com o gpg ou o ssh-agent.
