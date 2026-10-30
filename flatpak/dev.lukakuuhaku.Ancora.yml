@@ -15,6 +15,31 @@ finish-args:
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
 
+# Cada família de extensão é um ponto de extensão, montado em
+# /app/extensoes/<família>/<Nome>, com o ancora.toml na raiz (ver
+# docs/extensoes.md). no-autodownload: instalar o Âncora não instala extensão
+# nenhuma; quem escolhe é a pessoa, pela tela de extensões. autodelete: elas
+# só servem ao Âncora e saem junto com ele.
+add-extensions:
+  dev.lukakuuhaku.Ancora.Driver:
+    directory: extensoes/driver
+    subdirectories: true
+    no-autodownload: true
+    autodelete: true
+    version: master
+  dev.lukakuuhaku.Ancora.Assinador:
+    directory: extensoes/assinador
+    subdirectories: true
+    no-autodownload: true
+    autodelete: true
+    version: master
+  dev.lukakuuhaku.Ancora.App:
+    directory: extensoes/app
+    subdirectories: true
+    no-autodownload: true
+    autodelete: true
+    version: master
+
 modules:
   - name: ancora
     buildsystem: simple
@@ -26,6 +51,8 @@ modules:
     build-commands:
       - cargo --offline build --release --locked
       - install -Dm755 target/release/ancora -t /app/bin
+      # O Flatpak só monta extensão onde o diretório já existe no app.
+      - install -d /app/extensoes/driver /app/extensoes/assinador /app/extensoes/app
       - install -Dm644 data/dev.lukakuuhaku.Ancora.desktop -t /app/share/applications
       - install -Dm644 data/dev.lukakuuhaku.Ancora.metainfo.xml -t /app/share/metainfo
       - install -Dm644 data/icons/hicolor/scalable/apps/dev.lukakuuhaku.Ancora.svg

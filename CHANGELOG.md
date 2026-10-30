@@ -10,3 +10,8 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
 
 - A janela do Âncora (`dev.lukakuuhaku.Ancora`), com nome, ícone e entrada no
   menu de aplicativos, empacotada como Flatpak sobre o GNOME 51.
+- Extensões de driver, assinador e aplicativo
+  (`dev.lukakuuhaku.Ancora.{Driver,Assinador,App}.<Nome>`), cada uma descrita
+  por um `ancora.toml`. O contrato está em `docs/extensoes.md`.
+- `flatpak run --command=ancora dev.lukakuuhaku.Ancora extensoes` lista as
+  extensões instaladas e diz o motivo de cada uma que estiver quebrada.

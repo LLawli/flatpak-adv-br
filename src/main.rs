@@ -1,4 +1,7 @@
 use adw::prelude::*;
+use std::path::Path;
+
+mod extensao;
 
 /// O id do aplicativo. É também o prefixo das extensões
 /// (`dev.lukakuuhaku.Ancora.Driver.SafeSign`), e por isso não muda.
@@ -7,6 +10,9 @@ pub const APP_ID: &str = "dev.lukakuuhaku.Ancora";
 const NOME: &str = "Âncora";
 
 fn main() -> gtk::glib::ExitCode {
+    if std::env::args().nth(1).as_deref() == Some("extensoes") {
+        return listar_extensoes();
+    }
     let app = adw::Application::builder().application_id(APP_ID).build();
     app.connect_activate(montar_janela);
     app.run()
@@ -32,6 +38,29 @@ fn montar_janela(app: &adw::Application) {
         .present();
 }
 
+/// `ancora extensoes`: o que está montado, uma linha por extensão, pelo ref
+/// que o `flatpak` entende. Sai com erro se alguma estiver quebrada.
+fn listar_extensoes() -> gtk::glib::ExitCode {
+    let home = gtk::glib::home_dir();
+    let mut quebradas = false;
+    for e in extensao::encontrar(Path::new(extensao::RAIZ), &home) {
+        let referencia = format!("{APP_ID}.{}.{}", e.familia.ponto(), e.id);
+        match &e.descritor {
+            Ok(d) if d.fabricante.is_empty() => println!("{referencia}: {}", d.nome),
+            Ok(d) => println!("{referencia}: {} ({})", d.nome, d.fabricante),
+            Err(erro) => {
+                quebradas = true;
+                println!("{referencia}: {erro}");
+            }
+        }
+    }
+    if quebradas {
+        gtk::glib::ExitCode::FAILURE
+    } else {
+        gtk::glib::ExitCode::SUCCESS
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::APP_ID;
@@ -51,5 +80,23 @@ mod tests {
             "<launchable type=\"desktop-id\">{APP_ID}.desktop</launchable>"
         )));
         assert!(manifesto.starts_with(&format!("id: {APP_ID}\n")));
+    }
+
+    // Um ponto de extensão com diretório diferente do que o código varre
+    // monta a extensão num lugar onde ninguém procura.
+    #[test]
+    fn cada_familia_tem_ponto_de_extensao_onde_o_codigo_procura() {
+        use crate::extensao::{Familia, RAIZ};
+        let manifesto = include_str!("../flatpak/dev.lukakuuhaku.Ancora.yml");
+        let raiz = RAIZ.strip_prefix("/app/").unwrap();
+        for familia in Familia::TODAS {
+            let ponto = format!(
+                "  {APP_ID}.{}:\n    directory: {raiz}/{}\n",
+                familia.ponto(),
+                familia.diretorio()
+            );
+            assert!(manifesto.contains(&ponto), "falta no manifesto:\n{ponto}");
+            assert!(manifesto.contains(&format!("/app/{raiz}/{}", familia.diretorio())));
+        }
     }
 }

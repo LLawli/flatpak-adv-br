@@ -17,10 +17,14 @@ Todo o resto é **extensão Flatpak** do `dev.lukakuuhaku.Ancora`:
 | assinadores | `dev.lukakuuhaku.Ancora.Assinador.<Nome>` | o programa que o navegador chama por native messaging |
 | aplicativos | `dev.lukakuuhaku.Ancora.App.<Nome>` | um aplicativo com janela (PJeOffice, por exemplo) |
 
-O aplicativo base não tem tabela de extensões. Cada extensão traz um descritor
-dizendo o que é, o que publica e que controles oferece, e a interface de uma
-extensão só existe enquanto ela está instalada. O formato do descritor é a
-etapa 2 do plano abaixo.
+O aplicativo base não tem tabela de extensões. Cada extensão traz um
+`ancora.toml` dizendo o que é, o que publica e que programas oferece, e a
+interface de uma extensão só existe enquanto ela está instalada. O contrato
+está em [extensoes.md](extensoes.md).
+
+Não há ponto de extensão público para outros aplicativos montarem os drivers,
+como o flatpak-adv-br tinha para o PjeOffice-flatpak: um app que queira os
+tokens os recebe pelo p11-kit do host, sem depender do Âncora.
 
 ## Instalar extensões de dentro do aplicativo
 
@@ -47,7 +51,8 @@ PJeOffice, quando existir, convive com ele.
 ## Plano de construção
 
 1. **Fundação**: este esqueleto, os gates e a CI.
-2. **Contrato de extensão**: o descritor que cada extensão traz.
+2. **Contrato de extensão** (feito): o `ancora.toml`, os pontos de extensão
+   no manifesto e `ancora extensoes`.
 3. **Núcleo de publicação**: PKCS#11, NSS e native messaging. O mecanismo da
    ponte será escolhido por medição: `remote: |flatpak run ...` por stdio, como
    no flatpak-adv-br, ou um `p11-kit server` por driver num socket, como no
