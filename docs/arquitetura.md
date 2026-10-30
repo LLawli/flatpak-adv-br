@@ -295,6 +295,14 @@ e segue com ele, mas um driver removido dá erro na conexão seguinte, porque o
 `p11-kit server` carrega o módulo a cada conexão. Uma extensão removida fica
 esmaecida até o reinício.
 
+Uma extensão de um remote do sistema vai para a instalação do sistema, e o
+Âncora, mesmo instalado no usuário, a monta: medido em 2026-10-30, instalando
+e removendo o SafeSign por um remote `--system`. O Flatpak libera o grupo
+`wheel` sem senha (`org.freedesktop.Flatpak.rules`), e por isso a janela do
+polkit não pôde ser vista aqui; o Âncora chama o `flatpak` com `-y` e sem
+`--noninteractive`, que desligaria a autenticação interativa. Falta conferir
+numa VM, com um usuário fora do grupo de administração.
+
 Pelo terminal: `ancora disponiveis`, `ancora instalar|atualizar|remover
 Driver.SafeSign`. `tests/e2e/loja.sh` confere o caminho inteiro com um remote
 local.

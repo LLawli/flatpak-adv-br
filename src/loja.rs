@@ -285,40 +285,35 @@ fn referencia(id: &str, ramo: &str) -> String {
     }
 }
 
+/// Uma mudança no host. `-y` responde às perguntas, mas sem
+/// `--noninteractive`, que também desliga a autenticação interativa do polkit:
+/// numa instalação do sistema, quem precisa de senha receberia "não
+/// autorizado" em vez da janela. A janela não pôde ser medida aqui (o Flatpak
+/// libera o grupo `wheel` sem senha); falta conferir numa VM, com um usuário
+/// fora do grupo de administração.
+fn mudar(acao: &str, instalacao: &Instalacao, alvo: &[&str]) -> Result<(), String> {
+    let opcao = instalacao.opcao();
+    let mut argumentos = vec![acao, opcao.as_str(), "-y"];
+    argumentos.extend_from_slice(alvo);
+    flatpak(&argumentos).map(drop)
+}
+
 /// Instala. As extensões de fabricante usam `extra-data`: o pacote é baixado
 /// do site dele agora, na máquina de quem instala.
 pub fn instalar(d: &Disponivel) -> Result<(), String> {
-    flatpak(&[
+    mudar(
         "install",
-        &d.instalacao.opcao(),
-        "--noninteractive",
-        "-y",
-        &d.remoto,
-        &referencia(&d.id, &d.ramo),
-    ])
-    .map(drop)
+        &d.instalacao,
+        &[&d.remoto, &referencia(&d.id, &d.ramo)],
+    )
 }
 
 pub fn atualizar(i: &Instalada) -> Result<(), String> {
-    flatpak(&[
-        "update",
-        &i.instalacao.opcao(),
-        "--noninteractive",
-        "-y",
-        &referencia(&i.id, &i.ramo),
-    ])
-    .map(drop)
+    mudar("update", &i.instalacao, &[&referencia(&i.id, &i.ramo)])
 }
 
 pub fn remover(i: &Instalada) -> Result<(), String> {
-    flatpak(&[
-        "uninstall",
-        &i.instalacao.opcao(),
-        "--noninteractive",
-        "-y",
-        &referencia(&i.id, &i.ramo),
-    ])
-    .map(drop)
+    mudar("uninstall", &i.instalacao, &[&referencia(&i.id, &i.ramo)])
 }
 
 /// As extensões montadas neste sandbox, com o commit de cada uma, lidas do
