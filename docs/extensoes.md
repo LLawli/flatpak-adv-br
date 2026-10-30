@@ -27,9 +27,26 @@ outros mostram variações: `Driver.SafeNet` (pacote dentro de um zip),
 `Driver.SerproID` (`HOME` própria, `LD_PRELOAD` e uma ferramenta),
 `Assinador.WebPKI` (manifestos de native messaging).
 
-## Pacote do fabricante: `extra-data`
+## Pacote do fabricante
 
-Driver que não pode ser redistribuído entra como `extra-data` (`filename`,
+Um driver ou assinador que não pode ser redistribuído entra como receita, e o
+pacote é baixado na máquina de quem usa, com o sha256 conferido. Há dois
+jeitos, e o `apply_extra` da extensão é o mesmo nos dois:
+
+| | `extra-data` (Flatpak) | `[pacote]` (Âncora, contrato 2) |
+|---|---|---|
+| quando baixa | na instalação | na primeira vez que a extensão é usada montada |
+| cadeia TLS incompleta | falha | completada com o intermediário que a extensão traz |
+| conexões | uma | até 8, se o servidor aceitar faixas |
+| pacote errado | a instalação falha | a extensão aparece com o motivo, e tenta de novo |
+
+Use `extra-data` por padrão. Use `[pacote]` quando o servidor do fabricante
+tem cadeia TLS incompleta (Softplan) ou limita a velocidade de cada conexão
+(DigiCert, do SafeNet: 6 minutos numa conexão, menos de 1 minuto em 8).
+
+### `extra-data`
+
+Entra no manifesto como fonte `extra-data` (`filename`,
 `url`, `sha256`, `size`): o remote publica só a receita, e o Flatpak baixa o
 pacote na máquina de quem instala, confere o sha256 e roda
 `${FLATPAK_DEST}/bin/apply_extra`. O que se sabe dele, medido no Flatpak
@@ -62,13 +79,54 @@ pacote na máquina de quem instala, confere o sha256 e roda
 - o download pode ser lento: o zip do SafeNet (91 MB, da DigiCert) já levou
   6 minutos e já estourou o tempo limite do Flatpak.
 
+### `[pacote]`
+
+```toml
+contrato = 2
+[pacote]
+url = "https://websigner.softplan.com.br/Downloads/2.15.0/webpki-chrome-64-deb"
+sha256 = "04fa41e9..."
+tamanho = 47128110
+arquivo = "websigner.deb"          # o nome com que o apply_extra o recebe
+cadeia = "ThawteTLSRSACAG1.pem"    # opcional: intermediários que o servidor não manda
+```
+
+O Âncora (`src/pacote.rs`) baixa para
+`~/.local/share/ancora/pacotes/<Família>.<Nome>/<sha256>`, confere tamanho e
+sha256 e roda `bin/apply_extra` da extensão como o Flatpak rodaria: sem rede,
+num sub-sandbox (`flatpak-spawn --sandbox`) que só enxerga essa pasta, com ela
+como diretório atual. Com `[pacote]`, os caminhos `extra/...` do descritor
+apontam para essa pasta. Um navegador Flatpak ganha permissão de lê-la.
+
+Quem prepara: o serviço, antes de subir um driver (o driver aparece como
+"iniciando" e, se falhar, com o motivo, tentando de novo em 5 minutos); a
+publicação dos assinadores, antes de escrever os lançadores; e
+`ancora preparar [Família.Nome]`, pelo terminal. Pacotes de extensões
+removidas e versões anteriores são apagados quando o serviço começa.
+
+A `url` precisa ser HTTPS, e os redirecionamentos também. A cadeia é somada às
+CAs do sistema, não as substitui: a conexão continua validada, só que com o
+intermediário que o servidor deixou de mandar.
+
+Sem `extra-data`, o manifesto não precisa de nada do pacote. Se o
+flatpak-builder conseguir baixá-lo, mantenha a cópia de verificação
+(`type: file`, `dest-filename: verificar.*`) para testar o `apply_extra` no
+build; se não (Softplan), o `scripts/ci.sh` o testa sobre o pacote de verdade.
+
+### O fabricante mudou o pacote
+
+Cada repositório de extensão tem `scripts/fabricante.sh`, que baixa o pacote
+de novo, sem cache, e compara tamanho e sha256 com o que a extensão espera
+(`scripts/pacote.py` lê do `[pacote]` ou do `extra-data`). A action
+`.github/workflows/fabricante.yml` o roda todo dia, e a falha chega por e-mail.
+
 ## O descritor: `ancora.toml`
 
 Fica na raiz da extensão (`${FLATPAK_DEST}/ancora.toml`). Diretório montado
 sem ele não é extensão do Âncora e é ignorado.
 
 ```toml
-contrato = 1                      # obrigatório
+contrato = 2                      # obrigatório; 1 serve a quem não usa [pacote]
 nome = "SafeSign IC"              # obrigatório
 fabricante = "A.E.T. Europe"
 descricao = "Tokens GD Burti e outros SafeSign"

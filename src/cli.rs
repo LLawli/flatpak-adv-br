@@ -3,7 +3,9 @@
 
 use crate::estado::dados;
 use crate::verificacao::{self, Resultado, medidor};
-use crate::{APP_ID, aplicativos, assinadores, certificado, extensao, host, loja, nativos, sonda};
+use crate::{
+    APP_ID, aplicativos, assinadores, certificado, extensao, host, loja, nativos, pacote, sonda,
+};
 use gtk::glib::{self, ExitCode};
 use std::path::Path;
 use std::time::Duration;
@@ -25,6 +27,48 @@ pub fn extensoes() -> ExitCode {
         }
     }
     if quebradas {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+/// `ancora preparar [Família.Nome]`: baixa e prepara o pacote do fabricante
+/// das extensões montadas que têm `[pacote]` (todas, ou a informada). É o que o
+/// serviço roda antes de subir um driver.
+pub fn preparar(alvo: Option<&str>) -> ExitCode {
+    let home = glib::home_dir();
+    let mut falhou = false;
+    let mut achou = false;
+    for e in extensao::encontrar(Path::new(extensao::RAIZ), &home) {
+        let nome = format!("{}.{}", e.familia.ponto(), e.id);
+        if alvo.is_some_and(|a| a != nome) {
+            continue;
+        }
+        achou = true;
+        let Ok(d) = &e.descritor else { continue };
+        let Some(p) = &d.pacote else { continue };
+        if pacote::pronto(p) {
+            println!("{nome}: pronto");
+            continue;
+        }
+        eprintln!("{nome}: baixando {}", p.url);
+        let inicio = std::time::Instant::now();
+        match pacote::preparar(p) {
+            Ok(()) => println!("{nome}: pronto em {} s", inicio.elapsed().as_secs()),
+            Err(erro) => {
+                falhou = true;
+                eprintln!("{nome}: {erro}");
+            }
+        }
+    }
+    if let Some(a) = alvo
+        && !achou
+    {
+        eprintln!("{a}: nenhuma extensão montada com esse nome");
+        falhou = true;
+    }
+    if falhou {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
@@ -410,12 +454,21 @@ pub fn assinar(host_nm: Option<&str>, argumentos: &[String]) -> ExitCode {
     let achado = extensao::encontrar(Path::new(extensao::RAIZ), &home)
         .into_iter()
         .filter_map(|e| e.descritor.ok())
-        .flat_map(|d| d.assinadores)
-        .find(|a| a.host == host_nm);
-    let Some(a) = achado else {
+        .find_map(|d| {
+            let a = d.assinadores.into_iter().find(|a| a.host == host_nm)?;
+            Some((d.pacote, a))
+        });
+    let Some((pacote, a)) = achado else {
         eprintln!("nenhum assinador instalado responde por {host_nm}");
         return ExitCode::FAILURE;
     };
+    // Normalmente já preparado ao publicar; aqui só se a pasta sumiu.
+    if let Some(p) = &pacote
+        && let Err(e) = pacote::preparar(p)
+    {
+        eprintln!("{host_nm}: {e}");
+        return ExitCode::FAILURE;
+    }
     // No $XDG_RUNTIME_DIR do sandbox, que é de cada instância: o /tmp de um
     // aplicativo Flatpak é compartilhado entre as instâncias e sobrevive a
     // elas, e os PIDs dentro do sandbox se repetem.

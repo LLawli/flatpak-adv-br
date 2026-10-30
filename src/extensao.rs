@@ -18,7 +18,10 @@ use std::path::{Component, Path, PathBuf};
 
 /// A versão do contrato que este Âncora entende. Um descritor com número
 /// maior foi feito para um Âncora mais novo.
-pub const CONTRATO: u32 = 1;
+pub const CONTRATO: u32 = 2;
+
+/// O contrato que trouxe o `[pacote]`.
+const CONTRATO_DO_PACOTE: u32 = 2;
 
 /// O nome do descritor na raiz de cada extensão.
 pub const ARQUIVO: &str = "ancora.toml";
@@ -98,6 +101,24 @@ pub struct Ferramenta {
     pub atalho: bool,
 }
 
+/// O pacote do fabricante que o Âncora baixa e prepara (ver `pacote`), no
+/// lugar do `extra-data` do Flatpak.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pacote {
+    /// HTTPS. Redirecionamentos também precisam ser HTTPS.
+    pub url: String,
+    pub sha256: String,
+    pub tamanho: u64,
+    /// O nome com que o pacote é entregue ao `apply_extra`.
+    pub arquivo: String,
+    /// Certificados intermediários que o servidor deixa de mandar, em PEM.
+    pub cadeia: Option<PathBuf>,
+    /// O `bin/apply_extra` da extensão.
+    pub apply_extra: PathBuf,
+    /// Onde o pacote fica pronto, e para onde apontam os caminhos `extra/`.
+    pub pasta: PathBuf,
+}
+
 /// O que um `ancora.toml` válido descreve, com os caminhos já resolvidos.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Descritor {
@@ -110,6 +131,7 @@ pub struct Descritor {
     pub pkcs11: Vec<Pkcs11>,
     pub assinadores: Vec<Assinador>,
     pub ferramentas: Vec<Ferramenta>,
+    pub pacote: Option<Pacote>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,6 +149,8 @@ pub enum Erro {
     },
     /// A extensão não oferece o que a família dela exige.
     Vazia(Familia),
+    /// Um campo do `[pacote]` que não serve.
+    Pacote(String),
 }
 
 impl fmt::Display for Erro {
@@ -149,6 +173,7 @@ impl fmt::Display for Erro {
                 write!(f, "assinador sem nenhum [[assinador]]")
             }
             Erro::Vazia(Familia::App) => write!(f, "aplicativo sem nenhuma [[ferramenta]]"),
+            Erro::Pacote(e) => write!(f, "[pacote]: {e}"),
         }
     }
 }
@@ -238,7 +263,16 @@ pub fn interpretar(
 
     let a: arquivo::Arquivo =
         toml::from_str(texto).map_err(|e| Erro::Formato(e.message().to_owned()))?;
-    let r = Resolvedor { diretorio, home };
+    let mut r = Resolvedor {
+        diretorio,
+        home,
+        pacote: None,
+    };
+    let pacote = match a.pacote {
+        Some(p) => Some(r.pacote(p, contrato, familia)?),
+        None => None,
+    };
+    r.pacote = pacote.as_ref().map(|p| p.pasta.clone());
 
     let d = Descritor {
         nome: a.nome,
@@ -309,6 +343,7 @@ pub fn interpretar(
                 })
             })
             .collect::<Result<_, Erro>>()?,
+        pacote,
     };
 
     let oferece = match familia {
@@ -325,10 +360,14 @@ pub fn interpretar(
 struct Resolvedor<'a> {
     diretorio: &'a Path,
     home: &'a Path,
+    /// A pasta do pacote preparado, quando há `[pacote]`.
+    pacote: Option<PathBuf>,
 }
 
 impl Resolvedor<'_> {
-    /// Um caminho relativo que não sai do diretório da extensão.
+    /// Um caminho relativo que não sai do diretório da extensão. Com
+    /// `[pacote]`, o que começa em `extra/` está na pasta do pacote, como
+    /// estaria no `extra/` de uma extensão com `extra-data`.
     fn dentro(&self, campo: &'static str, valor: &str) -> Result<PathBuf, Erro> {
         let relativo = Path::new(valor);
         let preso = !valor.is_empty()
@@ -341,7 +380,52 @@ impl Resolvedor<'_> {
                 valor: valor.to_owned(),
             });
         }
+        if let Some(pasta) = &self.pacote
+            && let Ok(resto) = relativo.strip_prefix("extra")
+        {
+            return Ok(pasta.join(resto));
+        }
         Ok(self.diretorio.join(relativo))
+    }
+
+    fn pacote(&self, p: arquivo::Pacote, contrato: u32, familia: Familia) -> Result<Pacote, Erro> {
+        let erro = |e: &str| Err(Erro::Pacote(e.to_owned()));
+        if contrato < CONTRATO_DO_PACOTE {
+            return erro("exige contrato = 2");
+        }
+        if !p.url.starts_with("https://") {
+            return erro("a url precisa ser https://");
+        }
+        if p.sha256.len() != 64 || !p.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return erro("sha256 precisa ter 64 dígitos hexadecimais");
+        }
+        if p.tamanho == 0 {
+            return erro("tamanho zero");
+        }
+        if p.arquivo.is_empty() || p.arquivo.contains('/') || p.arquivo.starts_with('.') {
+            return erro("arquivo aceita só um nome de arquivo");
+        }
+        let nome = self
+            .diretorio
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Ok(Pacote {
+            url: p.url,
+            sha256: p.sha256.to_ascii_lowercase(),
+            tamanho: p.tamanho,
+            arquivo: p.arquivo,
+            cadeia: p
+                .cadeia
+                .map(|c| self.dentro("pacote.cadeia", &c))
+                .transpose()?,
+            apply_extra: self.diretorio.join("bin/apply_extra"),
+            pasta: self
+                .home
+                .join(crate::pacote::PASTA)
+                .join(format!("{}.{nome}", familia.ponto()))
+                .join(p.sha256.to_ascii_lowercase()),
+        })
     }
 
     /// Um caminho `~/...` que não sai da home.
@@ -399,6 +483,17 @@ mod arquivo {
         pub assinador: Vec<Assinador>,
         #[serde(default)]
         pub ferramenta: Vec<Ferramenta>,
+        pub pacote: Option<Pacote>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Pacote {
+        pub url: String,
+        pub sha256: String,
+        pub tamanho: u64,
+        pub arquivo: String,
+        pub cadeia: Option<String>,
     }
 
     #[derive(Deserialize)]
@@ -563,8 +658,101 @@ mod tests {
 
     #[test]
     fn contrato_mais_novo_pede_atualizar_mesmo_com_campo_desconhecido() {
-        let r = driver("contrato = 2\nnome = \"X\"\ncampo_do_futuro = true\n");
-        assert_eq!(r, Err(Erro::ContratoNovo(2)));
+        let novo = CONTRATO + 1;
+        let r = driver(&format!(
+            "contrato = {novo}\nnome = \"X\"\ncampo_do_futuro = true\n"
+        ));
+        assert_eq!(r, Err(Erro::ContratoNovo(novo)));
+    }
+
+    const SHA: &str = "04fa41e962d91e4d7337f4707479437bf660f19057fac63829fb46784ee08289";
+
+    fn com_pacote(contrato: u32, pacote: &str) -> Result<Descritor, Erro> {
+        interpretar(
+            &format!(
+                r#"
+                contrato = {contrato}
+                nome = "WebSigner"
+                [pacote]
+                {pacote}
+                [[assinador]]
+                host = "br.com.softplan.webpki"
+                executavel = "extra/websigner"
+                manifesto_firefox = "extra/firefox.json"
+            "#
+            ),
+            Path::new("/app/extensoes/assinador/WebSigner"),
+            Familia::Assinador,
+            Path::new(HOME),
+        )
+    }
+
+    fn pacote_valido(sha: &str) -> String {
+        format!(
+            "url = \"https://websigner.softplan.com.br/x.deb\"\nsha256 = \"{sha}\"\ntamanho = 47128110\narquivo = \"websigner.deb\"\ncadeia = \"cadeia.pem\""
+        )
+    }
+
+    #[test]
+    fn com_pacote_o_extra_e_a_pasta_que_o_ancora_prepara() {
+        let d = com_pacote(2, &pacote_valido(SHA)).unwrap();
+        let pasta = PathBuf::from(format!(
+            "/home/pessoa/.local/share/ancora/pacotes/Assinador.WebSigner/{SHA}"
+        ));
+        let p = d.pacote.as_ref().unwrap();
+        assert_eq!(p.pasta, pasta);
+        assert_eq!(p.tamanho, 47_128_110);
+        assert_eq!(p.arquivo, "websigner.deb");
+        // O que a extensão traz continua nela; o que o pacote dá, na pasta.
+        assert_eq!(
+            p.cadeia,
+            Some(PathBuf::from(
+                "/app/extensoes/assinador/WebSigner/cadeia.pem"
+            ))
+        );
+        assert_eq!(
+            p.apply_extra,
+            PathBuf::from("/app/extensoes/assinador/WebSigner/bin/apply_extra")
+        );
+        assert_eq!(d.assinadores[0].executavel, pasta.join("websigner"));
+        assert_eq!(
+            d.assinadores[0].manifesto_firefox,
+            Some(pasta.join("firefox.json"))
+        );
+    }
+
+    #[test]
+    fn um_sha_maiusculo_e_o_mesmo_pacote() {
+        let d = com_pacote(2, &pacote_valido(&SHA.to_uppercase())).unwrap();
+        assert!(d.pacote.unwrap().pasta.ends_with(SHA));
+    }
+
+    #[test]
+    fn pacote_exige_o_contrato_que_o_trouxe() {
+        // Um Âncora do contrato 1 diria "campo desconhecido", e não "atualize".
+        assert!(matches!(
+            com_pacote(1, &pacote_valido(SHA)),
+            Err(Erro::Pacote(_))
+        ));
+    }
+
+    #[test]
+    fn campos_do_pacote_que_nao_servem_sao_recusados() {
+        let base = pacote_valido(SHA);
+        for (de, para) in [
+            ("https://", "http://"),
+            (SHA, "abc"),
+            (SHA, &SHA.replace('0', "g")),
+            ("tamanho = 47128110", "tamanho = 0"),
+            ("\"websigner.deb\"", "\"../websigner.deb\""),
+            ("\"websigner.deb\"", "\".cas.pem\""),
+        ] {
+            let texto = base.replace(de, para);
+            let r = com_pacote(2, &texto);
+            assert!(matches!(r, Err(Erro::Pacote(_))), "{texto}: {r:?}");
+        }
+        let r = com_pacote(2, &base.replace("cadeia.pem", "/etc/cadeia.pem"));
+        assert!(matches!(r, Err(Erro::Caminho { .. })), "{r:?}");
     }
 
     #[test]

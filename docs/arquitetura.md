@@ -250,9 +250,14 @@ sandbox. A escolha foi consciente: o Âncora é distribuído pelo remote própri
 a alternativa (mandar a pessoa para a loja do sistema) tira a instalação da
 janela.
 
-As extensões usam `extra-data`: o remote publica só a receita, e o pacote do
-fabricante é baixado na máquina de quem instala, com o sha256 conferido. As
-licenças dos drivers permitem usar e guardar uma cópia, não redistribuir.
+As extensões trazem só a receita, e o pacote do fabricante é baixado na
+máquina de quem usa, com o sha256 conferido. As licenças dos drivers permitem
+usar e guardar uma cópia, não redistribuir. Quem baixa é o Flatpak, na
+instalação (`extra-data`), ou o próprio Âncora (`[pacote]`, `src/pacote.rs`),
+quando o servidor do fabricante tem cadeia TLS incompleta ou limita cada
+conexão. Os dois rodam o mesmo `apply_extra` da extensão, sem rede, e o
+Âncora o roda num sub-sandbox que só enxerga a pasta do pacote
+(`docs/extensoes.md`).
 
 `src/loja.rs` faz o trabalho pelo `flatpak` do host, sempre com `LC_ALL=C`: as
 chaves do `--json` saem traduzidas conforme o idioma (`id_de_aplicativo`), e

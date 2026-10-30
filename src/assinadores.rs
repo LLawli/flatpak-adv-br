@@ -17,7 +17,7 @@
 //! que chega ao servidor do sistema e aos tokens de todos os drivers.
 
 use crate::extensao::{self, Assinador, Familia};
-use crate::{APP_ID, host, nss, permissao};
+use crate::{APP_ID, host, nss, pacote, permissao};
 use permissao::Entrada;
 use std::collections::BTreeSet;
 use std::fs;
@@ -169,6 +169,9 @@ pub struct Instalado {
     /// muda quando a extensão é atualizada.
     pub raiz_no_host: PathBuf,
     pub arquivos_no_host: PathBuf,
+    /// O pacote do fabricante, quando a extensão tem `[pacote]`: o programa
+    /// fica na pasta dele, fora da extensão.
+    pub pacote: Option<extensao::Pacote>,
 }
 
 impl Instalado {
@@ -211,6 +214,7 @@ pub fn instalados() -> Vec<Result<Instalado, String>> {
                 dentro: e.diretorio.clone(),
                 raiz_no_host: lugar.0.clone(),
                 arquivos_no_host: lugar.1.clone(),
+                pacote: d.pacote.clone(),
             }));
         }
     }
@@ -379,6 +383,14 @@ pub fn planejar(
                         id.to_owned(),
                         Entrada::arquivos(format!("{}:ro", i.raiz_no_host.display())),
                     ));
+                    // A pasta do pacote é a mesma no host e no sandbox do
+                    // Âncora (a pasta de dados dele, no mesmo caminho).
+                    if let Some(p) = &i.pacote {
+                        plano.permissoes.push((
+                            id.to_owned(),
+                            Entrada::arquivos(format!("{}:ro", p.pasta.display())),
+                        ));
+                    }
                     if a.x11 {
                         plano
                             .permissoes
@@ -445,6 +457,11 @@ pub fn sincronizar(home: &Path, dados: &Path) -> Result<Plano, String> {
         let i = i?;
         if ligados.contains(&i.id) {
             escolhidos.push(i);
+        }
+    }
+    for i in &escolhidos {
+        if let Some(p) = &i.pacote {
+            pacote::preparar(p).map_err(|e| format!("{}: {e}", i.id))?;
         }
     }
     let plano = planejar(home, &navegadores, &escolhidos)?;
@@ -587,6 +604,7 @@ mod tests {
             dentro,
             raiz_no_host: "/var/lib/flatpak/runtime/dev.lukakuuhaku.Ancora.Assinador.WebPKI".into(),
             arquivos_no_host: "/var/lib/flatpak/runtime/dev.lukakuuhaku.Ancora.Assinador.WebPKI/x86_64/master/active/files".into(),
+            pacote: None,
         }
     }
 
@@ -669,6 +687,36 @@ mod tests {
                 .contains(&("com.brave.Browser".into(), Entrada::socket("x11")))
         );
         assert!(plano.sem_tokens.contains("com.brave.Browser"));
+    }
+
+    #[test]
+    fn com_pacote_o_navegador_flatpak_roda_e_le_o_programa_na_pasta_dele() {
+        let h = home("pacote");
+        let mut i = instalado(&h.0);
+        let pasta = h.0.join(".local/share/ancora/pacotes/Assinador.WebPKI/abc");
+        i.assinador.executavel = pasta.join("webpki");
+        i.pacote = Some(extensao::Pacote {
+            url: "https://x".into(),
+            sha256: "abc".into(),
+            tamanho: 1,
+            arquivo: "webpki.deb".into(),
+            cadeia: None,
+            apply_extra: i.dentro.join("bin/apply_extra"),
+            pasta: pasta.clone(),
+        });
+        let plano = planejar(&h.0, &[navegador("Brave", true)], &[i]).unwrap();
+        let lancador =
+            host::var_app(&h.0, "com.brave.Browser").join("data/ancora/com.lacunasoftware.webpki");
+        let Some((_, Conteudo::Executavel(script))) =
+            plano.arquivos.iter().find(|(c, _)| *c == lancador)
+        else {
+            panic!("sem lançador")
+        };
+        assert!(script.contains(&format!("exec '{}' \"$@\"", pasta.join("webpki").display())));
+        assert!(plano.permissoes.contains(&(
+            "com.brave.Browser".into(),
+            Entrada::arquivos(format!("{}:ro", pasta.display()))
+        )));
     }
 
     #[test]

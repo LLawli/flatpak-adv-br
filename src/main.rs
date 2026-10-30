@@ -14,6 +14,7 @@ mod janela;
 mod loja;
 mod nativos;
 mod nss;
+mod pacote;
 mod permissao;
 mod processo;
 mod publicacao;
@@ -37,6 +38,7 @@ fn main() -> gtk::glib::ExitCode {
         Some("atualizar") => return cli::atualizar(args.get(2).map(String::as_str)),
         Some("remover") => return cli::remover(args.get(2).map(String::as_str)),
         Some("servir") => return servico::servir(),
+        Some("preparar") => return cli::preparar(args.get(2).map(String::as_str)),
         Some("sondar") => return cli::sondar(args.get(2).map(Path::new)),
         Some("certificados") => return cli::certificados(args.get(2).map(Path::new)),
         Some("aplicativos") => return cli::aplicativos(),

@@ -10,6 +10,9 @@
 //! driver que a pessoa desliga é parado e despublicado na hora (ver
 //! `estado`).
 //!
+//! Um driver com `[pacote]` ainda não preparado roda `ancora preparar` num
+//! processo à parte antes de subir o servidor (ver `pacote`).
+//!
 //! As extensões são lidas uma vez, na partida: o Flatpak monta as extensões
 //! quando o sandbox começa, e uma instalada depois só aparece num serviço
 //! reiniciado.
@@ -17,7 +20,7 @@
 use crate::estado::{self, Situacao};
 use crate::extensao::{self, Familia};
 use crate::supervisao::{Acao, Estado, Sondagem, Supervisao};
-use crate::{processo, publicacao};
+use crate::{pacote, processo, publicacao};
 use gtk::glib;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -35,6 +38,9 @@ const LIMITE_SONDA: Duration = Duration::from_secs(10);
 const ESPERA_INICIAL: Duration = Duration::from_secs(1);
 /// O passo do laço que acompanha servidores e sondas.
 const PASSO: Duration = Duration::from_millis(200);
+/// Depois de um pacote que não pôde ser preparado (sem rede, servidor fora),
+/// quanto esperar para tentar de novo.
+const NOVA_TENTATIVA_DO_PACOTE: Duration = Duration::from_secs(300);
 
 struct Driver {
     /// O id da extensão, que é o que a pessoa liga e desliga.
@@ -43,6 +49,11 @@ struct Driver {
     rotulo: String,
     modulo: extensao::Pkcs11,
     criar_diretorios: Vec<PathBuf>,
+    /// O pacote do fabricante, e o nome com que `ancora preparar` o conhece
+    /// (`Driver.SafeNet`).
+    pacote: Option<(extensao::Pacote, String)>,
+    preparo: Option<Child>,
+    proximo_preparo: Instant,
     socket: PathBuf,
     servidor: Option<Child>,
     sonda: Option<(Child, Instant)>,
@@ -92,8 +103,10 @@ fn iniciar() -> Result<Servico, String> {
     publicacao::publicar(&dir_modules, &BTreeMap::new())
         .map_err(|e| format!("{}: {e}", dir_modules.display()))?;
 
+    let extensoes = extensao::encontrar(Path::new(extensao::RAIZ), &home);
+    pacote::podar(&home, &extensoes);
     let mut drivers = BTreeMap::new();
-    for e in extensao::encontrar(Path::new(extensao::RAIZ), &home) {
+    for e in extensoes {
         if e.familia != Familia::Driver {
             continue;
         }
@@ -125,6 +138,12 @@ fn iniciar() -> Result<Servico, String> {
                     rotulo,
                     modulo,
                     criar_diretorios: d.criar_diretorios.clone(),
+                    pacote: d
+                        .pacote
+                        .clone()
+                        .map(|p| (p, format!("{}.{}", e.familia.ponto(), e.id))),
+                    preparo: None,
+                    proximo_preparo: Instant::now(),
                     socket: dir_sockets.join(&chave),
                     servidor: None,
                     sonda: None,
@@ -224,6 +243,7 @@ fn acompanhar(servico: &mut Servico) {
                 eprintln!("{}: desligado", d.rotulo);
                 matar_sonda(d);
                 parar_servidor(d);
+                parar_preparo(d);
             } else {
                 eprintln!("{}: ligado", d.rotulo);
                 d.supervisao = Supervisao::default();
@@ -234,6 +254,12 @@ fn acompanhar(servico: &mut Servico) {
     }
     for d in servico.drivers.values_mut() {
         if d.desligado || d.supervisao.parado() {
+            continue;
+        }
+        // Enquanto o `ancora preparar` existir, mesmo com a pasta já pronta:
+        // ela aparece um instante antes de ele sair.
+        if d.preparo.is_some() || sem_pacote(d) {
+            mudou |= acompanhar_preparo(d);
             continue;
         }
         let antes = d.supervisao.estado.clone();
@@ -391,6 +417,7 @@ fn encerrar(servico: &mut Servico) {
     for d in servico.drivers.values_mut() {
         matar_sonda(d);
         parar_servidor(d);
+        parar_preparo(d);
     }
 }
 
@@ -404,7 +431,90 @@ fn descrever(estado: &Estado) -> String {
     }
 }
 
+/// Se o driver ainda espera o pacote do fabricante.
+fn sem_pacote(d: &Driver) -> bool {
+    d.pacote.as_ref().is_some_and(|(p, _)| !pacote::pronto(p))
+}
+
+/// Acompanha o `ancora preparar` do driver: sobe o servidor quando ele
+/// termina bem, e mostra o motivo quando não. Diz se o estado mudou.
+fn acompanhar_preparo(d: &mut Driver) -> bool {
+    let Some(filho) = &mut d.preparo else {
+        if Instant::now() >= d.proximo_preparo {
+            iniciar_preparo(d);
+        }
+        return false;
+    };
+    match filho.try_wait() {
+        Ok(None) => false,
+        Ok(Some(_)) => {
+            let saida = d
+                .preparo
+                .take()
+                .expect("preparo em andamento")
+                .wait_with_output();
+            match saida {
+                Ok(s) if s.status.success() && !sem_pacote(d) => {
+                    eprintln!("{}: pacote do fabricante pronto", d.rotulo);
+                    d.supervisao = Supervisao::default();
+                    iniciar_servidor(d);
+                }
+                Ok(s) => falha_do_preparo(d, ultima_linha(&s.stderr)),
+                Err(e) => falha_do_preparo(d, e.to_string()),
+            }
+            true
+        }
+        Err(e) => {
+            d.preparo = None;
+            falha_do_preparo(d, e.to_string());
+            true
+        }
+    }
+}
+
+fn ultima_linha(stderr: &[u8]) -> String {
+    let texto = String::from_utf8_lossy(stderr);
+    let linha = texto.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+    // "Driver.SafeNet: motivo": o nome já aparece no rótulo.
+    linha.split_once(": ").map_or(linha, |(_, m)| m).to_owned()
+}
+
+fn falha_do_preparo(d: &mut Driver, motivo: String) {
+    eprintln!("{}: pacote do fabricante: {motivo}", d.rotulo);
+    d.supervisao.estado = Estado::ComErro(format!("pacote do fabricante: {motivo}"));
+    d.proximo_preparo = Instant::now() + NOVA_TENTATIVA_DO_PACOTE;
+}
+
+fn iniciar_preparo(d: &mut Driver) {
+    let Some((_, nome)) = &d.pacote else { return };
+    let exe = std::env::current_exe().unwrap_or_else(|_| "ancora".into());
+    let mut cmd = Command::new(exe);
+    cmd.args(["preparar", nome])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    processo::amarrar(&mut cmd);
+    match cmd.spawn() {
+        Ok(filho) => {
+            eprintln!("{}: baixando o pacote do fabricante", d.rotulo);
+            d.preparo = Some(filho);
+        }
+        Err(e) => falha_do_preparo(d, e.to_string()),
+    }
+}
+
+fn parar_preparo(d: &mut Driver) {
+    if let Some(mut filho) = d.preparo.take() {
+        processo::parar_grupo(&mut filho);
+    }
+}
+
 fn iniciar_servidor(d: &mut Driver) {
+    if sem_pacote(d) {
+        d.proximo_preparo = Instant::now();
+        acompanhar_preparo(d);
+        return;
+    }
     for dir in &d.criar_diretorios {
         if let Err(e) = fs::create_dir_all(dir) {
             eprintln!("{}: {}: {e}", d.rotulo, dir.display());

@@ -15,6 +15,10 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   por um `ancora.toml`. O contrato está em `docs/extensoes.md`.
 - `flatpak run --command=ancora dev.lukakuuhaku.Ancora extensoes` lista as
   extensões instaladas e diz o motivo de cada uma que estiver quebrada.
+- O Âncora baixa ele mesmo o pacote do fabricante de uma extensão que pede
+  (`[pacote]`, contrato 2): com a cadeia TLS completada, o que faz o Softplan
+  WebSigner funcionar, e em várias conexões, o que tira o download do SafeNet
+  de minutos para segundos. `ancora preparar` faz o mesmo pelo terminal.
 - `ancora servir`: publica os drivers instalados no p11-kit do sistema, para
   os navegadores e aplicativos (inclusive Flatpak, como o PJeOffice Pro do
   FlatPark). Um driver que trava sai da publicação em vez de travar quem abre o
