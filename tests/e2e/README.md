@@ -39,6 +39,17 @@ Instala `Driver.Vazio` (`vazio.c`, um módulo sem nenhum slot, como o driver de
 uma leitora sem cartão) e confere que ele fica publicado sem token, sem ser
 parado, sem sonda presa e com a lista de certificados vazia na hora.
 
+## `loja.sh`
+
+```bash
+ANCORA_BANCADA=/mnt/dados/caches/ancora-exp tests/e2e/loja.sh
+```
+
+Exporta uma extensão de teste, com metainfo, para um repositório local, o
+adiciona como o remote `ancora-e2e` do usuário e, de dentro do sandbox, a
+lista, instala, confere que um sandbox novo a monta, publica e aplica uma
+versão nova, e a remove. Tira o remote e a extensão no fim.
+
 ## `aplicativos.sh`
 
 ```bash

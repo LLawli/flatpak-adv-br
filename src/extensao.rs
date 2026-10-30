@@ -167,6 +167,16 @@ pub struct Encontrada {
     pub descritor: Result<Descritor, Erro>,
 }
 
+/// As extensões montadas neste sandbox, lidas uma vez por processo: o Flatpak
+/// as monta quando o sandbox começa, e elas não mudam depois. Reler seria pior
+/// que inútil: atualizar ou remover uma extensão no host apaga os arquivos da
+/// versão montada, mesmo com o sandbox vivo (medido no Flatpak 1.18.2), e ela
+/// sumiria da lista enquanto o driver dela ainda está carregado.
+pub fn montadas() -> &'static [Encontrada] {
+    static MONTADAS: std::sync::OnceLock<Vec<Encontrada>> = std::sync::OnceLock::new();
+    MONTADAS.get_or_init(|| encontrar(Path::new(RAIZ), &gtk::glib::home_dir()))
+}
+
 /// As extensões montadas sob `raiz`, em ordem de família e de id. Diretório
 /// sem `ancora.toml` não é extensão do Âncora e fica de fora.
 pub fn encontrar(raiz: &Path, home: &Path) -> Vec<Encontrada> {

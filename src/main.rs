@@ -5,11 +5,13 @@ mod aplicativos;
 mod assinadores;
 mod certificado;
 mod cli;
+mod dialogo_extensoes;
 mod estado;
 mod extensao;
 mod fundo;
 mod host;
 mod janela;
+mod loja;
 mod nativos;
 mod nss;
 mod permissao;
@@ -30,6 +32,10 @@ fn main() -> gtk::glib::ExitCode {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("extensoes") => return cli::extensoes(),
+        Some("disponiveis") => return cli::disponiveis(),
+        Some("instalar") => return cli::instalar(args.get(2).map(String::as_str)),
+        Some("atualizar") => return cli::atualizar(args.get(2).map(String::as_str)),
+        Some("remover") => return cli::remover(args.get(2).map(String::as_str)),
         Some("servir") => return servico::servir(),
         Some("sondar") => return cli::sondar(args.get(2).map(Path::new)),
         Some("certificados") => return cli::certificados(args.get(2).map(Path::new)),

@@ -183,14 +183,14 @@ impl Instalado {
 
 /// Os assinadores das extensões instaladas, com onde cada extensão está no
 /// host (perguntado ao host).
-pub fn instalados(home_sandbox: &Path) -> Vec<Result<Instalado, String>> {
+pub fn instalados() -> Vec<Result<Instalado, String>> {
     let mut saida = Vec::new();
-    for e in extensao::encontrar(Path::new(extensao::RAIZ), home_sandbox) {
+    for e in extensao::montadas() {
         if e.familia != Familia::Assinador {
             continue;
         }
         let referencia = format!("{APP_ID}.{}.{}", e.familia.ponto(), e.id);
-        let d = match e.descritor {
+        let d = match &e.descritor {
             Ok(d) => d,
             Err(erro) => {
                 saida.push(Err(format!("{referencia}: {erro}")));
@@ -204,10 +204,10 @@ pub fn instalados(home_sandbox: &Path) -> Vec<Result<Instalado, String>> {
                 continue;
             }
         };
-        for a in d.assinadores {
+        for a in &d.assinadores {
             saida.push(Ok(Instalado {
                 id: e.id.clone(),
-                assinador: a,
+                assinador: a.clone(),
                 dentro: e.diretorio.clone(),
                 raiz_no_host: lugar.0.clone(),
                 arquivos_no_host: lugar.1.clone(),
@@ -431,7 +431,7 @@ pub fn ligar(dados: &Path, ids: &BTreeSet<String>) -> Result<(), String> {
 /// Publica os assinadores ligados em todo navegador presente, e tira o resto.
 /// É o que se roda quando a escolha muda, e de novo quando um navegador
 /// aparece.
-pub fn sincronizar(home: &Path, home_sandbox: &Path, dados: &Path) -> Result<Plano, String> {
+pub fn sincronizar(home: &Path, dados: &Path) -> Result<Plano, String> {
     let ligados = ligados(dados);
     if ligados.is_empty() {
         let plano = Plano::default();
@@ -441,7 +441,7 @@ pub fn sincronizar(home: &Path, home_sandbox: &Path, dados: &Path) -> Result<Pla
     let flatpaks = crate::aplicativos::instalados()?;
     let navegadores = presentes(home, &flatpaks);
     let mut escolhidos = Vec::new();
-    for i in instalados(home_sandbox) {
+    for i in instalados() {
         let i = i?;
         if ligados.contains(&i.id) {
             escolhidos.push(i);

@@ -250,6 +250,51 @@ As extensões usam `extra-data`: o remote publica só a receita, e o pacote do
 fabricante é baixado na máquina de quem instala, com o sha256 conferido. As
 licenças dos drivers permitem usar e guardar uma cópia, não redistribuir.
 
+`src/loja.rs` faz o trabalho pelo `flatpak` do host, sempre com `LC_ALL=C`: as
+chaves do `--json` saem traduzidas conforme o idioma (`id_de_aplicativo`), e
+uma lista vazia não imprime nem `[]`. O botão `+` da seção Extensões abre o
+diálogo de busca (`src/dialogo_extensoes.rs`), com as extensões por família.
+Uma extensão oferecida por mais de um remote aparece uma vez, pela do usuário,
+que instala sem pedir senha. Remotes desligados e os `no-enumerate` (os que o
+flatpak-builder cria) ficam de fora, e um remote fora do ar não esconde os
+outros.
+
+O nome e a descrição vêm do appstream que o cliente guardou do remote. Num
+remote recém-adicionado ele ainda não existe, e o Flatpak dá como nome o último
+pedaço do id. Quando isso acontece com uma extensão do Âncora, o Âncora
+atualiza o appstream só daquele remote e lista de novo: atualizar todos a cada
+abertura não dá, porque o do Flathub levou 133 s (medido em 2026-10-30).
+
+Instalar, atualizar e remover mudam o host, não este sandbox: as extensões
+são montadas quando ele começa. A janela compara o que está montado (o
+`app-extensions` do `/.flatpak-info`, com o commit inteiro) com o que está
+instalado (`flatpak list`, com o commit abreviado em 12 caracteres) e, se
+diferem, mostra um banner com "Reiniciar". Isso vale também para o que mudou por
+fora (pelo terminal, ou pela loja do sistema). Reiniciar para o serviço, deixa
+no host um processo solto pelo `setsid -f` e sai. Esse processo espera o nome
+`dev.lukakuuhaku.Ancora` sair do D-Bus da sessão (senão a janela nova só
+repassaria a ativação à velha) e roda `flatpak run`. A janela nova sobe o
+serviço novo, que monta as extensões como estão. Medido: 1,2 s até a janela
+nova. Duas armadilhas desse caminho:
+
+- nada da saída do processo do host pode voltar por um pipe: ler um pipe que
+  ele herdou esperaria o fim dele, que espera o fim da janela;
+- o `flatpak ps` não serve para esperar a instância acabar: ele segue listando
+  instâncias mortas.
+
+Atualizar ou remover uma extensão apaga os arquivos da versão montada, mesmo
+com o sandbox vivo (Flatpak 1.18.2): a pasta em `/app/extensoes` fica vazia.
+Por isso as extensões montadas são lidas uma vez por processo
+(`extensao::montadas`): a janela não perde a linha, e publicar os assinadores
+depois de atualizar um não o despublica. O serviço já tinha o driver carregado
+e segue com ele, mas um driver removido dá erro na conexão seguinte, porque o
+`p11-kit server` carrega o módulo a cada conexão. Uma extensão removida fica
+esmaecida até o reinício.
+
+Pelo terminal: `ancora disponiveis`, `ancora instalar|atualizar|remover
+Driver.SafeSign`. `tests/e2e/loja.sh` confere o caminho inteiro com um remote
+local.
+
 ## Compatibilidade com o PJeOffice Pro do FlatPark
 
 O `br.jus.cnj.PJeOfficePro` do FlatPark já tem
@@ -268,7 +313,8 @@ PJeOffice, quando existir, convive com ele.
    o token-sentinela) e os assinadores por native messaging.
 4. **Interface base** (feito): os tokens e os certificados, as extensões
    instaladas, os aplicativos e navegadores, e o serviço com a sessão.
-5. **Tela de extensões**: busca, instala e atualiza nos remotes.
+5. **Tela de extensões** (feito): busca, instala, atualiza e remove nos
+   remotes, e reinicia para valer.
 6. **Migração**: as extensões do flatpak-adv-br (SafeSign primeiro), o remote e
    o `end-of-life-rebase` do `dev.lukakuuhaku.AdvBr` para o Âncora.
 

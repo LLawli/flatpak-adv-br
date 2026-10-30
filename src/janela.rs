@@ -15,12 +15,12 @@ use crate::certificado::{self, Certificado, Data, Prazo, Token};
 use crate::estado::{self, Situacao};
 use crate::extensao::{self, Encontrada, Familia, Ferramenta};
 use crate::nativos::{self, Destino};
-use crate::{APP_ID, NOME, assinadores, fundo, host, verificacao};
+use crate::{APP_ID, NOME, assinadores, dialogo_extensoes, fundo, host, loja, verificacao};
 use adw::prelude::*;
 use gtk::{gio, glib};
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -156,6 +156,11 @@ struct Retrato {
     assinadores: BTreeSet<String>,
     aplicativos: Result<Vec<(Aplicativo, aplicativos::Situacao)>, String>,
     nativos: Vec<(Destino, nativos::Situacao)>,
+    /// As extensões instaladas no host, que podem não ser as montadas aqui.
+    instaladas: Result<Vec<loja::Instalada>, String>,
+    /// O host mudou desde que este sandbox começou: só um Âncora aberto de
+    /// novo vê as extensões como elas estão.
+    reinicio_pendente: bool,
 }
 
 fn retratar() -> Retrato {
@@ -173,12 +178,19 @@ fn retratar() -> Retrato {
         .map(|d| (d, nativos::situacao(d, &home, &dados)))
         .filter(|(_, s)| s.bancos > 0)
         .collect();
+    let instaladas = loja::instaladas();
+    let reinicio_pendente = match (&instaladas, std::fs::read_to_string("/.flatpak-info")) {
+        (Ok(i), Ok(info)) => loja::reinicio_pendente(&loja::montadas(&info), i),
+        _ => false,
+    };
     Retrato {
-        extensoes: extensao::encontrar(Path::new(extensao::RAIZ), &glib::home_dir()),
+        extensoes: extensao::montadas().to_vec(),
         desligados: estado::desligados(&dados),
         assinadores: assinadores::ligados(&dados),
         aplicativos,
         nativos,
+        instaladas,
+        reinicio_pendente,
     }
 }
 
@@ -234,6 +246,13 @@ struct Janela {
     /// Os interruptores que disparam operações demoradas, para travá-los
     /// enquanto uma roda.
     interruptores: RefCell<Vec<gtk::Switch>>,
+    reinicio: adw::Banner,
+    /// As extensões instaladas com versão nova no remote.
+    atualizacoes: RefCell<BTreeSet<String>>,
+    /// As extensões sendo atualizadas ou removidas agora.
+    no_flatpak: RefCell<BTreeSet<String>>,
+    /// A pergunta de remover aberta, para não abrir outra por cima.
+    confirmacao: RefCell<Option<adw::AlertDialog>>,
 }
 
 fn linha(titulo: &str, legenda: Option<&str>, icone: &str) -> adw::ActionRow {
@@ -489,6 +508,7 @@ impl Janela {
         self.extensoes.limpar();
         let retrato = self.retrato.borrow().clone();
         let Some(retrato) = retrato else { return };
+        self.reinicio.set_revealed(retrato.reinicio_pendente);
         if retrato.extensoes.is_empty() {
             self.extensoes.por(&linha_vazia(
                 "Nenhuma extensão instalada",
@@ -503,6 +523,7 @@ impl Janela {
                 Err(erro) => {
                     let l = linha(&e.id, Some(&erro.to_string()), "dialog-warning-symbolic");
                     l.add_css_class("warning");
+                    self.sufixos_loja(&l, e, &retrato);
                     self.extensoes.por(&l);
                     continue;
                 }
@@ -540,8 +561,165 @@ impl Janela {
                 }
                 Familia::App => {}
             }
+            self.sufixos_loja(&l, e, &retrato);
             self.extensoes.por(&l);
         }
+    }
+
+    /// Atualizar e remover, pelo host. Uma extensão que saiu do host segue
+    /// montada até o Âncora abrir de novo, e fica esmaecida até lá.
+    fn sufixos_loja(self: &Rc<Self>, l: &adw::ActionRow, e: &Encontrada, retrato: &Retrato) {
+        let id = format!("{APP_ID}.{}.{}", e.familia.ponto(), e.id);
+        let Ok(instaladas) = &retrato.instaladas else {
+            return;
+        };
+        let Some(instalada) = instaladas.iter().find(|i| i.id == id) else {
+            l.set_sensitive(false);
+            return;
+        };
+        if self.no_flatpak.borrow().contains(&id) {
+            l.add_suffix(&adw::Spinner::new());
+            return;
+        }
+        if self.atualizacoes.borrow().contains(&id) {
+            let botao = gtk::Button::builder()
+                .icon_name("software-update-available-symbolic")
+                .tooltip_text("Atualizar")
+                .valign(gtk::Align::Center)
+                .css_classes(["flat"])
+                .build();
+            let eu = Rc::downgrade(self);
+            let i = instalada.clone();
+            botao.connect_clicked(move |_| {
+                if let Some(eu) = eu.upgrade() {
+                    let i = i.clone();
+                    eu.no_flatpak_fazer(&i.id.clone(), move || loja::atualizar(&i));
+                }
+            });
+            l.add_suffix(&botao);
+        }
+        let menu = gio::Menu::new();
+        menu.append(
+            Some("Remover"),
+            Some(&format!("win.remover::{}", instalada.id)),
+        );
+        l.add_suffix(
+            &gtk::MenuButton::builder()
+                .icon_name("view-more-symbolic")
+                .menu_model(&menu)
+                .valign(gtk::Align::Center)
+                .css_classes(["flat"])
+                .tooltip_text("Mais")
+                .build(),
+        );
+    }
+
+    /// Pergunta antes de remover: tirar um driver tira os tokens dele de
+    /// todos os aplicativos.
+    fn confirmar_remocao(self: &Rc<Self>, id: &str) {
+        if self.confirmacao.borrow().is_some() {
+            return;
+        }
+        let Some(instalada) = self
+            .retrato
+            .borrow()
+            .as_ref()
+            .and_then(|r| r.instaladas.as_ref().ok())
+            .and_then(|l| l.iter().find(|i| i.id == id).cloned())
+        else {
+            return;
+        };
+        let nome = loja::familia_de(id)
+            .map(|(_, curto)| self.nome_da_extensao(curto))
+            .unwrap_or_else(|| id.to_owned());
+        let alerta = adw::AlertDialog::new(Some(&format!("Remover {nome}?")), None);
+        alerta.add_responses(&[("cancelar", "Cancelar"), ("remover", "Remover")]);
+        alerta.set_response_appearance("remover", adw::ResponseAppearance::Destructive);
+        alerta.set_default_response(Some("cancelar"));
+        alerta.set_close_response("cancelar");
+        let eu = Rc::downgrade(self);
+        alerta.connect_response(Some("remover"), move |_, _| {
+            if let Some(eu) = eu.upgrade() {
+                let i = instalada.clone();
+                eu.no_flatpak_fazer(&i.id.clone(), move || loja::remover(&i));
+            }
+        });
+        {
+            let eu = Rc::downgrade(self);
+            alerta.connect_closed(move |_| {
+                if let Some(eu) = eu.upgrade() {
+                    eu.confirmacao.borrow_mut().take();
+                }
+            });
+        }
+        *self.confirmacao.borrow_mut() = Some(alerta.clone());
+        alerta.present(Some(&self.janela));
+    }
+
+    /// Atualiza ou remove fora da thread da interface, com a linha mostrando
+    /// que está trabalhando.
+    fn no_flatpak_fazer(
+        self: &Rc<Self>,
+        id: &str,
+        tarefa: impl FnOnce() -> Result<(), String> + Send + 'static,
+    ) {
+        if !self.no_flatpak.borrow_mut().insert(id.to_owned()) {
+            return;
+        }
+        self.mostrar_extensoes();
+        let eu = self.clone();
+        let id = id.to_owned();
+        glib::spawn_future_local(async move {
+            let r = gio::spawn_blocking(tarefa)
+                .await
+                .unwrap_or_else(|_| Err("a operação falhou".into()));
+            eu.no_flatpak.borrow_mut().remove(&id);
+            match r {
+                Ok(()) => {
+                    eu.atualizacoes.borrow_mut().remove(&id);
+                }
+                Err(e) => eu.avisar(&e),
+            }
+            *eu.retrato.borrow_mut() = None;
+            eu.atualizar_tudo();
+        });
+    }
+
+    /// Pergunta aos remotes o que tem versão nova. Usa a rede: só ao abrir.
+    fn buscar_atualizacoes(self: &Rc<Self>) {
+        let eu = self.clone();
+        glib::spawn_future_local(async move {
+            let r =
+                gio::spawn_blocking(|| loja::atualizacoes(&loja::instaladas().unwrap_or_default()))
+                    .await;
+            if let Ok(ids) = r
+                && *eu.atualizacoes.borrow() != ids
+            {
+                *eu.atualizacoes.borrow_mut() = ids;
+                eu.mostrar_extensoes();
+            }
+        });
+    }
+
+    fn reabrir(self: &Rc<Self>) {
+        self.reinicio.set_sensitive(false);
+        let eu = self.clone();
+        glib::spawn_future_local(async move {
+            let r = gio::spawn_blocking(fundo::reabrir)
+                .await
+                .unwrap_or_else(|_| Err("a operação falhou".into()));
+            match r {
+                Ok(()) => {
+                    if let Some(app) = eu.janela.application() {
+                        app.quit();
+                    }
+                }
+                Err(e) => {
+                    eu.reinicio.set_sensitive(true);
+                    eu.avisar(&e);
+                }
+            }
+        });
     }
 
     fn sufixos_driver(
@@ -619,7 +797,7 @@ impl Janela {
             eu.operar(sw, &espera, move || {
                 let dados = estado::dados();
                 assinadores::ligar(&dados, &escolhidos)?;
-                let plano = assinadores::sincronizar(&host::home(), &glib::home_dir(), &dados)?;
+                let plano = assinadores::sincronizar(&host::home(), &dados)?;
                 Ok(aviso_assinadores(&plano, ligar))
             })
         });
@@ -861,6 +1039,13 @@ pub fn montar(app: &adw::Application) {
         retratando: Cell::new(false),
         ocupado: Cell::new(false),
         interruptores: RefCell::default(),
+        reinicio: adw::Banner::builder()
+            .title("As mudanças nas extensões valem depois de reiniciar")
+            .button_label("Reiniciar")
+            .build(),
+        atualizacoes: RefCell::default(),
+        no_flatpak: RefCell::default(),
+        confirmacao: RefCell::default(),
     });
     let pagina = adw::PreferencesPage::new();
     for s in [&j.tokens, &j.extensoes, &j.aplicativos, &j.nativos] {
@@ -869,8 +1054,48 @@ pub fn montar(app: &adw::Application) {
     j.aplicativos.grupo.set_visible(false);
     j.nativos.grupo.set_visible(false);
 
+    let adicionar = gtk::Button::builder()
+        .icon_name("list-add-symbolic")
+        .tooltip_text("Adicionar extensões")
+        .valign(gtk::Align::Center)
+        .css_classes(["flat"])
+        .build();
+    {
+        let eu = Rc::downgrade(&j);
+        adicionar.connect_clicked(move |_| {
+            let Some(eu) = eu.upgrade() else { return };
+            let depois = Rc::downgrade(&eu);
+            dialogo_extensoes::abrir(&eu.janela, move || {
+                if let Some(eu) = depois.upgrade() {
+                    *eu.retrato.borrow_mut() = None;
+                    eu.atualizar_tudo();
+                }
+            });
+        });
+    }
+    j.extensoes.grupo.set_header_suffix(Some(&adicionar));
+    {
+        let eu = Rc::downgrade(&j);
+        j.reinicio.connect_button_clicked(move |_| {
+            if let Some(eu) = eu.upgrade() {
+                eu.reabrir();
+            }
+        });
+    }
+    let remover = gio::SimpleAction::new("remover", Some(glib::VariantTy::STRING));
+    {
+        let eu = Rc::downgrade(&j);
+        remover.connect_activate(move |_, id| {
+            if let (Some(eu), Some(id)) = (eu.upgrade(), id.and_then(|v| v.str())) {
+                eu.confirmar_remocao(id);
+            }
+        });
+    }
+    j.janela.add_action(&remover);
+
     let vista = adw::ToolbarView::new();
     vista.add_top_bar(&cabecalho);
+    vista.add_top_bar(&j.reinicio);
     vista.set_content(Some(&pagina));
     j.avisos.set_child(Some(&vista));
     j.janela.set_content(Some(&j.avisos));
@@ -884,10 +1109,9 @@ pub fn montar(app: &adw::Application) {
         let eu = j.clone();
         eu.ocupado.set(true);
         glib::spawn_future_local(async move {
-            let r = gio::spawn_blocking(|| {
-                assinadores::sincronizar(&host::home(), &glib::home_dir(), &estado::dados())
-            })
-            .await;
+            let r =
+                gio::spawn_blocking(|| assinadores::sincronizar(&host::home(), &estado::dados()))
+                    .await;
             if let Ok(Err(e)) = r {
                 eu.avisar(&e);
             }
@@ -898,6 +1122,7 @@ pub fn montar(app: &adw::Application) {
 
     j.atualizar_servico();
     j.atualizar_tudo();
+    j.buscar_atualizacoes();
     {
         let eu = Rc::downgrade(&j);
         glib::timeout_add_local(INTERVALO_SERVICO, move || match eu.upgrade() {

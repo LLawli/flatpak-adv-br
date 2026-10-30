@@ -3,7 +3,7 @@
 
 use crate::estado::dados;
 use crate::verificacao::{self, Resultado, medidor};
-use crate::{APP_ID, aplicativos, assinadores, certificado, extensao, host, nativos, sonda};
+use crate::{APP_ID, aplicativos, assinadores, certificado, extensao, host, loja, nativos, sonda};
 use gtk::glib::{self, ExitCode};
 use std::path::Path;
 use std::time::Duration;
@@ -28,6 +28,110 @@ pub fn extensoes() -> ExitCode {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// O id completo a partir do que a pessoa digitou: `Driver.SafeSign` ou
+/// `dev.lukakuuhaku.Ancora.Driver.SafeSign`.
+fn id_de_extensao(arg: Option<&str>) -> Result<String, ExitCode> {
+    let Some(arg) = arg else {
+        eprintln!("informe a extensão, como Driver.SafeSign");
+        return Err(ExitCode::FAILURE);
+    };
+    let id = if arg.starts_with(APP_ID) {
+        arg.to_owned()
+    } else {
+        format!("{APP_ID}.{arg}")
+    };
+    if loja::familia_de(&id).is_none() {
+        eprintln!("{arg} não é uma extensão do Âncora");
+        return Err(ExitCode::FAILURE);
+    }
+    Ok(id)
+}
+
+/// `ancora disponiveis`: as extensões que os remotes oferecem, com o que já
+/// está instalado e o que tem atualização.
+pub fn disponiveis() -> ExitCode {
+    let (lista, erros) = loja::disponiveis();
+    for e in &erros {
+        eprintln!("{e}");
+    }
+    let instaladas = loja::instaladas().unwrap_or_default();
+    let atualizacoes = loja::atualizacoes(&instaladas);
+    for d in &lista {
+        let marca = if atualizacoes.contains(&d.id) {
+            " [atualização]"
+        } else if instaladas.iter().any(|i| i.id == d.id) {
+            " [instalada]"
+        } else {
+            ""
+        };
+        println!("{}: {} ({}){marca}", d.id, d.nome, d.remoto);
+    }
+    if lista.is_empty() && !erros.is_empty() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+fn concluir(r: Result<(), String>, feito: &str) -> ExitCode {
+    match r {
+        Ok(()) => {
+            println!("{feito}. Abra o Âncora de novo para valer.");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `ancora instalar <extensão>`: do remote que a oferece.
+pub fn instalar(arg: Option<&str>) -> ExitCode {
+    let id = match id_de_extensao(arg) {
+        Ok(id) => id,
+        Err(c) => return c,
+    };
+    let (lista, erros) = loja::disponiveis();
+    let Some(d) = lista.into_iter().find(|d| d.id == id) else {
+        for e in &erros {
+            eprintln!("{e}");
+        }
+        eprintln!("nenhum remote oferece {id}");
+        return ExitCode::FAILURE;
+    };
+    concluir(loja::instalar(&d), "instalada")
+}
+
+fn instalada(id: &str) -> Result<loja::Instalada, ExitCode> {
+    match loja::instaladas() {
+        Ok(l) => l.into_iter().find(|i| i.id == id).ok_or_else(|| {
+            eprintln!("{id} não está instalada");
+            ExitCode::FAILURE
+        }),
+        Err(e) => {
+            eprintln!("{e}");
+            Err(ExitCode::FAILURE)
+        }
+    }
+}
+
+/// `ancora atualizar <extensão>`.
+pub fn atualizar(arg: Option<&str>) -> ExitCode {
+    match id_de_extensao(arg).and_then(|id| instalada(&id)) {
+        Ok(i) => concluir(loja::atualizar(&i), "atualizada"),
+        Err(c) => c,
+    }
+}
+
+/// `ancora remover <extensão>`.
+pub fn remover(arg: Option<&str>) -> ExitCode {
+    match id_de_extensao(arg).and_then(|id| instalada(&id)) {
+        Ok(i) => concluir(loja::remover(&i), "removida"),
+        Err(c) => c,
     }
 }
 
@@ -235,7 +339,7 @@ pub fn assinadores(acao: Option<&str>) -> ExitCode {
     let home = host::home();
     if acao == Some("despublicar") {
         let r = assinadores::ligar(&dados(), &Default::default())
-            .and_then(|()| assinadores::sincronizar(&home, &glib::home_dir(), &dados()));
+            .and_then(|()| assinadores::sincronizar(&home, &dados()));
         return match r {
             Ok(_) => ExitCode::SUCCESS,
             Err(e) => {
@@ -253,7 +357,7 @@ pub fn assinadores(acao: Option<&str>) -> ExitCode {
     };
     let navegadores = assinadores::presentes(&home, &flatpaks);
     let mut instalados = Vec::new();
-    for i in assinadores::instalados(&glib::home_dir()) {
+    for i in assinadores::instalados() {
         match i {
             Ok(i) => instalados.push(i),
             Err(e) => eprintln!("{e}"),
@@ -273,7 +377,7 @@ pub fn assinadores(acao: Option<&str>) -> ExitCode {
     }
     let todos = instalados.iter().map(|i| i.id.clone()).collect();
     let resultado = assinadores::ligar(&dados(), &todos)
-        .and_then(|()| assinadores::sincronizar(&home, &glib::home_dir(), &dados()));
+        .and_then(|()| assinadores::sincronizar(&home, &dados()));
     match resultado {
         Ok(plano) => {
             for id in &plano.sem_tokens {

@@ -58,19 +58,69 @@ pub fn iniciar_servico() -> Result<(), String> {
 /// sandbox, como o do início automático) e sobe um nesta, que enxerga as
 /// extensões instaladas depois que o outro começou.
 pub fn reiniciar_servico() -> Result<(), String> {
-    let dir = estado::diretorio();
-    if estado::rodando(&dir) {
-        estado::pedir_parada(&dir).map_err(|e| e.to_string())?;
-        let limite = Instant::now() + ESPERA_PARADA;
-        while estado::rodando(&dir) {
-            if Instant::now() > limite {
-                estado::descartar_parada(&dir);
-                return Err("o serviço não parou".into());
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-    }
+    parar_servico()?;
     iniciar_servico()
+}
+
+/// Pede ao serviço que pare e espera ele soltar a trava.
+fn parar_servico() -> Result<(), String> {
+    let dir = estado::diretorio();
+    if !estado::rodando(&dir) {
+        return Ok(());
+    }
+    estado::pedir_parada(&dir).map_err(|e| e.to_string())?;
+    let limite = Instant::now() + ESPERA_PARADA;
+    while estado::rodando(&dir) {
+        if Instant::now() > limite {
+            estado::descartar_parada(&dir);
+            return Err("o serviço não parou".into());
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    Ok(())
+}
+
+/// O que o host roda para abrir o Âncora de novo: espera a janela velha
+/// soltar o nome dela no D-Bus da sessão (até 10 s), senão a nova só
+/// repassaria a ativação à velha e sairia, e então o `flatpak run`. O
+/// `flatpak ps` não serve para isso: ele segue listando instâncias mortas.
+const REABRIR: &str = r#"exec </dev/null >/dev/null 2>&1
+if command -v gdbus >/dev/null; then
+    i=0
+    while [ "$i" -lt 100 ] && gdbus call --session --dest org.freedesktop.DBus \
+        --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner "$1" |
+        grep -q true; do
+        sleep 0.1; i=$((i + 1))
+    done
+else
+    sleep 2
+fi
+exec flatpak run "$1""#;
+
+/// Prepara a volta do Âncora num sandbox novo, que monta as extensões como
+/// estão agora no host. Para o serviço (o novo sobe com a janela nova) e deixa
+/// no host um processo esperando esta janela sair; quem chama sai logo depois.
+///
+/// O `setsid -f` volta na hora, e o `flatpak-spawn` com ele. Nenhuma saída do
+/// processo do host pode vir para cá: ler um pipe que ele herdou esperaria o
+/// fim dele, que espera o fim desta janela.
+pub fn reabrir() -> Result<(), String> {
+    if !Path::new("/.flatpak-info").is_file() {
+        return Err("fora do Flatpak não há o que reabrir".into());
+    }
+    parar_servico()?;
+    let status = Command::new("flatpak-spawn")
+        .args(["--host", "setsid", "-f", "sh", "-c", REABRIR, "sh"])
+        .arg(crate::APP_ID)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("flatpak-spawn: {e}"))?;
+    if !status.success() {
+        return Err("o host não aceitou abrir o Âncora de novo".into());
+    }
+    Ok(())
 }
 
 const PORTAL: &str = "org.freedesktop.portal.Desktop";

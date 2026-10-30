@@ -88,6 +88,29 @@ O atalho de menu de uma `[[ferramenta]]` é gerado pelo Âncora a partir de
 `nome` e `icone`, porque o Flatpak não exporta o `.desktop` de uma extensão
 instalada depois do aplicativo.
 
+## Nome e descrição na busca
+
+A janela mostra o nome e a descrição do appstream do remote, e sem ele só o
+último pedaço do id (`SafeSign`). Para aparecer direito:
+
+- a extensão instala um metainfo `addon` em
+  `${FLATPAK_DEST}/share/metainfo/<id>.metainfo.xml`, sem
+  `appstream-compose: false` no manifesto:
+
+  ```xml
+  <component type="addon">
+    <id>dev.lukakuuhaku.Ancora.Driver.SafeSign</id>
+    <extends>dev.lukakuuhaku.Ancora</extends>
+    <name>SafeSign IC</name>
+    <summary>Tokens GD Burti e outros SafeSign</summary>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>LicenseRef-proprietary</project_license>
+  </component>
+  ```
+
+- quem publica o remote roda `flatpak build-update-repo` depois de exportar:
+  é ele que gera o ramo `appstream` que os clientes baixam.
+
 ## Uma extensão quebrada continua visível
 
 Descritor ilegível, inválido ou de contrato mais novo não some da lista: a

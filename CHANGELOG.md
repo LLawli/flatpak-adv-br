@@ -49,6 +49,14 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   instalada depois passar a valer, o que a linha dela também oferece.
 - `ancora certificados <socket>` lista, em JSON, os certificados dos tokens de
   um driver, sem pedir PIN.
+- Adicionar extensões pela janela: o botão `+` da seção Extensões busca, nos
+  remotes que você já tem, os drivers, assinadores e aplicativos para o
+  Âncora, e instala com um clique. Cada extensão instalada mostra quando há
+  versão nova e pode ser removida pelo menu dela. Como o Flatpak só monta
+  extensões na partida, um aviso no alto da janela oferece reiniciar o Âncora,
+  o que leva cerca de um segundo.
+- `ancora disponiveis`, `ancora instalar`, `ancora atualizar` e
+  `ancora remover` fazem o mesmo pelo terminal.
 
 ### Corrigido
 
