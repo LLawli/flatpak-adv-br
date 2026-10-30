@@ -15,3 +15,7 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   por um `ancora.toml`. O contrato está em `docs/extensoes.md`.
 - `flatpak run --command=ancora dev.lukakuuhaku.Ancora extensoes` lista as
   extensões instaladas e diz o motivo de cada uma que estiver quebrada.
+- `ancora servir`: publica os drivers instalados no p11-kit do sistema, para
+  os navegadores e aplicativos (inclusive Flatpak, como o PJeOffice Pro do
+  FlatPark). Um driver que trava sai da publicação em vez de travar quem abre o
+  token, e fechar o serviço não deixa nada para trás.

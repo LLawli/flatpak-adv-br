@@ -2,7 +2,7 @@
 
 ## Dependências
 
-- Rust estável (1.85 ou mais novo).
+- Rust estável (1.92 ou mais novo).
 - GTK 4.18 e libadwaita 1.7, ou mais novos, com os cabeçalhos
   (`gtk4-devel libadwaita-devel` no Fedora).
 - `desktop-file-utils` e `appstream`, para validar os arquivos de dados.
@@ -40,3 +40,9 @@ O script cobre só crates do crates.io; uma dependência git é recusada.
 flatpak run org.flatpak.Builder --user --install --force-clean build-dir flatpak/dev.lukakuuhaku.Ancora.yml
 flatpak run dev.lukakuuhaku.Ancora
 ```
+
+## Ponta a ponta
+
+`tests/e2e/` tem testes que rodam no sandbox de verdade, com extensões de
+teste construídas na hora. Não fazem parte do `scripts/ci.sh`; veja
+`tests/e2e/README.md`.

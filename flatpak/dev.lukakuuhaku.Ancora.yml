@@ -11,6 +11,13 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
+  # As leitoras de smartcard, pelo pcscd do host.
+  - --socket=pcsc
+  # Os sockets dos servidores de cada driver: $XDG_RUNTIME_DIR/ancora/<driver>.
+  - --filesystem=xdg-run/ancora:create
+  # Onde o p11-kit do host procura os módulos do usuário. Só os arquivos
+  # ancora-*.module são escritos ou apagados.
+  - --filesystem=xdg-config/pkcs11:create
 
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin

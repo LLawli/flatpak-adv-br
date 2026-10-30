@@ -2,6 +2,10 @@ use adw::prelude::*;
 use std::path::Path;
 
 mod extensao;
+mod publicacao;
+mod servico;
+mod sonda;
+mod supervisao;
 
 /// O id do aplicativo. É também o prefixo das extensões
 /// (`dev.lukakuuhaku.Ancora.Driver.SafeSign`), e por isso não muda.
@@ -10,8 +14,12 @@ pub const APP_ID: &str = "dev.lukakuuhaku.Ancora";
 const NOME: &str = "Âncora";
 
 fn main() -> gtk::glib::ExitCode {
-    if std::env::args().nth(1).as_deref() == Some("extensoes") {
-        return listar_extensoes();
+    let args: Vec<String> = std::env::args().collect();
+    match args.get(1).map(String::as_str) {
+        Some("extensoes") => return listar_extensoes(),
+        Some("servir") => return servico::servir(),
+        Some("sondar") => return sondar(args.get(2).map(Path::new)),
+        _ => {}
     }
     let app = adw::Application::builder().application_id(APP_ID).build();
     app.connect_activate(montar_janela);
@@ -58,6 +66,26 @@ fn listar_extensoes() -> gtk::glib::ExitCode {
         gtk::glib::ExitCode::FAILURE
     } else {
         gtk::glib::ExitCode::SUCCESS
+    }
+}
+
+/// `ancora sondar <socket>`: os rótulos dos tokens, um por linha.
+fn sondar(socket: Option<&Path>) -> gtk::glib::ExitCode {
+    let Some(socket) = socket else {
+        eprintln!("uso: ancora sondar <socket>");
+        return gtk::glib::ExitCode::FAILURE;
+    };
+    match sonda::sondar(socket) {
+        Ok(tokens) => {
+            for t in tokens {
+                println!("{t}");
+            }
+            gtk::glib::ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            gtk::glib::ExitCode::FAILURE
+        }
     }
 }
 

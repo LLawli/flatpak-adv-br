@@ -26,6 +26,53 @@ Não há ponto de extensão público para outros aplicativos montarem os drivers
 como o flatpak-adv-br tinha para o PjeOffice-flatpak: um app que queira os
 tokens os recebe pelo p11-kit do host, sem depender do Âncora.
 
+## A publicação dos drivers
+
+```
+token USB ──► pcscd (host) ──--socket=pcsc──┐
+┌──────────────── sandbox do Âncora ─────────▼──────────────┐
+│ ancora servir                                              │
+│   um p11-kit server por módulo, cada um carregando o driver│
+│   $XDG_RUNTIME_DIR/ancora/<driver>                         │
+│   sonda a cada 10 s (ancora sondar, num processo à parte)  │
+└────────────────────────────────────────────────────────────┘
+        ▲ remote: unix:path=... em ~/.config/pkcs11/modules/ancora-<driver>.module
+┌──────── host ──────────────────────────────────────────────┐
+│ p11-kit-proxy (aplicativos nativos)                        │
+│ p11-kit-server.socket do usuário (aplicativos Flatpak com  │
+│   --filesystem=xdg-run/p11-kit/pkcs11, como o PJeOffice)   │
+└────────────────────────────────────────────────────────────┘
+```
+
+`ancora servir` (`src/servico.rs`) sobe um `p11-kit server` por módulo
+PKCS#11 das extensões de driver e o sonda a cada 10 s, num processo à parte
+com limite de 10 s. Só o que respondeu da última vez fica publicado
+(`src/publicacao.rs`). Um driver que não responde sai da publicação e é
+reiniciado, e depois de 3 vezes seguidas é parado (`src/supervisao.rs`): um
+driver travado e publicado travaria todo aplicativo que abrisse o p11-kit.
+
+Por que socket e não `remote: |flatpak run ...` por stdio, como no
+flatpak-adv-br: medido em 2026-10-30, abrir o proxy do host custa ~6 ms pelo
+socket e ~205 ms pelo stdio, por módulo e por processo consumidor, e o stdio
+não permite supervisão. Um `.module` apontando para socket morto (Âncora
+fechado, ou morto com SIGKILL) é pulado em 0,9 ms, sem travar e sem afetar o
+resto. O custo é o token só aparecer com o serviço rodando.
+
+Cada `.module` sai com `disable-in` para os serviços da sessão GNOME que
+carregam todo módulo do usuário (`gsd-smartcard`, `gnome-software`,
+`gvfsd-http` e outros): sem isso, o flatpak-adv-br chegou a travar o login no
+Fedora 44. O serviço só escreve e apaga arquivos `ancora-*.module`, apaga os
+que sobraram de uma queda ao partir, e despublica tudo ao sair. Ele tem uma
+instância só (trava em `$XDG_RUNTIME_DIR/ancora/servico.trava`), e os
+servidores morrem junto com ele mesmo num SIGKILL.
+
+As extensões são lidas na partida: o Flatpak monta extensões quando o sandbox
+começa, e uma instalada depois só aparece num serviço reiniciado.
+
+Ainda falta: host com p11-kit da série 0.25 (Debian trixie, Ubuntu 24.04), que
+fala um protocolo diferente do runtime (0.26), e o início automático do
+serviço com a sessão.
+
 ## Instalar extensões de dentro do aplicativo
 
 A tela de extensões procura, nos remotes que a pessoa já tem configurados, os
@@ -53,10 +100,8 @@ PJeOffice, quando existir, convive com ele.
 1. **Fundação**: este esqueleto, os gates e a CI.
 2. **Contrato de extensão** (feito): o `ancora.toml`, os pontos de extensão
    no manifesto e `ancora extensoes`.
-3. **Núcleo de publicação**: PKCS#11, NSS e native messaging. O mecanismo da
-   ponte será escolhido por medição: `remote: |flatpak run ...` por stdio, como
-   no flatpak-adv-br, ou um `p11-kit server` por driver num socket, como no
-   Tessera, que também despublica um driver travado.
+3. **Núcleo de publicação**: PKCS#11 (feito: socket por driver, com
+   supervisão), aplicativos (permissão e NSS) e native messaging.
 4. **Interface base**: o estado do certificado e as extensões instaladas.
 5. **Tela de extensões**: busca, instala e atualiza nos remotes.
 6. **Migração**: as extensões do flatpak-adv-br (SafeSign primeiro), o remote e
