@@ -190,6 +190,10 @@ PJeOffice, quando existir, convive com ele.
 6. **Migração**: as extensões do flatpak-adv-br (SafeSign primeiro), o remote e
    o `end-of-life-rebase` do `dev.lukakuuhaku.AdvBr` para o Âncora.
 
+## Backlog
+
+O que ficou para depois, com o plano, está em [backlog.md](backlog.md).
+
 ## Pendências de nome
 
 O repositório vai substituir o `flatpak-adv-br` quando estiver pronto. Ao
