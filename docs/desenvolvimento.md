@@ -48,6 +48,27 @@ do controle de versão do Âncora, com `scripts/ci.sh` e `scripts/construir.sh`.
 O contrato está em [extensoes.md](extensoes.md), e o exemplo é o
 `extensoes/Driver.SafeSign`.
 
+### Testar sem o token
+
+Um `pcscd` com leitoras e cartões virtuais, num contêiner, com o Âncora
+apontado para ele no lugar do pcscd do host. Não substitui o token de verdade:
+os drivers proprietários não reconhecem o cartão emulado. Serve para ver o
+driver enxergar as leitoras, aguentar um cartão que não é dele e sobreviver a
+cartão entrando e saindo, e para medir o tempo disso.
+
+```bash
+X=/mnt/dados/caches/ancora-exp/pcsc-falso; mkdir -p "$X/run"
+docker build -t ancora-pcsc-falso tests/pcsc-falso
+docker run -d --rm --name ancora-pcsc-falso -v "$X/run:/run/pcscd" ancora-pcsc-falso
+docker exec -d ancora-pcsc-falso vicc -t iso7816   # insere o cartão
+docker exec ancora-pcsc-falso pkill -f '[v]icc'    # retira
+
+# --nosocket=pcsc: com o socket, o Flatpak sobrescreve o PCSCLITE_CSOCK_NAME.
+flatpak run --nosocket=pcsc --filesystem="$X/run" \
+    --env=PCSCLITE_CSOCK_NAME="$X/run/pcscd.comm" \
+    --command=ancora dev.lukakuuhaku.Ancora servir
+```
+
 ## Publicar
 
 ```bash

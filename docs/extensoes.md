@@ -22,7 +22,10 @@ e sem isso eles tentam instalar em `/app`.
 O Âncora fornece o `libpcsclite.so.1` (pcsc-lite 2.5.1, em `/app/lib`), que
 fala com o `pcscd` do host: um driver não deve trazer o seu.
 
-O repositório de exemplo é o do SafeSign, em `extensoes/Driver.SafeSign`.
+O repositório de exemplo é o do SafeSign, em `extensoes/Driver.SafeSign`. Os
+outros mostram variações: `Driver.SafeNet` (pacote dentro de um zip),
+`Driver.SerproID` (`HOME` própria, `LD_PRELOAD` e uma ferramenta),
+`Assinador.WebPKI` (manifestos de native messaging).
 
 ## Pacote do fabricante: `extra-data`
 
@@ -45,8 +48,19 @@ pacote na máquina de quem instala, confere o sha256 e roda
 - um `apply_extra` quebrado, ou uma biblioteca que o carregador não resolve,
   só apareceria na máquina de quem instala. Repita no build o que ele faz numa
   cópia do mesmo pacote (uma fonte `type: file`, que não entra na extensão) e
-  abra a biblioteca de verdade (`ctypes.CDLL`); o `ldd` não vê símbolo
-  indefinido.
+  abra cada biblioteca de verdade (`ctypes.CDLL`). O `ldd` não serve: não vê
+  símbolo indefinido, e numa `.so` sem bit de execução (como vêm a do SafeSign
+  e as do SafeNet) só avisa e não lista nada, então um `grep 'not found'`
+  passa sempre;
+- quem baixa é o Flatpak de quem instala, com a validação TLS do sistema e sem
+  como acrescentar uma CA. Um servidor com cadeia incompleta (o da Softplan)
+  torna a extensão impossível de instalar, mesmo que o build passe;
+- o sha256 é fixo, e alguns fabricantes servem sempre o pacote mais novo numa
+  URL que só parece ter versão (Lacuna e Softplan ignoram o número). Uma
+  versão nova quebra a instalação até o manifesto ser atualizado: o
+  `scripts/ci.sh` dessas extensões compara o tamanho servido com o `size`;
+- o download pode ser lento: o zip do SafeNet (91 MB, da DigiCert) já levou
+  6 minutos e já estourou o tempo limite do Flatpak.
 
 ## O descritor: `ancora.toml`
 
@@ -115,6 +129,18 @@ assinador carregar (no Web PKI e no WebSigner, `libaetpkss.so.3`, a opção
 "Dispositivos SafeSign AET"), e um só basta: dois nomes marcados na extensão
 fariam cada token aparecer duas vezes. O executável recebe uma `HOME` própria,
 onde guarda os dados dele, e precisa rodar nos runtimes freedesktop e GNOME.
+
+A home do sandbox some a cada execução, e o serviço que carrega os drivers e a
+janela que abre as ferramentas são instâncias diferentes. Um driver que guarda
+dados do usuário em `$HOME` precisa de uma `HOME` em
+`~/.local/share/ancora/casa/<Nome>`, a pasta de dados do Âncora, que é a do
+host: no `ambiente` do `[[pkcs11]]` e no da `[[ferramenta]]`, apontando para a
+mesma. O SerproID é o exemplo; um programa Java tira a home do passwd, e o
+lançador passa a mesma pasta em `-Duser.home`.
+
+Um assinador cujo fabricante traz um manifesto para o Chrome e outro para o
+Edge, com ids diferentes (o Lacuna), junta as duas listas `allowed_origins` no
+`apply_extra`: o Âncora publica um manifesto só para a família Chromium.
 
 O atalho de menu de uma `[[ferramenta]]` é gerado pelo Âncora a partir de
 `nome` e `icone`, porque o Flatpak não exporta o `.desktop` de uma extensão
