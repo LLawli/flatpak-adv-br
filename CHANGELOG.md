@@ -71,6 +71,11 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   repetir o pedido para sempre.
 - Os drivers que falam com o fabricante durante a assinatura (como o da
   Certisign) passam a ter rede.
+- Os assinadores chegam ao Brave Origin, ao Brave Beta e Nightly, ao Chrome
+  Beta e Unstable e ao Edge Beta e Dev: cada um lê os manifestos numa pasta
+  própria, e o Âncora só conhecia a do canal estável.
+- Publicar os assinadores não falha mais com "File exists" quando há um
+  navegador nativo.
 - O nome do token do SerproID aparece sem lixo no fim: o driver completa o
   nome com bytes nulos, e não com espaços como a norma pede.
 

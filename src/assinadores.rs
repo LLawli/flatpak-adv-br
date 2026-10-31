@@ -85,12 +85,62 @@ pub const NAVEGADORES: &[Navegador] = &[
         manifestos: &[".config/BraveSoftware/Brave-Browser/NativeMessagingHosts"],
         marcas: &[".config/BraveSoftware/Brave-Browser"],
     },
+    // Os canais e as variantes têm pasta própria, e cada um só lê a dele.
+    Navegador {
+        nome: "Brave Origin",
+        tipo: Tipo::Chromium,
+        flatpak: None,
+        manifestos: &[".config/BraveSoftware/Brave-Origin/NativeMessagingHosts"],
+        marcas: &[".config/BraveSoftware/Brave-Origin"],
+    },
+    Navegador {
+        nome: "Brave Beta",
+        tipo: Tipo::Chromium,
+        flatpak: None,
+        manifestos: &[".config/BraveSoftware/Brave-Browser-Beta/NativeMessagingHosts"],
+        marcas: &[".config/BraveSoftware/Brave-Browser-Beta"],
+    },
+    Navegador {
+        nome: "Brave Nightly",
+        tipo: Tipo::Chromium,
+        flatpak: None,
+        manifestos: &[".config/BraveSoftware/Brave-Browser-Nightly/NativeMessagingHosts"],
+        marcas: &[".config/BraveSoftware/Brave-Browser-Nightly"],
+    },
+    Navegador {
+        nome: "Google Chrome Beta",
+        tipo: Tipo::Chromium,
+        flatpak: None,
+        manifestos: &[".config/google-chrome-beta/NativeMessagingHosts"],
+        marcas: &[".config/google-chrome-beta"],
+    },
+    Navegador {
+        nome: "Google Chrome Unstable",
+        tipo: Tipo::Chromium,
+        flatpak: None,
+        manifestos: &[".config/google-chrome-unstable/NativeMessagingHosts"],
+        marcas: &[".config/google-chrome-unstable"],
+    },
     Navegador {
         nome: "Microsoft Edge",
         tipo: Tipo::Chromium,
         flatpak: None,
         manifestos: &[".config/microsoft-edge/NativeMessagingHosts"],
         marcas: &[".config/microsoft-edge"],
+    },
+    Navegador {
+        nome: "Microsoft Edge Beta",
+        tipo: Tipo::Chromium,
+        flatpak: None,
+        manifestos: &[".config/microsoft-edge-beta/NativeMessagingHosts"],
+        marcas: &[".config/microsoft-edge-beta"],
+    },
+    Navegador {
+        nome: "Microsoft Edge Dev",
+        tipo: Tipo::Chromium,
+        flatpak: None,
+        manifestos: &[".config/microsoft-edge-dev/NativeMessagingHosts"],
+        marcas: &[".config/microsoft-edge-dev"],
     },
     Navegador {
         nome: "Vivaldi",
@@ -761,6 +811,29 @@ mod tests {
         assert!(plano.permissoes.is_empty());
         assert!(lancador_nativo("com.lacunasoftware.webpki")
             .contains("flatpak run --command=ancora dev.lukakuuhaku.Ancora assinar 'com.lacunasoftware.webpki' \"$@\""));
+    }
+
+    #[test]
+    fn o_sandbox_alcanca_a_pasta_de_cada_navegador_nativo() {
+        // Sem a permissão, publicar num navegador do catálogo falha dentro do
+        // Flatpak, e os testes, que rodam fora dele, não veem.
+        let manifesto = include_str!("../flatpak/dev.lukakuuhaku.Ancora.yml");
+        let permitidas: Vec<&str> = manifesto
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("- --filesystem=~/"))
+            .map(|p| p.split(':').next().unwrap_or(p))
+            .collect();
+        for n in NAVEGADORES.iter().filter(|n| n.flatpak.is_none()) {
+            for pasta in n.manifestos {
+                assert!(
+                    permitidas
+                        .iter()
+                        .any(|p| pasta.starts_with(&format!("{p}/"))),
+                    "{}: o manifesto não dá acesso a ~/{pasta}",
+                    n.nome
+                );
+            }
+        }
     }
 
     #[test]

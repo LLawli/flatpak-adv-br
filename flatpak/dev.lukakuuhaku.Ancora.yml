@@ -59,9 +59,13 @@ finish-args:
   - --filesystem=~/.mozilla
   - --filesystem=~/.config/mozilla
   - --filesystem=~/.config/google-chrome
+  - --filesystem=~/.config/google-chrome-beta
+  - --filesystem=~/.config/google-chrome-unstable
   - --filesystem=~/.config/chromium
   - --filesystem=~/.config/BraveSoftware
   - --filesystem=~/.config/microsoft-edge
+  - --filesystem=~/.config/microsoft-edge-beta
+  - --filesystem=~/.config/microsoft-edge-dev
   - --filesystem=~/.config/vivaldi
   - --filesystem=~/.config/opera
 
