@@ -76,5 +76,9 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
 
 ### Mudado
 
+- O serviço deixa de ligar e desligar o token a cada sonda: o driver fica
+  carregado num processo próprio, consultado a cada 10 s. Com o SafeSign, o
+  jeito anterior religava o cartão e mandava cerca de 80 comandos a cada 10 s.
+
 - `ancora assinadores publicar` liga todos os assinadores instalados, e
   `despublicar` desliga todos: é a mesma escolha que a janela mostra.

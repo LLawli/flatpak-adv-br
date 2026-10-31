@@ -1,9 +1,10 @@
 //! `ancora servir`: o serviço que publica os drivers.
 //!
 //! Para cada módulo PKCS#11 das extensões de driver, sobe um `p11-kit server`
-//! em `$XDG_RUNTIME_DIR/ancora/<chave>`, sonda-o periodicamente num processo
-//! à parte e mantém publicado no host (ver `publicacao`) só o que respondeu
-//! da última vez. Ao receber SIGTERM, SIGINT ou SIGHUP, ou o pedido de
+//! em `$XDG_RUNTIME_DIR/ancora/<chave>`, sonda o driver periodicamente num
+//! processo à parte que o mantém carregado (`ancora vigiar`, ver `sonda`) e
+//! mantém publicado no host (ver `publicacao`) só o que respondeu da última
+//! vez. Ao receber SIGTERM, SIGINT ou SIGHUP, ou o pedido de
 //! parada da janela, despublica tudo e para os servidores.
 //!
 //! O que cada driver está fazendo vai para o estado que a janela lê, e um
@@ -20,13 +21,15 @@
 use crate::estado::{self, Situacao};
 use crate::extensao::{self, Familia};
 use crate::supervisao::{Acao, Estado, Sondagem, Supervisao};
-use crate::{pacote, processo, publicacao};
+use crate::{pacote, processo, publicacao, sonda};
 use gtk::glib;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -36,6 +39,8 @@ const INTERVALO: Duration = Duration::from_secs(10);
 const LIMITE_SONDA: Duration = Duration::from_secs(10);
 /// A primeira sonda depois de (re)iniciar um servidor, para dar tempo ao socket.
 const ESPERA_INICIAL: Duration = Duration::from_secs(1);
+/// Quanto esperar a sonda descarregar o driver ao parar.
+const ESPERA_PELA_SONDA: Duration = Duration::from_secs(1);
 /// O passo do laço que acompanha servidores e sondas.
 const PASSO: Duration = Duration::from_millis(200);
 /// Depois de um pacote que não pôde ser preparado (sem rede, servidor fora),
@@ -56,7 +61,7 @@ struct Driver {
     proximo_preparo: Instant,
     socket: PathBuf,
     servidor: Option<Child>,
-    sonda: Option<(Child, Instant)>,
+    vigia: Option<Vigia>,
     proxima_sonda: Instant,
     supervisao: Supervisao,
     desligado: bool,
@@ -146,7 +151,7 @@ fn iniciar() -> Result<Servico, String> {
                     proximo_preparo: Instant::now(),
                     socket: dir_sockets.join(&chave),
                     servidor: None,
-                    sonda: None,
+                    vigia: None,
                     proxima_sonda: Instant::now(),
                     supervisao: Supervisao::default(),
                     desligado: false,
@@ -241,7 +246,6 @@ fn acompanhar(servico: &mut Servico) {
             d.desligado = desligar;
             if desligar {
                 eprintln!("{}: desligado", d.rotulo);
-                matar_sonda(d);
                 parar_servidor(d);
                 parar_preparo(d);
             } else {
@@ -289,37 +293,49 @@ fn observar(d: &mut Driver) -> Option<Sondagem> {
         && let Ok(Some(_)) = servidor.try_wait()
     {
         d.servidor = None;
-        matar_sonda(d);
+        parar_vigia(d, false);
         return Some(Sondagem::Caiu);
     }
-    if let Some((sonda, inicio)) = &mut d.sonda {
-        return match sonda.try_wait() {
-            Ok(Some(_)) => {
-                let (sonda, _) = d.sonda.take().expect("sonda em andamento");
-                Some(resultado(sonda))
-            }
-            Ok(None) if inicio.elapsed() > LIMITE_SONDA => {
-                // Contado antes de matar a sonda: uma das conexões é a dela.
-                let ocupado = d.servidor.as_ref().is_some_and(|s| conexoes(s.id()) > 1);
-                matar_sonda(d);
-                Some(if ocupado {
-                    Sondagem::Ocupado
-                } else {
-                    Sondagem::Travou
-                })
-            }
-            Ok(None) => None,
-            Err(e) => {
-                d.sonda = None;
-                Some(Sondagem::Falhou(e.to_string()))
-            }
-        };
+    let Some(v) = &mut d.vigia else {
+        // Parada numa sondagem anterior: outra sobe para o próximo pedido.
+        if d.servidor.is_some()
+            && let Err(e) = iniciar_vigia(d)
+        {
+            return Some(Sondagem::Falhou(e));
+        }
+        return None;
+    };
+    if let Ok(Some(_)) = v.filho.try_wait() {
+        let motivo = v.motivo_da_saida();
+        d.vigia = None;
+        return Some(Sondagem::Falhou(motivo));
+    }
+    if let Some(inicio) = v.pedido {
+        if let Some(linha) = v.linha() {
+            v.pedido = None;
+            return Some(match sonda::ler_resposta(&linha) {
+                Ok(tokens) => Sondagem::Respondeu(tokens),
+                Err(e) => Sondagem::Falhou(e),
+            });
+        }
+        if inicio.elapsed() <= LIMITE_SONDA {
+            return None;
+        }
+        // A sonda não é conexão do servidor: qualquer conexão é de um
+        // consumidor, que pode estar no meio de um login.
+        let ocupado = d.servidor.as_ref().is_some_and(|s| conexoes(s.id()) > 0);
+        parar_vigia(d, false);
+        return Some(if ocupado {
+            Sondagem::Ocupado
+        } else {
+            Sondagem::Travou
+        });
     }
     if Instant::now() >= d.proxima_sonda {
         d.proxima_sonda = Instant::now() + INTERVALO;
-        match iniciar_sonda(&d.socket) {
-            Ok(sonda) => d.sonda = Some((sonda, Instant::now())),
-            Err(e) => return Some(Sondagem::Falhou(e)),
+        if let Err(e) = v.pedir() {
+            parar_vigia(d, false);
+            return Some(Sondagem::Falhou(e));
         }
     }
     None
@@ -347,19 +363,6 @@ fn pai(stat: &str) -> Option<u32> {
         .nth(1)?
         .parse()
         .ok()
-}
-
-fn resultado(sonda: Child) -> Sondagem {
-    match sonda.wait_with_output() {
-        Ok(saida) if saida.status.success() => Sondagem::Respondeu(
-            String::from_utf8_lossy(&saida.stdout)
-                .lines()
-                .map(str::to_owned)
-                .collect(),
-        ),
-        Ok(saida) => Sondagem::Falhou(String::from_utf8_lossy(&saida.stderr).trim().to_owned()),
-        Err(e) => Sondagem::Falhou(e.to_string()),
-    }
 }
 
 fn publicar(servico: &Servico) {
@@ -415,7 +418,6 @@ fn encerrar(servico: &mut Servico) {
     }
     estado::apagar(&servico.dir_sockets);
     for d in servico.drivers.values_mut() {
-        matar_sonda(d);
         parar_servidor(d);
         parar_preparo(d);
     }
@@ -522,25 +524,34 @@ fn iniciar_servidor(d: &mut Driver) {
     }
     let _ = fs::remove_file(&d.socket);
 
-    let mut bibliotecas: Vec<PathBuf> = d.modulo.bibliotecas.clone();
+    let mut cmd = processo::comando_servidor(&d.socket, &d.modulo.modulo);
+    ambiente_do_driver(&mut cmd, &d.modulo);
+    match cmd.spawn() {
+        Ok(servidor) => d.servidor = Some(servidor),
+        Err(e) => eprintln!("{}: p11-kit server: {e}", d.rotulo),
+    }
+    if let Err(e) = iniciar_vigia(d) {
+        eprintln!("{}: sonda: {e}", d.rotulo);
+    }
+    d.proxima_sonda = Instant::now() + ESPERA_INICIAL;
+}
+
+/// O que o driver exige do processo que o carrega: o servidor e a sonda.
+fn ambiente_do_driver(cmd: &mut Command, modulo: &extensao::Pkcs11) {
+    let mut bibliotecas: Vec<PathBuf> = modulo.bibliotecas.clone();
     if let Some(atual) = std::env::var_os("LD_LIBRARY_PATH") {
         bibliotecas.extend(std::env::split_paths(&atual));
     }
-    let mut cmd = processo::comando_servidor(&d.socket, &d.modulo.modulo);
-    cmd.envs(&d.modulo.ambiente);
+    cmd.envs(&modulo.ambiente);
     if let Ok(caminho) = std::env::join_paths(&bibliotecas)
         && !bibliotecas.is_empty()
     {
         cmd.env("LD_LIBRARY_PATH", caminho);
     }
-    match cmd.spawn() {
-        Ok(servidor) => d.servidor = Some(servidor),
-        Err(e) => eprintln!("{}: p11-kit server: {e}", d.rotulo),
-    }
-    d.proxima_sonda = Instant::now() + ESPERA_INICIAL;
 }
 
 fn parar_servidor(d: &mut Driver) {
+    parar_vigia(d, true);
     // O servidor apaga o socket ao sair, e as conexões abertas (inclusive uma
     // travada num driver) saem junto, por estarem no mesmo grupo.
     if let Some(mut servidor) = d.servidor.take() {
@@ -548,23 +559,134 @@ fn parar_servidor(d: &mut Driver) {
     }
 }
 
-fn iniciar_sonda(socket: &Path) -> Result<Child, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut cmd = Command::new(exe);
-    cmd.arg("sondar")
-        .arg(socket)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    processo::amarrar(&mut cmd);
-    cmd.spawn().map_err(|e| e.to_string())
+/// A sonda de um driver (`ancora vigiar`): o driver carregado uma vez,
+/// respondendo a um pedido por vez (ver `sonda::vigiar`).
+struct Vigia {
+    filho: Child,
+    entrada: ChildStdin,
+    saida: ChildStdout,
+    erros: ChildStderr,
+    lido: Vec<u8>,
+    /// O fim do stderr, para dizer por que ela saiu.
+    ultimos_erros: Vec<u8>,
+    /// Quando o pedido em andamento foi feito.
+    pedido: Option<Instant>,
 }
 
-fn matar_sonda(d: &mut Driver) {
-    if let Some((mut sonda, _)) = d.sonda.take() {
-        let _ = sonda.kill();
-        let _ = sonda.wait();
+/// Quanto do stderr da sonda guardar.
+const MAXIMO_DE_ERROS: usize = 4096;
+
+impl Vigia {
+    fn pedir(&mut self) -> Result<(), String> {
+        self.entrada
+            .write_all(b"\n")
+            .and_then(|_| self.entrada.flush())
+            .map_err(|e| format!("sonda: {e}"))?;
+        self.pedido = Some(Instant::now());
+        Ok(())
     }
+
+    /// Uma resposta inteira, se já chegou. Não bloqueia.
+    fn linha(&mut self) -> Option<String> {
+        ler_disponivel(&mut self.saida, &mut self.lido);
+        self.drenar_erros();
+        let fim = self.lido.iter().position(|&b| b == b'\n')?;
+        let linha: Vec<u8> = self.lido.drain(..=fim).collect();
+        Some(String::from_utf8_lossy(&linha).trim().to_owned())
+    }
+
+    fn drenar_erros(&mut self) {
+        ler_disponivel(&mut self.erros, &mut self.ultimos_erros);
+        if self.ultimos_erros.len() > MAXIMO_DE_ERROS {
+            let sobra = self.ultimos_erros.len() - MAXIMO_DE_ERROS;
+            self.ultimos_erros.drain(..sobra);
+        }
+    }
+
+    fn motivo_da_saida(&mut self) -> String {
+        self.drenar_erros();
+        let texto = String::from_utf8_lossy(&self.ultimos_erros);
+        match texto.lines().rfind(|l| !l.trim().is_empty()) {
+            Some(l) => l.trim().to_owned(),
+            None => match self.filho.try_wait() {
+                Ok(Some(s)) => format!("a sonda saiu: {s}"),
+                _ => "a sonda saiu".to_owned(),
+            },
+        }
+    }
+}
+
+/// Lê o que houver num pipe sem bloqueio.
+fn ler_disponivel(pipe: &mut impl Read, destino: &mut Vec<u8>) {
+    let mut buf = [0u8; 4096];
+    while let Ok(n) = pipe.read(&mut buf) {
+        if n == 0 {
+            break;
+        }
+        destino.extend_from_slice(&buf[..n]);
+    }
+}
+
+fn sem_bloqueio(fd: &impl AsRawFd) {
+    let fd = fd.as_raw_fd();
+    // SAFETY: só muda as flags de um descritor que este processo tem.
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+}
+
+fn iniciar_vigia(d: &mut Driver) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut cmd = Command::new(exe);
+    cmd.arg("vigiar")
+        .arg(&d.modulo.modulo)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    ambiente_do_driver(&mut cmd, &d.modulo);
+    processo::amarrar(&mut cmd);
+    let mut filho = cmd.spawn().map_err(|e| e.to_string())?;
+    let (Some(entrada), Some(saida), Some(erros)) =
+        (filho.stdin.take(), filho.stdout.take(), filho.stderr.take())
+    else {
+        processo::parar_grupo(&mut filho);
+        return Err("a sonda subiu sem os pipes".into());
+    };
+    sem_bloqueio(&saida);
+    sem_bloqueio(&erros);
+    d.vigia = Some(Vigia {
+        filho,
+        entrada,
+        saida,
+        erros,
+        lido: Vec::new(),
+        ultimos_erros: Vec::new(),
+        pedido: None,
+    });
+    Ok(())
+}
+
+/// Para a sonda. Com calma, fecha a entrada e dá a ela um instante para
+/// descarregar o driver (`C_Finalize`); uma sonda travada é parada direto.
+fn parar_vigia(d: &mut Driver, com_calma: bool) {
+    let Some(Vigia {
+        mut filho, entrada, ..
+    }) = d.vigia.take()
+    else {
+        return;
+    };
+    drop(entrada);
+    if com_calma {
+        let limite = Instant::now() + ESPERA_PELA_SONDA;
+        while Instant::now() < limite {
+            if let Ok(Some(_)) = filho.try_wait() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+    processo::parar_grupo(&mut filho);
 }
 
 #[cfg(test)]

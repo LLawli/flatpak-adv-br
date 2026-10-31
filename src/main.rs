@@ -40,6 +40,7 @@ fn main() -> gtk::glib::ExitCode {
         Some("servir") => return servico::servir(),
         Some("preparar") => return cli::preparar(args.get(2).map(String::as_str)),
         Some("sondar") => return cli::sondar(args.get(2).map(Path::new)),
+        Some("vigiar") => return cli::vigiar(args.get(2).map(Path::new)),
         Some("certificados") => return cli::certificados(args.get(2).map(Path::new)),
         Some("aplicativos") => return cli::aplicativos(),
         Some("configurar") => return cli::configurar(args.get(2).map(String::as_str)),

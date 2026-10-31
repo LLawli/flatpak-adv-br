@@ -179,6 +179,22 @@ pub fn remover(arg: Option<&str>) -> ExitCode {
     }
 }
 
+/// `ancora vigiar <módulo>`: a sonda de longa duração do serviço (ver
+/// `sonda::vigiar`).
+pub fn vigiar(modulo: Option<&Path>) -> ExitCode {
+    let Some(modulo) = modulo else {
+        eprintln!("uso: ancora vigiar <módulo>");
+        return ExitCode::FAILURE;
+    };
+    match sonda::vigiar(modulo) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// `ancora sondar <socket>`: os rótulos dos tokens, um por linha.
 pub fn sondar(socket: Option<&Path>) -> ExitCode {
     let Some(socket) = socket else {

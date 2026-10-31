@@ -3,11 +3,23 @@
 //!
 //! Roda num processo à parte porque um driver travado trava quem o chama: o
 //! serviço mata a sonda que passar do limite, e segue.
+//!
+//! `ancora vigiar <módulo>` é a sonda que o serviço usa: carrega o driver uma
+//! vez e responde a cada pedido. Carregar o driver é o que mexe no cartão: o
+//! SafeSign liga o cartão e manda dezenas de comandos a cada `C_Initialize`, e
+//! o desliga no `C_Finalize`. Medido com o SafeSign 4.5 e um cartão que ele
+//! reconhece (o cartão virtual do gdburti-rs na leitora virtual do
+//! vsmartcard), em 2026-10-31: sondando por conexões novas a cada 10 s, 6
+//! ciclos de energia e 474 comandos por minuto; com o driver carregado uma vez,
+//! nenhum ciclo e nenhum comando depois da carga, e o token que sai e volta
+//! aparece na consulta seguinte. Com o GD Burti de verdade, o primeiro jeito
+//! acompanhou o pcscd perder a comunicação USB com o token.
 
 use cryptoki::context::{CInitializeArgs, CInitializeFlags, Pkcs11};
 use cryptoki::slot::Slot;
 use cryptoki_sys::{
-    CK_FUNCTION_LIST, CK_RV, CK_SLOT_ID, CK_TRUE, CK_ULONG, CKR_BUFFER_TOO_SMALL, CKR_OK,
+    CK_C_INITIALIZE_ARGS, CK_FUNCTION_LIST, CK_RV, CK_SLOT_ID, CK_TOKEN_INFO, CK_TRUE, CK_ULONG,
+    CKF_OS_LOCKING_OK, CKF_TOKEN_INITIALIZED, CKR_BUFFER_TOO_SMALL, CKR_OK,
 };
 use std::path::{Path, PathBuf};
 
@@ -146,6 +158,112 @@ pub fn texto_fixo(campo: &str) -> String {
         .to_owned()
 }
 
+/// `ancora vigiar <módulo>`: carrega o driver uma vez e, a cada linha na
+/// entrada, responde uma linha com os rótulos dos tokens (um array JSON) ou
+/// `{"erro": ...}`. Sai quando a entrada fecha.
+pub fn vigiar(modulo: &Path) -> Result<(), String> {
+    use std::io::{BufRead, Write};
+    // SAFETY: carregar o driver roda o construtor dele, e é para isso que
+    // este processo existe.
+    let biblioteca = unsafe { libloading::Library::new(modulo) }
+        .map_err(|e| format!("{}: {e}", modulo.display()))?;
+    let pegar: libloading::Symbol<unsafe extern "C" fn(*mut *mut CK_FUNCTION_LIST) -> CK_RV> =
+        unsafe { biblioteca.get(b"C_GetFunctionList") }.map_err(|e| e.to_string())?;
+    let mut tabela: *mut CK_FUNCTION_LIST = std::ptr::null_mut();
+    // SAFETY: C_GetFunctionList só escreve o ponteiro da tabela.
+    let rv = unsafe { pegar(&mut tabela) };
+    if rv != CKR_OK || tabela.is_null() {
+        return Err(format!("C_GetFunctionList: 0x{rv:x}"));
+    }
+    // SAFETY: a tabela vive enquanto `biblioteca` estiver carregada, até o
+    // fim da função.
+    let (iniciar, finalizar, listar, info) = unsafe {
+        let t = &*tabela;
+        (
+            t.C_Initialize,
+            t.C_Finalize,
+            t.C_GetSlotList,
+            t.C_GetTokenInfo,
+        )
+    };
+    let (Some(iniciar), Some(finalizar), Some(listar), Some(info)) =
+        (iniciar, finalizar, listar, info)
+    else {
+        return Err("o driver não tem as funções da lista de tokens".into());
+    };
+    // Como o p11-kit inicializa os módulos: com as travas do sistema.
+    let mut argumentos = CK_C_INITIALIZE_ARGS {
+        CreateMutex: None,
+        DestroyMutex: None,
+        LockMutex: None,
+        UnlockMutex: None,
+        flags: CKF_OS_LOCKING_OK,
+        pReserved: std::ptr::null_mut(),
+    };
+    // SAFETY: os argumentos vivem até o fim da chamada.
+    let rv = unsafe { iniciar((&mut argumentos as *mut CK_C_INITIALIZE_ARGS).cast()) };
+    if rv != CKR_OK {
+        return Err(format!("C_Initialize: 0x{rv:x}"));
+    }
+    let consultar = || -> Result<Vec<String>, String> {
+        let slots = listar_slots(|ids, n| {
+            // SAFETY: `ids` é nulo ou tem espaço para `*n` ids.
+            unsafe { listar(CK_TRUE, ids, n) }
+        })?;
+        let mut rotulos = Vec::new();
+        for slot in slots {
+            // SAFETY: a estrutura é só dados, e o driver a preenche inteira.
+            let mut t: CK_TOKEN_INFO = unsafe { std::mem::zeroed() };
+            // SAFETY: `t` é uma CK_TOKEN_INFO válida para escrita.
+            let rv = unsafe { info(slot.id(), &mut t) };
+            // Um slot com token que o driver não reconhece (outro cartão na
+            // leitora) não é erro: só não é token dele. O slot livre (o
+            // SoftHSM sempre deixa um) tem token sem inicializar.
+            if rv == CKR_OK && t.flags & CKF_TOKEN_INITIALIZED != 0 {
+                rotulos.push(texto_fixo(&String::from_utf8_lossy(&t.label)));
+            }
+        }
+        Ok(rotulos)
+    };
+    let mut saida = std::io::stdout().lock();
+    for linha in std::io::stdin().lock().lines() {
+        if linha.is_err() {
+            break;
+        }
+        let resposta = match consultar() {
+            Ok(rotulos) => serde_json::json!(rotulos),
+            Err(e) => serde_json::json!({ "erro": e }),
+        };
+        if writeln!(saida, "{resposta}")
+            .and_then(|_| saida.flush())
+            .is_err()
+        {
+            break;
+        }
+    }
+    // SAFETY: fecha o que o C_Initialize abriu.
+    unsafe { finalizar(std::ptr::null_mut()) };
+    Ok(())
+}
+
+/// Uma linha de resposta do `vigiar`: os rótulos, ou o erro.
+pub fn ler_resposta(linha: &str) -> Result<Vec<String>, String> {
+    let valor: serde_json::Value =
+        serde_json::from_str(linha).map_err(|e| format!("resposta da sonda ilegível: {e}"))?;
+    match valor {
+        serde_json::Value::Array(itens) => Ok(itens
+            .into_iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect()),
+        serde_json::Value::Object(o) => Err(o
+            .get("erro")
+            .and_then(|e| e.as_str())
+            .unwrap_or("erro sem motivo")
+            .to_owned()),
+        _ => Err("resposta da sonda ilegível".into()),
+    }
+}
+
 pub fn sondar(socket: &Path) -> Result<Vec<String>, String> {
     let (p11, slots) = abrir(socket)?;
     let mut rotulos = Vec::new();
@@ -191,6 +309,20 @@ mod tests {
         assert_eq!(texto_fixo("SerproID\0\0\0\0"), "SerproID");
         assert_eq!(texto_fixo("Meu token \0 \0"), "Meu token");
         assert_eq!(texto_fixo("\0\0"), "");
+    }
+
+    #[test]
+    fn a_resposta_do_vigiar_e_a_lista_ou_o_erro() {
+        assert_eq!(
+            ler_resposta(r#"["GD Burti","SerproID"]"#),
+            Ok(vec!["GD Burti".to_owned(), "SerproID".to_owned()])
+        );
+        assert_eq!(ler_resposta("[]"), Ok(vec![]));
+        assert_eq!(
+            ler_resposta(r#"{"erro":"C_GetSlotList: 0x30"}"#),
+            Err("C_GetSlotList: 0x30".to_owned())
+        );
+        assert!(ler_resposta("lixo").is_err());
     }
 
     #[test]

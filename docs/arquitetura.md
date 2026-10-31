@@ -34,7 +34,7 @@ token USB ──► pcscd (host) ──--socket=pcsc──┐
 │ ancora servir                                              │
 │   um p11-kit server por módulo, cada um carregando o driver│
 │   $XDG_RUNTIME_DIR/ancora/<driver>                         │
-│   sonda a cada 10 s (ancora sondar, num processo à parte)  │
+│   sonda a cada 10 s (ancora vigiar, um processo por driver)│
 └────────────────────────────────────────────────────────────┘
         ▲ remote: unix:path=... em ~/.config/pkcs11/modules/ancora-<driver>.module
 ┌──────── host ──────────────────────────────────────────────┐
@@ -45,14 +45,25 @@ token USB ──► pcscd (host) ──--socket=pcsc──┐
 ```
 
 `ancora servir` (`src/servico.rs`) sobe um `p11-kit server` por módulo
-PKCS#11 das extensões de driver e o sonda a cada 10 s, num processo à parte
-com limite de 10 s. Só o que respondeu da última vez fica publicado
+PKCS#11 das extensões de driver e o sonda a cada 10 s, com limite de 10 s.
+A sonda é um processo por driver (`ancora vigiar`) que carrega o driver uma
+vez e responde a cada pedido: carregar o driver é o que mexe no cartão. O
+SafeSign liga o cartão e manda dezenas de comandos em cada `C_Initialize`, e o
+desliga no `C_Finalize`; medido com um cartão que ele reconhece, sondar por
+conexões novas custava 6 ciclos de energia e 474 comandos por minuto, e a
+sonda que fica carregada, nenhum ciclo e 3 leituras por consulta. Com o GD
+Burti, o primeiro jeito acompanhou o pcscd perder a comunicação USB com o
+token. Ela não conecta pelo socket do servidor: o `p11-kit server` decide os
+tokens de uma conexão quando ela abre (`p11_kit_remote_serve_tokens`), e uma
+conexão mantida não veria um token conectado depois. Só o que respondeu da
+última vez fica publicado
 (`src/publicacao.rs`). Um driver que não responde sai da publicação e é
 reiniciado, e depois de 3 vezes seguidas é parado (`src/supervisao.rs`): um
 driver travado e publicado travaria todo aplicativo que abrisse o p11-kit.
 
 Sem resposta não quer dizer travado. Se, quando a sonda passa do limite, o
-servidor tem outras conexões abertas, o driver pode estar só ocupado: uma
+servidor tem alguma conexão aberta (a sonda não é uma), o driver pode estar
+só ocupado: uma
 pessoa digitando o PIN num leitor com teclado segura a transação do cartão, e
 um driver que fala com o cartão para listar tokens espera por ela. Nesse caso
 o driver sai da publicação até voltar a responder, mas não é reiniciado nem
@@ -60,7 +71,7 @@ conta para parar: reiniciar mataria a conexão de quem está assinando
 (medido: o login era derrubado em 11 s com `CKR_DEVICE_ERROR`; com esta regra,
 termina em 25 s). `tests/e2e/supervisao.sh` confere.
 
-A sonda lista os slots pela chamada crua (`sonda::slots_com_token`), e não pelo
+A sonda lista os slots pela chamada crua (`sonda::listar_slots`), e não pelo
 `get_slots_with_token` do cryptoki. Com zero slots (o driver de uma leitora sem
 cartão), o cryptoki pede a lista de novo com um buffer de tamanho zero, o RPC do
 p11-kit responde `CKR_BUFFER_TOO_SMALL`, e ele repete para sempre com a mesma
