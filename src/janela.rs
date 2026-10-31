@@ -44,6 +44,8 @@ enum Publicacao {
     Ausente,
     Iniciando,
     Publicado,
+    /// Responde, mas nenhum token está conectado.
+    SemToken,
     ComProblema(String),
     Desligado,
 }
@@ -82,6 +84,12 @@ fn publicacao(servico: Option<&estado::Estado>, extensao: &str) -> Publicacao {
     }
     if modulos.iter().any(|d| d.situacao == Situacao::Iniciando) {
         return Publicacao::Iniciando;
+    }
+    if !modulos
+        .iter()
+        .any(|d| matches!(d.situacao, Situacao::Publicado { .. }))
+    {
+        return Publicacao::SemToken;
     }
     Publicacao::Publicado
 }
@@ -731,6 +739,12 @@ impl Janela {
     ) {
         match publicacao(servico, id) {
             Publicacao::Iniciando => l.add_suffix(&adw::Spinner::new()),
+            Publicacao::SemToken => {
+                let sem = gtk::Image::from_icon_name("media-removable-symbolic");
+                sem.set_tooltip_text(Some("Nenhum token conectado"));
+                sem.add_css_class("dim-label");
+                l.add_suffix(&sem);
+            }
             Publicacao::ComProblema(motivo) => {
                 let aviso = gtk::Image::from_icon_name("dialog-warning-symbolic");
                 aviso.set_tooltip_text(Some(&motivo));
@@ -1249,7 +1263,18 @@ mod tests {
                 driver(
                     "SafeSign",
                     "SafeSign",
-                    Situacao::Publicado { tokens: vec![] },
+                    Situacao::Publicado {
+                        tokens: vec!["GD Burti".into()],
+                    },
+                ),
+                driver("SafeNet", "SafeNet", Situacao::SemToken),
+                driver("Misto", "Misto/1", Situacao::SemToken),
+                driver(
+                    "Misto",
+                    "Misto/2",
+                    Situacao::Publicado {
+                        tokens: vec!["A".into()],
+                    },
                 ),
                 driver("Duplo", "Duplo/1", Situacao::Publicado { tokens: vec![] }),
                 driver(
@@ -1266,6 +1291,8 @@ mod tests {
         let s = Some(&servico);
         assert_eq!(publicacao(None, "SafeSign"), Publicacao::SemServico);
         assert_eq!(publicacao(s, "SafeSign"), Publicacao::Publicado);
+        assert_eq!(publicacao(s, "SafeNet"), Publicacao::SemToken);
+        assert_eq!(publicacao(s, "Misto"), Publicacao::Publicado);
         assert_eq!(
             publicacao(s, "Duplo"),
             Publicacao::ComProblema("Duplo/2: o driver não respondeu".into())

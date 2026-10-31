@@ -58,8 +58,16 @@ impl Default for Supervisao {
 }
 
 impl Supervisao {
-    pub fn publicado(&self) -> bool {
-        matches!(self.estado, Estado::Publicado(_))
+    /// Vai para o host: respondeu e tem token. Um módulo sem token esconde,
+    /// no `p11-kit-server.socket`, todos os módulos depois dele: o iterador do
+    /// p11-kit pede a lista de slots com um buffer de tamanho zero, o RPC
+    /// responde `CKR_BUFFER_TOO_SMALL`, e ele encerra a iteração inteira
+    /// (iter.c, `finish_iterating`). Medido em 2026-10-31: o SafeNet sem token
+    /// escondia o GD Burti dos assinadores. Publicar antes não adianta: o
+    /// servidor do driver decide os tokens de uma conexão quando ela abre, e
+    /// quem conectou sem o token não o vê depois.
+    pub fn publicavel(&self) -> bool {
+        matches!(&self.estado, Estado::Publicado(tokens) if !tokens.is_empty())
     }
 
     pub fn parado(&self) -> bool {
@@ -115,7 +123,7 @@ mod tests {
     #[test]
     fn so_e_publicado_depois_de_responder() {
         let mut s = Supervisao::default();
-        assert!(!s.publicado());
+        assert!(!s.publicavel());
         assert_eq!(
             s.registrar(Sondagem::Respondeu(vec!["HUBTESTE".into()])),
             Acao::Nenhuma
@@ -124,26 +132,29 @@ mod tests {
     }
 
     #[test]
-    fn sem_token_espetado_continua_publicado() {
-        // Driver que responde com zero tokens está saudável: o token pode ser
-        // espetado depois.
+    fn sem_token_espetado_responde_mas_fica_fora_da_publicacao() {
+        // Saudável, nem parado nem com erro; vai para o host quando o token
+        // chegar.
         let mut s = Supervisao::default();
-        s.registrar(Sondagem::Respondeu(vec![]));
-        assert!(s.publicado());
+        assert_eq!(s.registrar(Sondagem::Respondeu(vec![])), Acao::Nenhuma);
+        assert_eq!(s.estado, Estado::Publicado(vec![]));
+        assert!(!s.publicavel());
+        s.registrar(Sondagem::Respondeu(vec!["GD Burti".into()]));
+        assert!(s.publicavel());
     }
 
     #[test]
     fn travar_despublica_e_reinicia_na_hora() {
         let mut s = Supervisao::default();
-        s.registrar(Sondagem::Respondeu(vec![]));
+        s.registrar(Sondagem::Respondeu(vec!["T".into()]));
         assert_eq!(s.registrar(Sondagem::Travou), Acao::Reiniciar);
-        assert!(!s.publicado());
+        assert!(!s.publicavel());
     }
 
     #[test]
     fn erro_despublica_sem_reiniciar() {
         let mut s = Supervisao::default();
-        s.registrar(Sondagem::Respondeu(vec![]));
+        s.registrar(Sondagem::Respondeu(vec!["T".into()]));
         assert_eq!(
             s.registrar(Sondagem::Falhou("CKR_GENERAL_ERROR".into())),
             Acao::Nenhuma
@@ -159,24 +170,27 @@ mod tests {
         }
         assert_eq!(s.registrar(Sondagem::Caiu), Acao::Parar);
         assert!(s.parado());
-        assert_eq!(s.registrar(Sondagem::Respondeu(vec![])), Acao::Nenhuma);
+        assert_eq!(
+            s.registrar(Sondagem::Respondeu(vec!["T".into()])),
+            Acao::Nenhuma
+        );
         assert!(s.parado());
     }
 
     #[test]
     fn ocupado_despublica_sem_reiniciar_nem_contar() {
         let mut s = Supervisao::default();
-        s.registrar(Sondagem::Respondeu(vec![]));
+        s.registrar(Sondagem::Respondeu(vec!["T".into()]));
         for _ in 0..10 {
             assert_eq!(s.registrar(Sondagem::Ocupado), Acao::Nenhuma);
         }
-        assert!(!s.publicado() && !s.parado());
+        assert!(!s.publicavel() && !s.parado());
         // A contagem de travadas não andou: ainda são precisas todas.
         for _ in 1..LIMITE_SEM_RESPOSTA {
             assert_eq!(s.registrar(Sondagem::Travou), Acao::Reiniciar);
         }
-        s.registrar(Sondagem::Respondeu(vec![]));
-        assert!(s.publicado());
+        s.registrar(Sondagem::Respondeu(vec!["T".into()]));
+        assert!(s.publicavel());
     }
 
     #[test]
@@ -186,8 +200,8 @@ mod tests {
             for _ in 1..LIMITE_SEM_RESPOSTA {
                 assert_eq!(s.registrar(Sondagem::Travou), Acao::Reiniciar);
             }
-            s.registrar(Sondagem::Respondeu(vec![]));
+            s.registrar(Sondagem::Respondeu(vec!["T".into()]));
         }
-        assert!(s.publicado());
+        assert!(s.publicavel());
     }
 }

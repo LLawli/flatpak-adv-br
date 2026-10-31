@@ -81,6 +81,9 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
 
 ### Mudado
 
+- Um driver sem token fica fora da publicação, com o estado "sem token" na
+  janela, até um token chegar. Publicado, ele escondia dos assinadores e dos
+  aplicativos Flatpak os tokens dos drivers que vêm depois dele.
 - O serviço deixa de ligar e desligar o token a cada sonda: o driver fica
   carregado num processo próprio, consultado a cada 10 s. Com o SafeSign, o
   jeito anterior religava o cartão e mandava cerca de 80 comandos a cada 10 s.

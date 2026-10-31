@@ -36,8 +36,9 @@ ANCORA_BANCADA=/mnt/dados/caches/ancora-exp tests/e2e/semtoken.sh
 ```
 
 Instala `Driver.Vazio` (`vazio.c`, um módulo sem nenhum slot, como o driver de
-uma leitora sem cartão) e confere que ele fica publicado sem token, sem ser
-parado, sem sonda presa e com a lista de certificados vazia na hora.
+uma leitora sem cartão) e confere que ele fica fora da publicação, com o
+estado "sem token", sem ser parado, com uma sonda só e com a lista de
+certificados vazia na hora.
 
 ## `loja.sh`
 

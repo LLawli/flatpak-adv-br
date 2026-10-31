@@ -56,7 +56,7 @@ Burti, o primeiro jeito acompanhou o pcscd perder a comunicação USB com o
 token. Ela não conecta pelo socket do servidor: o `p11-kit server` decide os
 tokens de uma conexão quando ela abre (`p11_kit_remote_serve_tokens`), e uma
 conexão mantida não veria um token conectado depois. Só o que respondeu da
-última vez fica publicado
+última vez, com pelo menos um token, fica publicado
 (`src/publicacao.rs`). Um driver que não responde sai da publicação e é
 reiniciado, e depois de 3 vezes seguidas é parado (`src/supervisao.rs`): um
 driver travado e publicado travaria todo aplicativo que abrisse o p11-kit.
@@ -77,6 +77,14 @@ cartão), o cryptoki pede a lista de novo com um buffer de tamanho zero, o RPC d
 p11-kit responde `CKR_BUFFER_TOO_SMALL`, e ele repete para sempre com a mesma
 conta: medido em VM, o driver era parado depois de três sondas, com a carga em
 16. `tests/e2e/semtoken.sh` confere com um módulo sem slot (`vazio.c`).
+
+Um driver sem token responde, mas fica fora da publicação, com o estado "sem
+token", até um token chegar. No `p11-kit-server.socket` do host, o mesmo
+`CKR_BUFFER_TOO_SMALL` faz o iterador do p11-kit encerrar a lista inteira
+(iter.c, `finish_iterating`): um módulo sem token esconderia todos os que vêm
+depois dele. Medido em 2026-10-31: o SafeNet sem token escondia o GD Burti dos
+assinadores. Publicar antes não traria nada, porque o servidor do driver
+decide os tokens de uma conexão quando ela abre.
 
 O aplicativo base traz o cliente PC/SC (`libpcsclite.so.1`, pcsc-lite 2.5.1),
 que todo driver usa para falar com o `pcscd` do host pelo `--socket=pcsc`: o

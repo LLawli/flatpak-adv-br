@@ -65,9 +65,17 @@ pub struct Driver {
 #[serde(tag = "tipo", rename_all = "kebab-case")]
 pub enum Situacao {
     Iniciando,
-    Publicado { tokens: Vec<String> },
-    ComErro { motivo: String },
-    Parado { motivo: String },
+    Publicado {
+        tokens: Vec<String>,
+    },
+    /// Responde, mas sem nenhum token: fica fora da publicação até um chegar.
+    SemToken,
+    ComErro {
+        motivo: String,
+    },
+    Parado {
+        motivo: String,
+    },
     Desligado,
 }
 

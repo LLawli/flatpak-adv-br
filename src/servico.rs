@@ -369,7 +369,7 @@ fn publicar(servico: &Servico) {
     let desejados = servico
         .drivers
         .iter()
-        .filter(|(_, d)| !d.desligado && d.supervisao.publicado())
+        .filter(|(_, d)| !d.desligado && d.supervisao.publicavel())
         .map(|(chave, d)| (publicacao::nome(chave), publicacao::conteudo(&d.socket)))
         .collect();
     if let Err(e) = publicacao::publicar(&servico.dir_modules, &desejados) {
@@ -400,6 +400,7 @@ fn situacao(d: &Driver) -> Situacao {
     }
     match &d.supervisao.estado {
         Estado::Iniciando => Situacao::Iniciando,
+        Estado::Publicado(tokens) if tokens.is_empty() => Situacao::SemToken,
         Estado::Publicado(tokens) => Situacao::Publicado {
             tokens: tokens.clone(),
         },
@@ -426,7 +427,9 @@ fn encerrar(servico: &mut Servico) {
 fn descrever(estado: &Estado) -> String {
     match estado {
         Estado::Iniciando => "iniciando".to_owned(),
-        Estado::Publicado(tokens) if tokens.is_empty() => "publicado, sem token".to_owned(),
+        Estado::Publicado(tokens) if tokens.is_empty() => {
+            "sem token, fora da publicação".to_owned()
+        }
         Estado::Publicado(tokens) => format!("publicado, tokens: {}", tokens.join(", ")),
         Estado::ComErro(e) => format!("fora da publicação: {e}"),
         Estado::Parado(e) => format!("parado: {e}"),
