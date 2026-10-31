@@ -470,14 +470,29 @@ pub fn sincronizar(home: &Path, dados: &Path) -> Result<Plano, String> {
 }
 
 fn arquivo_registro(dados: &Path) -> PathBuf {
+    dados.join("assinadores-publicados")
+}
+
+/// O nome que o registro tinha. Com os dados no lugar padrão
+/// (`~/.local/share/ancora`), ele ocupava o caminho da pasta dos lançadores
+/// dos navegadores nativos, e publicar falhava com "File exists".
+fn registro_antigo(dados: &Path) -> PathBuf {
     dados.join("assinadores")
 }
 
-/// O que a publicação anterior escreveu: um caminho por linha.
+/// O que a publicação anterior escreveu: um caminho por linha, no registro
+/// atual ou no de nome antigo.
 fn escritos(dados: &Path) -> BTreeSet<PathBuf> {
-    fs::read_to_string(arquivo_registro(dados))
-        .unwrap_or_default()
+    let antigo = registro_antigo(dados);
+    let antigo = if antigo.is_file() {
+        fs::read_to_string(&antigo).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let atual = fs::read_to_string(arquivo_registro(dados)).unwrap_or_default();
+    antigo
         .lines()
+        .chain(atual.lines())
         .filter(|l| !l.is_empty())
         .map(PathBuf::from)
         .collect()
@@ -514,7 +529,12 @@ fn permissoes_anteriores(dados: &Path) -> Vec<(String, Entrada)> {
 /// vazio.
 pub fn aplicar(home: &Path, dados: &Path, plano: &Plano) -> Result<(), String> {
     let novos: BTreeSet<PathBuf> = plano.arquivos.iter().map(|(p, _)| p.clone()).collect();
-    for velho in escritos(dados).difference(&novos) {
+    let anteriores = escritos(dados);
+    let antigo = registro_antigo(dados);
+    if antigo.is_file() {
+        fs::remove_file(&antigo).map_err(|e| format!("{}: {e}", antigo.display()))?;
+    }
+    for velho in anteriores.difference(&novos) {
         let r = match fs::symlink_metadata(velho) {
             Ok(m) if m.is_dir() => fs::remove_dir_all(velho),
             _ => fs::remove_file(velho),
@@ -741,6 +761,29 @@ mod tests {
         assert!(plano.permissoes.is_empty());
         assert!(lancador_nativo("com.lacunasoftware.webpki")
             .contains("flatpak run --command=ancora dev.lukakuuhaku.Ancora assinar 'com.lacunasoftware.webpki' \"$@\""));
+    }
+
+    #[test]
+    fn com_os_dados_no_lugar_padrao_o_registro_nao_ocupa_a_pasta_dos_lancadores() {
+        // Fora dos testes, os dados do Âncora são `~/.local/share/ancora`, e os
+        // lançadores dos navegadores nativos ficam em `assinadores/` ali dentro.
+        let h = home("padrao");
+        let dados = h.0.join(".local/share/ancora");
+        fs::create_dir_all(&dados).unwrap();
+        // O registro com o nome antigo, deixado por uma versão anterior.
+        let antigo = dados.join("assinadores");
+        fs::write(&antigo, "").unwrap();
+        fs::create_dir_all(h.0.join(".config/chromium")).unwrap();
+
+        let plano = planejar(&h.0, &[navegador("Chromium", false)], &[instalado(&h.0)]).unwrap();
+        aplicar(&h.0, &dados, &plano).unwrap();
+        let lancador = dados.join("assinadores/com.lacunasoftware.webpki");
+        assert!(lancador.is_file(), "sem lançador");
+        assert!(escritos(&dados).contains(&lancador));
+
+        aplicar(&h.0, &dados, &Plano::default()).unwrap();
+        assert!(!lancador.exists());
+        assert!(escritos(&dados).is_empty());
     }
 
     #[test]
