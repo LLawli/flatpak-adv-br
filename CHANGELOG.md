@@ -76,6 +76,9 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   própria, e o Âncora só conhecia a do canal estável.
 - Publicar os assinadores não falha mais com "File exists" quando há um
   navegador nativo.
+- O módulo de teste da verificação não fica mais publicado quando a
+  verificação morre no meio (a máquina caiu, por exemplo): o serviço o tira
+  ao começar, se ninguém mais o atende.
 - O nome do token do SerproID aparece sem lixo no fim: o driver completa o
   nome com bytes nulos, e não com espaços como a norma pede.
 

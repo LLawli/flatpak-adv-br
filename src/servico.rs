@@ -107,6 +107,11 @@ fn iniciar() -> Result<Servico, String> {
     let dir_modules = publicacao::diretorio(&crate::host::home());
     publicacao::publicar(&dir_modules, &BTreeMap::new())
         .map_err(|e| format!("{}: {e}", dir_modules.display()))?;
+    // O sentinela fica de fora da publicação (é de quem verifica), mas um de
+    // uma verificação que morreu também não deve ficar.
+    if publicacao::limpar_sentinela_orfao(&dir_modules) {
+        eprintln!("tirado o sentinela de uma verificação que não terminou");
+    }
 
     let extensoes = extensao::encontrar(Path::new(extensao::RAIZ), &home);
     pacote::podar(&home, &extensoes);

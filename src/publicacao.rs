@@ -91,6 +91,29 @@ pub fn planejar(
     }
 }
 
+/// Tira o módulo do sentinela se a verificação que o publicou morreu sem
+/// tirá-lo: o servidor dele não atende. Uma verificação viva tem o servidor
+/// de pé, e o módulo fica. Medido em 2026-10-31: a máquina caiu no meio de uma
+/// verificação, o `Drop` do sentinela não rodou, e o módulo (prioridade 1000,
+/// o primeiro de todos) apontou para um socket morto até ser tirado à mão.
+/// Diz se tirou.
+pub fn limpar_sentinela_orfao(dir: &Path) -> bool {
+    let modulo = dir.join(SENTINELA);
+    let Ok(texto) = fs::read_to_string(&modulo) else {
+        return false;
+    };
+    let Some(socket) = texto
+        .lines()
+        .find_map(|l| l.strip_prefix("remote: unix:path="))
+    else {
+        return false;
+    };
+    if std::os::unix::net::UnixStream::connect(socket.trim()).is_ok() {
+        return false;
+    }
+    fs::remove_file(&modulo).is_ok()
+}
+
 fn e_nosso(nome: &str) -> bool {
     nome.starts_with(PREFIXO) && nome.ends_with(SUFIXO) && nome != SENTINELA
 }
@@ -265,6 +288,37 @@ mod tests {
             .collect();
         arquivos.sort();
         assert_eq!(arquivos, [SENTINELA, "opensc.module"]);
+    }
+
+    #[test]
+    fn o_sentinela_de_uma_verificacao_que_morreu_sai_e_o_de_uma_viva_fica() {
+        let dir = Dir::novo("sentinela");
+        fs::create_dir_all(&dir.0).unwrap();
+        // Sem módulo, nada a fazer.
+        assert!(!limpar_sentinela_orfao(&dir.0));
+
+        // O servidor morreu: o socket nem existe (a máquina reiniciou).
+        let morto = dir.0.join("morto.sock");
+        fs::write(dir.0.join(SENTINELA), conteudo_sentinela(&morto)).unwrap();
+        assert!(limpar_sentinela_orfao(&dir.0));
+        assert!(!dir.0.join(SENTINELA).exists());
+
+        // O socket ficou no disco, mas ninguém atende (o servidor levou SIGKILL).
+        drop(std::os::unix::net::UnixListener::bind(&morto).unwrap());
+        fs::write(dir.0.join(SENTINELA), conteudo_sentinela(&morto)).unwrap();
+        assert!(limpar_sentinela_orfao(&dir.0));
+        assert!(!dir.0.join(SENTINELA).exists());
+
+        // Uma verificação em andamento: o servidor atende, e o módulo fica.
+        let vivo = dir.0.join("vivo.sock");
+        let _ouvinte = std::os::unix::net::UnixListener::bind(&vivo).unwrap();
+        fs::write(dir.0.join(SENTINELA), conteudo_sentinela(&vivo)).unwrap();
+        assert!(!limpar_sentinela_orfao(&dir.0));
+        assert!(dir.0.join(SENTINELA).exists());
+
+        // Conteúdo que não é o nosso: não arrisca apagar.
+        fs::write(dir.0.join(SENTINELA), "module: outro.so\n").unwrap();
+        assert!(!limpar_sentinela_orfao(&dir.0));
     }
 
     #[test]
