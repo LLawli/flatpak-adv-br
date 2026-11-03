@@ -33,6 +33,12 @@ finish-args:
   # Flathub marca como saída do sandbox, aceita de propósito
   # (docs/arquitetura.md).
   - --talk-name=org.freedesktop.Flatpak
+  # O chaveiro da sessão (Secret Service), onde o driver do RemoteID guarda a
+  # senha da conta da Certisign. O portal de segredos não serve: só os
+  # backends do GNOME e do KDE o implementam, e no Hyprland (backends
+  # hyprland e gtk) ele não existe. Sem o chaveiro, o RemoteID guarda a senha
+  # cifrada com um PIN local, pedido uma vez por aplicativo aberto.
+  - --talk-name=org.freedesktop.secrets
   # O socket do p11-kit-server.socket do usuário: conferir de ponta a ponta o
   # que os aplicativos enxergam, e o caminho dos assinadores até os tokens.
   - --filesystem=xdg-run/p11-kit/pkcs11

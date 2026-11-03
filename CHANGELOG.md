@@ -15,6 +15,8 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
   por um `ancora.toml`. O contrato está em `docs/extensoes.md`.
 - `flatpak run --command=ancora dev.lukakuuhaku.Ancora extensoes` lista as
   extensões instaladas e diz o motivo de cada uma que estiver quebrada.
+- O driver do RemoteID guarda a senha da conta no chaveiro da sessão também
+  no Hyprland e em outros ambientes sem o portal de segredos.
 - O Âncora baixa ele mesmo o pacote do fabricante de uma extensão que pede
   (`[pacote]`, contrato 2): com a cadeia TLS completada, o que faz o Softplan
   WebSigner funcionar, e em várias conexões, o que tira o download do SafeNet
