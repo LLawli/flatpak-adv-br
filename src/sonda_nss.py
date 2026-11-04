@@ -6,9 +6,9 @@ depender de arquivo nenhum do lado de lá.
 
 Uso: python3 - <libnss3> <banco> <raizes> [servidor]
 
-raizes: "auto" abre o banco como o Firefox e o poppler, deixando o NSS
-carregar sozinho o módulo de raízes; "chromium" abre como o Chromium, que
-desliga isso e carrega o libnssckbi.so ele mesmo, como "Root Certs".
+raizes: "auto" abre o banco como o Firefox, deixando o NSS carregar sozinho o
+módulo de raízes; "chromium" abre como o Chromium e o poppler, que carregam o
+libnssckbi.so eles mesmos, como "Root Certs".
 servidor: aponta o cliente do p11-kit para outro socket (só em testes).
 
 Imprime uma linha JSON: [[módulo, token], ...]. Abre o banco só para leitura

@@ -81,6 +81,11 @@ Todas as mudanças visíveis para quem usa ficam aqui. O formato segue o
 - O módulo de teste da verificação não fica mais publicado quando a
   verificação morre no meio (a máquina caiu, por exemplo): o serviço o tira
   ao começar, se ninguém mais o atende.
+- O Okular e o Papers mostram cada certificado uma vez e pedem o PIN uma vez:
+  o Âncora registrava um acesso aos tokens que o poppler já tinha.
+- Um navegador aberto pela primeira vez depois do Âncora passa a ser visto: a
+  janela oferece reiniciar, e ligar o interruptor antes disso avisa que falta
+  o perfil, em vez de dizer que deu certo.
 - O nome do token do SerproID aparece sem lixo no fim: o driver completa o
   nome com bytes nulos, e não com espaços como a norma pede.
 

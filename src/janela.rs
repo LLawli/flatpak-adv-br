@@ -167,7 +167,7 @@ struct Retrato {
     /// As extensões instaladas no host, que podem não ser as montadas aqui.
     instaladas: Result<Vec<loja::Instalada>, String>,
     /// O host mudou desde que este sandbox começou: só um Âncora aberto de
-    /// novo vê as extensões como elas estão.
+    /// novo vê as extensões e as pastas dos navegadores como elas estão.
     reinicio_pendente: bool,
 }
 
@@ -187,10 +187,11 @@ fn retratar() -> Retrato {
         .filter(|(_, s)| s.bancos > 0)
         .collect();
     let instaladas = loja::instaladas();
-    let reinicio_pendente = match (&instaladas, std::fs::read_to_string("/.flatpak-info")) {
+    let extensoes_mudaram = match (&instaladas, std::fs::read_to_string("/.flatpak-info")) {
         (Ok(i), Ok(info)) => loja::reinicio_pendente(&loja::montadas(&info), i),
         _ => false,
     };
+    let reinicio_pendente = extensoes_mudaram || host::surgiu_pasta_depois(&home);
     Retrato {
         extensoes: extensao::montadas().to_vec(),
         desligados: estado::desligados(&dados),
@@ -1054,7 +1055,7 @@ pub fn montar(app: &adw::Application) {
         ocupado: Cell::new(false),
         interruptores: RefCell::default(),
         reinicio: adw::Banner::builder()
-            .title("As mudanças nas extensões valem depois de reiniciar")
+            .title("As mudanças valem depois de reiniciar")
             .button_label("Reiniciar")
             .build(),
         atualizacoes: RefCell::default(),

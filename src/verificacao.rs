@@ -32,9 +32,9 @@ pub const VARIAVEL_SERVIDOR: &str = "ANCORA_SERVIDOR_DO_SISTEMA";
 /// Como o consumidor abre o banco.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Raizes {
-    /// Firefox e poppler: o NSS carrega sozinho o módulo de raízes.
+    /// Firefox: o NSS carrega sozinho o módulo de raízes.
     Automaticas,
-    /// O Chromium desliga isso e carrega o `libnssckbi.so` ele mesmo.
+    /// O Chromium e o poppler carregam o `libnssckbi.so` eles mesmos.
     Chromium,
 }
 

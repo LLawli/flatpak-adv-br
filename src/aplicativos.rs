@@ -12,7 +12,8 @@
 //!    que o Tessera testou com token real em 29/10/2026: no Firefox, o cliente
 //!    do p11-kit em cada perfil; no Chromium e derivados, nada (o módulo de
 //!    confiança do runtime já chega ao servidor); no Papers e no Okular, um
-//!    banco vazio onde o poppler procura primeiro.
+//!    banco vazio onde o poppler procura primeiro, e nada nele pelo mesmo
+//!    motivo do Chromium: o poppler também carrega o módulo de confiança.
 
 use crate::verificacao::{self, Ambiente, Medidor, Raizes, Registro, Resultado};
 use crate::{host, nss, permissao};
@@ -218,6 +219,9 @@ pub fn configurar(
     if app.receita == Receita::Pronto {
         return Ok(vec![]);
     }
+    if app.receita != Receita::Poppler && bancos_medidos(app, home).is_empty() {
+        return Err(format!("abra o {} uma vez para criar o perfil", app.nome));
+    }
 
     permissao::conceder_a(
         home,
@@ -253,7 +257,7 @@ pub fn configurar(
             }
             nss::editar(&banco, nss::sem_p11_kit)
                 .map_err(|e| format!("{}: {e}", banco.display()))?;
-            (Raizes::Automaticas, vec![None, cliente], None, None)
+            (Raizes::Chromium, vec![None, cliente], None, None)
         }
         Receita::Pronto => unreachable!(),
     };
@@ -427,6 +431,30 @@ mod tests {
             "library=\nname=NSS Internal PKCS #11 Module\n\n",
         )
         .unwrap();
+    }
+
+    #[test]
+    fn o_poppler_e_medido_como_o_chromium() {
+        // O poppler carrega ele mesmo o "Root Certs". Medido como o Firefox,
+        // o token parecia faltar, o Âncora registrava o cliente e o Okular
+        // mostrava cada certificado e pedia o PIN duas vezes.
+        let h = home("poppler-raizes");
+        let vistas = std::cell::RefCell::new(vec![]);
+        let medidor = |_: Ambiente, banco: &Path, raizes: Raizes| {
+            vistas.borrow_mut().push(raizes);
+            ja_ve(Ambiente::Host, banco, raizes)
+        };
+        configurar(&app("org.kde.okular"), &h.0, &h.0.join("dados"), &medidor).unwrap();
+        assert_eq!(*vistas.borrow(), [Raizes::Chromium]);
+    }
+
+    #[test]
+    fn sem_perfil_nao_finge_que_configurou() {
+        let h = home("sem-perfil");
+        for id in ["org.mozilla.firefox", "org.chromium.Chromium"] {
+            let e = configurar(&app(id), &h.0, &h.0.join("dados"), &ja_ve).unwrap_err();
+            assert!(e.contains("uma vez"), "{e}");
+        }
     }
 
     #[test]
