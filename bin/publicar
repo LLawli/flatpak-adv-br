@@ -3,6 +3,7 @@
 #
 #   bin/publicar              constrói e assina no repositório local
 #   bin/publicar --enviar     e manda para o servidor
+#   bin/publicar --so-enviar  só manda o que já está assinado, com as guardas
 #
 # A configuração vem de config/publicar.env (ver o .example). A chave privada
 # nunca sai desta máquina: o que atravessa a rede é o resultado assinado.
@@ -29,6 +30,7 @@ ENVIAR=nao
 for argumento in "$@"; do
     case $argumento in
         --enviar) ENVIAR=sim ;;
+        --so-enviar) ENVIAR=so ;;
         *) erro "argumento desconhecido: $argumento" ;;
     esac
 done
@@ -55,6 +57,7 @@ usada=$(gpg --list-keys --with-colons "$CHAVE" | awk -F: '/^fpr/{print $10; exit
 
 # ---------------------------------------------------------------------------
 mkdir -p "$TRABALHO" "$REPO"
+construir() {
 passo "Construindo o $APP_ID"
 # A assinatura não é pedida ao builder: o org.flatpak.Builder roda num sandbox
 # sem pinentry e sem o gpg-agent desta sessão, e quem fala com a YubiKey é ele.
@@ -76,6 +79,7 @@ for script in "$RAIZ"/extensoes/*/scripts/construir.sh; do
     extensoes=$((extensoes + 1))
 done
 ok "o Âncora e $extensoes extensão(ões)"
+}
 
 # ---------------------------------------------------------------------------
 # A ordem é o que deixa o repositório instalável. Numa instalação nova, o
@@ -83,9 +87,6 @@ ok "o Âncora e $extensoes extensão(ões)"
 # commit feita quando o delta foi gerado: assinar depois dos deltas deixa a
 # assinatura lá, correta e inútil ("GPG verification enabled, but no
 # signatures found"). Então: appstream, assinatura de tudo, deltas e summary.
-passo "Preparando as refs"
-flatpak build-update-repo "$REPO" >/dev/null
-
 assinar_pendentes() {
     pendentes=0
     while IFS= read -r ref; do
@@ -114,16 +115,28 @@ atualizar() {
         --prune --prune-depth=3 >/dev/null
 }
 
-passo "Assinando, aqui fora"
-assinar_pendentes
-assinadas=$pendentes
-atualizar
-# Se a passada recriou alguma ref (o appstream muda com o repositório), ela
-# nasceu sem assinatura: assina e refaz uma vez.
-assinar_pendentes
-if [ "$pendentes" -gt 0 ]; then
-    assinadas=$((assinadas + pendentes))
+assinar() {
+    passo "Preparando as refs"
+    flatpak build-update-repo "$REPO" >/dev/null
+    passo "Assinando, aqui fora"
+    assinar_pendentes
+    assinadas=$pendentes
     atualizar
+    # Se a passada recriou alguma ref (o appstream muda com o repositório), ela
+    # nasceu sem assinatura: assina e refaz uma vez.
+    assinar_pendentes
+    if [ "$pendentes" -gt 0 ]; then
+        assinadas=$((assinadas + pendentes))
+        atualizar
+    fi
+}
+
+assinadas=0
+if [ "$ENVIAR" = so ]; then
+    extensoes=$(find "$RAIZ"/extensoes -mindepth 3 -maxdepth 3 -path '*/scripts/construir.sh' -executable | wc -l)
+else
+    construir
+    assinar
 fi
 
 # A guarda final conta contra um mínimo absoluto: o aplicativo e cada
