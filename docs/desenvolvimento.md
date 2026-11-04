@@ -75,7 +75,7 @@ flatpak run --nosocket=pcsc --filesystem="$X/run" \
 cp config/publicar.env.example config/publicar.env   # e preencha
 bin/publicar            # constrói o Âncora e as extensões e assina
 bin/publicar --enviar   # e manda para o servidor
-bin/publicar --so-enviar   # só manda o que já está assinado
+bin/publicar --so-enviar   # não constrói: assina o que faltar e manda
 ```
 
 O repositório local é o do AdvBr (`~/.local/share/adv-br-repo`), porque o
